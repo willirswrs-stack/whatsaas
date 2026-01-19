@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: wathsaas-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DATABASE_USER}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - "${DATABASE_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (Cache + Queue)
+  redis:
+    image: redis:7-alpine
+    container_name: wathsaas-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Evolution API - Provider 2 (Multiple Instances)
+  # Updated to v2.3.7 (Official Image)
+  evolution:
+    image: evoapicloud/evolution-api:v2.3.7
+    container_name: wathsaas-evolution
+    restart: unless-stopped
+    environment:
+      # Authentication
+      AUTHENTICATION_TYPE: apikey
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
+      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
+      # Server
+      SERVER_TYPE: http
+      SERVER_PORT: "8080"
+      CORS_ORIGIN: "*"
+      CORS_METHODS: "POST,GET,PUT,DELETE"
+      CORS_CREDENTIALS: "true"
+      # Database
+      DATABASE_ENABLED: "true"
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/wathsaas_evolution
+      # Cache
+      CACHE_REDIS_ENABLED: "false"
+      # Webhooks
+      WEBHOOK_GLOBAL_URL: http://host.docker.internal:3333/api/v1/webhooks/evolution
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      # Other
+      CONFIG_SESSION_PHONE_CLIENT: "WhatSaas"
+      QRCODE_LIMIT: 30
+      STORE_MESSAGES: "true"
+      STORE_CONTACTS: "true"
+      STORE_CHATS: "true"
+    ports:
+      - "8081:8080"
+    volumes:
+      - evolution_data:/evolution/instances
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # WAHA - Provider 1 (Single Session)
+  # Pinned specific digest for stability
+  waha:
+    image: devlikeapro/waha@sha256:ea1330e0e7af2acd6bfcaf929f7f0b2d4f1831a19d521b77d4ae292feeccc3e4
+    container_name: wathsaas-waha
+    restart: unless-stopped
+    environment:
+      WHATSAPP_DEFAULT_ENGINE: WEBJS
+      WHATSAPP_RESTART_ON_ERROR: "True"
+      WHATSAPP_FILES_LIFETIME: 180
+      # Auth
+      WAHA_API_KEY: ${WAHA_API_KEY}
+      WAHA_DASHBOARD_USERNAME: waha
+      WAHA_DASHBOARD_PASSWORD: ${WAHA_API_KEY}
+      WHATSAPP_SWAGGER_USERNAME: waha
+      WHATSAPP_SWAGGER_PASSWORD: ${WAHA_API_KEY}
+    ports:
+      - "8080:3000"
+    volumes:
+      - waha_data:/app/sessions
+
+  # WWebJS REMOVIDO - Deprecado, usar apenas Evolution API
+  # O WWebJS tinha problemas constantes de "No LID for user"
+
+volumes:
+  postgres_data:
+  redis_data:
+  evolution_data:
+  waha_data:
+
+
+networks:
+  default:
+    name: wathsaas-network

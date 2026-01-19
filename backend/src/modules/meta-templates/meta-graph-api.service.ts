@@ -1,0 +1,255 @@
+import { Injectable, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import axios, { AxiosInstance } from 'axios';
+
+export interface MetaTemplate {
+    id: string;
+    name: string;
+    category: string;
+    language: string;
+    status: 'APPROVED' | 'PENDING' | 'REJECTED' | 'DISABLED';
+    components: any[];
+    quality_score?: {
+        score: string;
+        date: string;
+    };
+    rejected_reason?: string;
+}
+
+export interface BusinessProfile {
+    about: string;
+    address: string;
+    description: string;
+    email: string;
+    profile_picture_url: string;
+    websites: string[];
+    vertical: string;
+}
+
+@Injectable()
+export class MetaGraphApiService {
+    private readonly logger = new Logger(MetaGraphApiService.name);
+    private readonly apiVersion = 'v18.0';
+    private readonly baseUrl = 'https://graph.facebook.com';
+
+    constructor(private readonly configService: ConfigService) { }
+
+    private createClient(accessToken: string): AxiosInstance {
+        return axios.create({
+            baseURL: `${this.baseUrl}/${this.apiVersion}`,
+            headers: {
+                Authorization: `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            timeout: 30000,
+        });
+    }
+
+    /**
+     * Get WABA info
+     */
+    async getWabaInfo(wabaId: string, accessToken: string): Promise<any> {
+        try {
+            const client = this.createClient(accessToken);
+            const response = await client.get(`/${wabaId}`);
+            return response.data;
+        } catch (error) {
+            this.handleApiError(error, 'getWabaInfo');
+        }
+    }
+
+    /**
+     * Get phone number info including quality rating
+     */
+    async getPhoneNumberInfo(phoneNumberId: string, accessToken: string): Promise<any> {
+        try {
+            const client = this.createClient(accessToken);
+            const response = await client.get(`/${phoneNumberId}`, {
+                params: {
+                    fields: 'display_phone_number,verified_name,quality_rating,platform_type,throughput',
+                },
+            });
+            return response.data;
+        } catch (error) {
+            this.handleApiError(error, 'getPhoneNumberInfo');
+        }
+    }
+
+    /**
+     * Get business profile
+     */
+    async getBusinessProfile(phoneNumberId: string, accessToken: string): Promise<BusinessProfile> {
+        try {
+            const client = this.createClient(accessToken);
+            const response = await client.get(`/${phoneNumberId}/whatsapp_business_profile`, {
+                params: {
+                    fields: 'about,address,description,email,profile_picture_url,websites,vertical',
+                },
+            });
+            return response.data.data?.[0] || {};
+        } catch (error) {
+            this.handleApiError(error, 'getBusinessProfile');
+        }
+    }
+
+    /**
+     * Update business profile
+     */
+    async updateBusinessProfile(
+        phoneNumberId: string,
+        accessToken: string,
+        profile: Partial<BusinessProfile>,
+    ): Promise<boolean> {
+        try {
+            const client = this.createClient(accessToken);
+            const response = await client.post(`/${phoneNumberId}/whatsapp_business_profile`, {
+                messaging_product: 'whatsapp',
+                ...profile,
+            });
+            return response.data.success === true;
+        } catch (error) {
+            this.handleApiError(error, 'updateBusinessProfile');
+        }
+    }
+
+    /**
+     * List all message templates
+     */
+    async listTemplates(wabaId: string, accessToken: string): Promise<MetaTemplate[]> {
+        try {
+            const client = this.createClient(accessToken);
+            const templates: MetaTemplate[] = [];
+            let nextUrl = `/${wabaId}/message_templates?fields=id,name,category,language,status,components,quality_score,rejected_reason&limit=100`;
+
+            while (nextUrl) {
+                const response = await client.get(nextUrl);
+                templates.push(...response.data.data);
+
+                // Handle pagination
+                nextUrl = response.data.paging?.next ?
+                    response.data.paging.next.replace(`${this.baseUrl}/${this.apiVersion}`, '') :
+                    null;
+            }
+
+            return templates;
+        } catch (error) {
+            this.handleApiError(error, 'listTemplates');
+        }
+    }
+
+    /**
+     * Get single template by name
+     */
+    async getTemplate(wabaId: string, accessToken: string, templateName: string): Promise<MetaTemplate | null> {
+        try {
+            const client = this.createClient(accessToken);
+            const response = await client.get(`/${wabaId}/message_templates`, {
+                params: {
+                    name: templateName,
+                    fields: 'id,name,category,language,status,components,quality_score,rejected_reason',
+                },
+            });
+            return response.data.data?.[0] || null;
+        } catch (error) {
+            this.handleApiError(error, 'getTemplate');
+        }
+    }
+
+    /**
+     * Create a new message template
+     */
+    async createTemplate(
+        wabaId: string,
+        accessToken: string,
+        template: {
+            name: string;
+            category: string;
+            language: string;
+            components: any[];
+        },
+    ): Promise<{ id: string; status: string }> {
+        try {
+            const client = this.createClient(accessToken);
+            const response = await client.post(`/${wabaId}/message_templates`, template);
+            return {
+                id: response.data.id,
+                status: response.data.status || 'PENDING',
+            };
+        } catch (error) {
+            this.handleApiError(error, 'createTemplate');
+        }
+    }
+
+    /**
+     * Delete a message template
+     */
+    async deleteTemplate(wabaId: string, accessToken: string, templateName: string): Promise<boolean> {
+        try {
+            const client = this.createClient(accessToken);
+            const response = await client.delete(`/${wabaId}/message_templates`, {
+                params: { name: templateName },
+            });
+            return response.data.success === true;
+        } catch (error) {
+            this.handleApiError(error, 'deleteTemplate');
+        }
+    }
+
+    /**
+     * Upload media for template header
+     */
+    async uploadMedia(
+        phoneNumberId: string,
+        accessToken: string,
+        mediaUrl: string,
+        mediaType: 'image' | 'video' | 'document',
+    ): Promise<string> {
+        try {
+            const client = this.createClient(accessToken);
+
+            // First, get the media from URL
+            const mediaResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+
+            // Upload to Meta
+            const formData = new FormData();
+            formData.append('messaging_product', 'whatsapp');
+            formData.append('file', new Blob([mediaResponse.data]), `media.${mediaType}`);
+            formData.append('type', mediaType);
+
+            const response = await client.post(`/${phoneNumberId}/media`, formData, {
+                headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            return response.data.id;
+        } catch (error) {
+            this.handleApiError(error, 'uploadMedia');
+        }
+    }
+
+    /**
+     * Handle API errors consistently
+     */
+    private handleApiError(error: any, operation: string): never {
+        const errorMessage = error.response?.data?.error?.message || error.message;
+        const errorCode = error.response?.data?.error?.code;
+
+        this.logger.error(`Meta API Error [${operation}]: ${errorMessage} (Code: ${errorCode})`);
+
+        if (error.response?.status === 401) {
+            throw new HttpException('Invalid or expired access token', HttpStatus.UNAUTHORIZED);
+        }
+
+        if (error.response?.status === 403) {
+            throw new HttpException('Insufficient permissions for this operation', HttpStatus.FORBIDDEN);
+        }
+
+        if (error.response?.status === 429) {
+            throw new HttpException('Rate limit exceeded. Please try again later.', HttpStatus.TOO_MANY_REQUESTS);
+        }
+
+        throw new HttpException(
+            `Meta API Error: ${errorMessage}`,
+            error.response?.status || HttpStatus.INTERNAL_SERVER_ERROR,
+        );
+    }
+}

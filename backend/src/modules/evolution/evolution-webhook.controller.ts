@@ -1,0 +1,195 @@
+
+import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+
+import { Instance } from '../instances/entities/instance.entity';
+import { Campaign, CampaignContact } from '../campaigns/entities/campaign.entity';
+import { InstanceStatus } from '../../common/enums/instance-status.enum';
+
+interface EvolutionWebhookPayload {
+    instance: string;
+    event: string;
+    data: any;
+}
+
+import { EventsGateway } from '../../events/events.gateway';
+
+@Controller('webhooks')
+export class EvolutionWebhookController {
+    private readonly logger = new Logger(EvolutionWebhookController.name);
+
+    constructor(
+        @InjectRepository(Instance)
+        private instanceRepo: Repository<Instance>,
+        @InjectRepository(CampaignContact)
+        private campaignContactRepo: Repository<CampaignContact>,
+        @InjectRepository(Campaign)
+        private campaignRepo: Repository<Campaign>,
+        private eventsGateway: EventsGateway,
+    ) { }
+
+    @Post('evolution')
+    async handleEvolutionWebhook(@Body() payload: EvolutionWebhookPayload) {
+        const { instance, event, data } = payload;
+
+        this.logger.debug(`Webhook: ${event} for ${instance}`);
+
+        try {
+            switch (event) {
+                case 'CONNECTION_UPDATE':
+                    await this.handleConnectionUpdate(instance, data);
+                    break;
+
+                case 'QRCODE_UPDATED':
+                    await this.handleQrCodeUpdate(instance, data);
+                    break;
+
+                case 'MESSAGES_UPDATE':
+                    await this.handleMessageUpdate(data);
+                    break;
+
+                case 'SEND_MESSAGE':
+                    await this.handleSendMessage(data);
+                    break;
+
+                default:
+                    this.logger.debug(`Unhandled event: ${event}`);
+            }
+        } catch (error) {
+            this.logger.error(`Webhook error: ${error.message}`);
+        }
+
+        return { received: true };
+    }
+
+    private async handleConnectionUpdate(instanceName: string, data: any) {
+        const state = data.state || data.status;
+        let status: InstanceStatus = InstanceStatus.DISCONNECTED;
+
+        const s = (state || '').toLowerCase();
+
+        if (s === 'open' || s === 'connected') {
+            status = InstanceStatus.CONNECTED;
+        } else if (s === 'connecting') {
+            status = InstanceStatus.CONNECTING;
+        } else if (s === 'close' || s === 'disconnected') {
+            status = InstanceStatus.DISCONNECTED;
+        } else if (s === 'qrcode') {
+            status = InstanceStatus.QR_PENDING;
+        }
+
+        const updateData: Partial<Instance> = {
+            status,
+        };
+
+        if (status === InstanceStatus.CONNECTED) {
+            updateData.connectedAt = new Date();
+        }
+
+        if (data.me?.id) {
+            updateData.phone = data.me.id.replace('@s.whatsapp.net', '');
+        }
+
+        await this.instanceRepo.update({ instanceName }, updateData);
+
+        this.logger.log(`Instance ${instanceName} status updated to: ${status}`);
+    }
+
+    private async handleQrCodeUpdate(instanceName: string, _data: any) {
+        // QR code generated, instance awaiting scan
+        await this.instanceRepo.update({ instanceName }, { status: InstanceStatus.QR_PENDING });
+    }
+
+    private async handleMessageUpdate(data: any) {
+        // Update message status (delivered, read)
+        const wamid = data.key?.id || data.messageId;
+        const status = data.update?.status || data.status;
+
+        if (!wamid) return;
+
+        // Try to update campaign tracking info
+        try {
+            const contact = await this.campaignContactRepo.findOne({
+                where: { messageId: wamid },
+                select: ['id', 'campaignId', 'status']
+            });
+
+            if (!contact) return;
+
+
+            if (status === 'DELIVERY_ACK' || status === 'delivered') {
+                if (contact.status !== 'delivered' && contact.status !== 'read') {
+                    await this.campaignContactRepo.update(contact.id, {
+                        status: 'delivered',
+                        deliveredAt: new Date()
+                    });
+                    await this.campaignRepo.increment({ id: contact.campaignId }, 'deliveredCount', 1);
+
+                    // Emit update to tenant
+                    const campaign = await this.campaignRepo.findOne({ where: { id: contact.campaignId } });
+                    if (campaign) {
+                        this.emitCampaignUpdate(campaign.tenantId, campaign.id, 'delivered');
+                        // Check completion
+                        await this.checkCampaignCompletion(campaign);
+                    }
+                }
+            } else if (status === 'READ' || status === 'read') {
+                if (contact.status !== 'read') {
+                    await this.campaignContactRepo.update(contact.id, {
+                        status: 'read',
+                        readAt: new Date()
+                    });
+                    await this.campaignRepo.increment({ id: contact.campaignId }, 'readCount', 1);
+
+                    // Emit update to tenant
+                    const campaign = await this.campaignRepo.findOne({ where: { id: contact.campaignId } });
+                    if (campaign) {
+                        this.emitCampaignUpdate(campaign.tenantId, campaign.id, 'read');
+                        // Check completion
+                        await this.checkCampaignCompletion(campaign);
+                    }
+                }
+            }
+        } catch (e) {
+            this.logger.error(`Error updating message status for ${wamid}: ${e.message}`);
+        }
+
+        this.logger.debug(`Message ${wamid} status: ${status}`);
+    }
+
+    private async checkCampaignCompletion(campaign: Campaign) {
+        if (campaign.status !== 'running') return;
+
+        const processed = (campaign.sentCount || 0) + (campaign.failedCount || 0);
+        if (processed >= campaign.totalContacts) {
+            await this.campaignRepo.update(campaign.id, {
+                status: 'completed',
+                completedAt: new Date()
+            });
+            this.logger.log(`🏁 Campanha ${campaign.id} concluída (via webhook)!`);
+
+            this.eventsGateway.emitToTenant(campaign.tenantId, 'campaign.updated', {
+                id: campaign.id,
+                status: 'completed'
+            });
+        }
+    }
+
+    // Injetar gateway dinamicamente para evitar ciclo ou usar um service
+    // Por simplicidade, vamos usar o Logger ou implementar no futuro o socket aqui
+    // TODO: Injetar EventsGateway para real-time updates no frontend
+    private emitCampaignUpdate(tenantId: string, campaignId: string, type: 'delivered' | 'read') {
+        this.eventsGateway.emitToTenant(tenantId, 'campaign.stats', {
+            campaignId,
+            type, // 'delivered' or 'read'
+            timestamp: new Date()
+        });
+    }
+
+    private async handleSendMessage(data: any) {
+        // Message sent confirmation
+        const wamid = data.key?.id;
+        this.logger.debug(`Message sent event: ${wamid}`);
+    }
+}

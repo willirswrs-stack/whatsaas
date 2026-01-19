@@ -1,0 +1,156 @@
+import {
+    Controller,
+    Get,
+    Post,
+    Put,
+    Delete,
+    Body,
+    Param,
+    Query,
+    UseGuards,
+    Request,
+    HttpCode,
+    HttpStatus,
+} from '@nestjs/common';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { ContactsService } from './contacts.service';
+import {
+    CreateContactDto,
+    UpdateContactDto,
+    ContactQueryDto,
+    CreateTagDto,
+    UpdateTagDto,
+    CreateCustomFieldDto,
+    UpdateCustomFieldDto,
+    ImportContactsDto,
+    BulkAddTagsDto,
+    BulkRemoveTagsDto,
+} from './dto';
+
+@Controller('contacts')
+@UseGuards(JwtAuthGuard)
+export class ContactsController {
+    constructor(private readonly contactsService: ContactsService) { }
+
+    // ============ CONTACTS - Specific routes FIRST ============
+
+    @Get()
+    async findAll(@Request() req, @Query() query: ContactQueryDto) {
+        return this.contactsService.findAllContacts(req.user.tenantId, query);
+    }
+
+    @Get('stats')
+    async getStats(@Request() req) {
+        return this.contactsService.getContactStats(req.user.tenantId);
+    }
+
+    @Get('export')
+    async exportContacts(@Request() req, @Query('tagIds') tagIds?: string) {
+        const tagIdArray = tagIds ? tagIds.split(',') : undefined;
+        return this.contactsService.exportContacts(req.user.tenantId, tagIdArray);
+    }
+
+    @Post()
+    async create(@Request() req, @Body() dto: CreateContactDto) {
+        return this.contactsService.createContact(req.user.tenantId, dto);
+    }
+
+    @Post('import')
+    async importContacts(@Request() req, @Body() dto: ImportContactsDto) {
+        return this.contactsService.importContacts(req.user.tenantId, dto.contacts);
+    }
+
+    @Post('bulk/add-tags')
+    async bulkAddTags(@Request() req, @Body() dto: BulkAddTagsDto) {
+        return this.contactsService.bulkAddTags(req.user.tenantId, dto);
+    }
+
+    @Post('bulk/remove-tags')
+    async bulkRemoveTags(@Request() req, @Body() dto: BulkRemoveTagsDto) {
+        return this.contactsService.bulkRemoveTags(req.user.tenantId, dto);
+    }
+
+    @Post('bulk/delete')
+    @HttpCode(HttpStatus.OK)
+    async bulkDelete(@Request() req, @Body('ids') ids: string[]) {
+        return this.contactsService.bulkDeleteContacts(req.user.tenantId, ids);
+    }
+
+    // ============ TAGS - All specific routes ============
+
+    @Get('tags/list')
+    async findAllTags(@Request() req) {
+        return this.contactsService.findAllTags(req.user.tenantId);
+    }
+
+    @Post('tags')
+    async createTag(@Request() req, @Body() dto: CreateTagDto) {
+        return this.contactsService.createTag(req.user.tenantId, dto);
+    }
+
+    @Get('tags/:id')
+    async findTag(@Request() req, @Param('id') id: string) {
+        return this.contactsService.findTagById(req.user.tenantId, id);
+    }
+
+    @Put('tags/:id')
+    async updateTag(
+        @Request() req,
+        @Param('id') id: string,
+        @Body() dto: UpdateTagDto,
+    ) {
+        return this.contactsService.updateTag(req.user.tenantId, id, dto);
+    }
+
+    @Delete('tags/:id')
+    async deleteTag(@Request() req, @Param('id') id: string) {
+        return this.contactsService.deleteTag(req.user.tenantId, id);
+    }
+
+    // ============ CUSTOM FIELDS - All specific routes ============
+
+    @Get('fields/list')
+    async findAllFields(@Request() req) {
+        return this.contactsService.findAllCustomFields(req.user.tenantId);
+    }
+
+    @Post('fields')
+    async createField(@Request() req, @Body() dto: CreateCustomFieldDto) {
+        return this.contactsService.createCustomField(req.user.tenantId, dto);
+    }
+
+    @Put('fields/:id')
+    async updateField(
+        @Request() req,
+        @Param('id') id: string,
+        @Body() dto: UpdateCustomFieldDto,
+    ) {
+        return this.contactsService.updateCustomField(req.user.tenantId, id, dto);
+    }
+
+    @Delete('fields/:id')
+    async deleteField(@Request() req, @Param('id') id: string) {
+        return this.contactsService.deleteCustomField(req.user.tenantId, id);
+    }
+
+    // ============ CONTACTS - Parameterized routes LAST ============
+
+    @Get(':id')
+    async findOne(@Request() req, @Param('id') id: string) {
+        return this.contactsService.findContactById(req.user.tenantId, id);
+    }
+
+    @Put(':id')
+    async update(
+        @Request() req,
+        @Param('id') id: string,
+        @Body() dto: UpdateContactDto,
+    ) {
+        return this.contactsService.updateContact(req.user.tenantId, id, dto);
+    }
+
+    @Delete(':id')
+    async delete(@Request() req, @Param('id') id: string) {
+        return this.contactsService.deleteContact(req.user.tenantId, id);
+    }
+}
