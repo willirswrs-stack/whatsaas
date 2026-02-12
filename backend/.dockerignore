@@ -1,0 +1,11 @@
+node_modules
+npm-debug.log
+dist
+.next
+.git
+.env
+.env.local
+.env.production
+coverage
+uploads/*
+!uploads/.gitkeep

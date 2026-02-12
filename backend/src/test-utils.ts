@@ -24,6 +24,7 @@ export function createMockRepository<T extends ObjectLiteral>(): MockRepository<
         delete: jest.fn(),
         remove: jest.fn(),
         count: jest.fn(),
+        findAndCount: jest.fn(),
         createQueryBuilder: jest.fn(),
     };
 }
@@ -164,7 +165,7 @@ export const mockConfigService = (config: Record<string, any> = {}) => ({
 // WhatsApp Provider Mock
 // ============================================
 
-export const mockWhatsAppProvider = () => ({
+export const mockWhatsAppProvider = (overrides = {}) => ({
     providerType: 'evolution' as const,
     createInstance: jest.fn().mockResolvedValue({
         instanceId: 'evo-123',
@@ -184,6 +185,7 @@ export const mockWhatsAppProvider = () => ({
     }),
     sendPresence: jest.fn().mockResolvedValue(undefined),
     isOnWhatsApp: jest.fn().mockResolvedValue(true),
+    ...overrides,
 });
 
 export const mockProviderFactory = () => ({

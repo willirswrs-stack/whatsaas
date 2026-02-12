@@ -27,6 +27,8 @@ export class DispatcherService {
      * Enfileira todos os contatos de uma campanha para envio
      */
     async enqueueCampaign(campaignId: string, tenantId: string): Promise<number> {
+        this.logger.log(`Starting enqueueCampaign for ${campaignId}`);
+
         // Validar ownership
         const campaign = await this.campaignRepo.findOne({
             where: { id: campaignId, tenantId },
@@ -45,7 +47,7 @@ export class DispatcherService {
         });
 
         if (pendingContacts.length === 0) {
-            this.logger.warn(`No pending contacts for campaign ${campaignId}`);
+            this.logger.log(`No pending contacts for campaign ${campaignId}`);
             return 0;
         }
 
@@ -58,12 +60,21 @@ export class DispatcherService {
                 campaignId,
             } as DispatchJobData,
             opts: {
-                jobId: cc.id,
+                // Adiciona timestamp para garantir unicidade e permitir re-retry se falhar
+                jobId: `${cc.id}-${Date.now()}`,
                 priority: 0,
+                removeOnComplete: true,
+                removeOnFail: false
             },
         }));
 
-        await this.dispatchQueue.addBulk(jobs);
+        this.logger.log(`🚀 Adding ${jobs.length} jobs to queue: ${this.dispatchQueue.name}`);
+        try {
+            await this.dispatchQueue.addBulk(jobs);
+        } catch (e) {
+            this.logger.error(`❌ FATAL: AddBulk Failed: ${e.message}`);
+            throw e;
+        }
 
         // Atualizar campanha
         await this.campaignRepo.update(campaignId, {

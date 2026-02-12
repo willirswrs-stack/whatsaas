@@ -45,7 +45,7 @@ describe('CampaignsController', () => {
 
     describe('findAll', () => {
         it('should return all campaigns', async () => {
-            const result = await controller.findAll('tenant-123');
+            const result = await controller.findAll({}, 'tenant-123');
             expect(result).toHaveLength(1);
         });
     });
@@ -131,7 +131,7 @@ describe('CampaignsController', () => {
 
     describe('Contacts', () => {
         it('should list all contacts', async () => {
-            const result = await controller.findAllContacts('tenant-123');
+            const result = await controller.findAllContacts({}, 'tenant-123');
             expect(result).toHaveLength(1);
         });
 

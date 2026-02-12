@@ -277,6 +277,50 @@ export class CampaignsService {
         return { deleted: true };
     }
 
+    async duplicate(id: string, tenantId: string) {
+        const original = await this.findOne(id, tenantId);
+
+        // Get original campaign contacts
+        const originalContacts = await this.campaignContactRepo.find({
+            where: { campaignId: id },
+            select: ['contactId'],
+        });
+
+        // Create new campaign with same settings but reset status
+        const newCampaign = this.campaignRepo.create({
+            tenantId,
+            name: `${original.name} (Cópia)`,
+            templateId: original.templateId,
+            flowId: original.flowId,
+            instanceId: original.instanceId,
+            status: 'draft',
+            aiSpinEnabled: original.aiSpinEnabled,
+            variationCount: original.variationCount,
+            minDelayMs: original.minDelayMs,
+            maxDelayMs: original.maxDelayMs,
+            settings: original.settings,
+            totalContacts: originalContacts.length,
+        });
+
+        const savedCampaign = await this.campaignRepo.save(newCampaign);
+
+        // Copy contacts to new campaign
+        if (originalContacts.length > 0) {
+            const copiedContacts = originalContacts.map(cc =>
+                this.campaignContactRepo.create({
+                    campaignId: savedCampaign.id,
+                    contactId: cc.contactId,
+                    status: 'queued',
+                })
+            );
+            await this.campaignContactRepo.save(copiedContacts);
+        }
+
+        this.logger.log(`📋 Campaign ${id} duplicated as ${savedCampaign.id} with ${originalContacts.length} contacts`);
+
+        return savedCampaign;
+    }
+
     // Templates
     async findAllTemplates(tenantId: string) {
         return this.templateRepo.find({

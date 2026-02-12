@@ -19,7 +19,7 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     private readonly logger = new Logger(EvolutionAdapter.name);
     private readonly baseUrl: string;
     private readonly apiKey: string;
-    private readonly requestTimeout: number = 60000;
+    private readonly requestTimeout: number = 120000;
 
     constructor(private configService: ConfigService) {
         this.baseUrl = configService.get('EVOLUTION_API_URL', 'http://localhost:8081');
@@ -165,6 +165,31 @@ export class EvolutionAdapter implements IWhatsAppProvider {
             number: this.formatPhone(to),
             text,
         });
+
+        return {
+            messageId: response.key?.id || 'unknown',
+            status: 'sent',
+        };
+    }
+
+    async sendMedia(instanceName: string, to: string, media: {
+        type: 'image' | 'video' | 'audio' | 'document';
+        url: string;
+        caption?: string;
+        filename?: string;
+    }): Promise<SendMessageResult> {
+        // Evolution API uses /message/sendMedia endpoint
+        const extension = media.url.split('.').pop()?.split('?')[0] || (media.type === 'video' ? 'mp4' : media.type === 'audio' ? 'mp3' : media.type === 'image' ? 'jpg' : 'pdf');
+
+        const response = await this.request('POST', `/message/sendMedia/${instanceName}`, {
+            number: this.formatPhone(to),
+            mediatype: media.type,
+            media: media.url,
+            caption: media.caption || '',
+            fileName: media.filename || `file.${extension}`,
+        });
+
+        this.logger.log(`Sent ${media.type} to ${to} via Evolution API`);
 
         return {
             messageId: response.key?.id || 'unknown',

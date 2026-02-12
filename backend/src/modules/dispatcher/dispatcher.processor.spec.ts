@@ -11,6 +11,8 @@ import { DelayGeneratorService } from '../anti-ban/delay-generator.service';
 import { StackRouterService } from '../anti-ban/stack-router.service';
 import { AntiBanAnalyticsService } from '../anti-ban/analytics.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { FlowsService } from '../flows/flows.service';
+import { EventsGateway } from '../events/events.gateway';
 import { Logger } from '@nestjs/common';
 
 describe('DispatcherProcessor', () => {
@@ -105,6 +107,18 @@ describe('DispatcherProcessor', () => {
                     useValue: {
                         recordSent: jest.fn(),
                         recordFailed: jest.fn(),
+                    },
+                },
+                {
+                    provide: FlowsService,
+                    useValue: {
+                        startExecution: jest.fn(),
+                    },
+                },
+                {
+                    provide: EventsGateway,
+                    useValue: {
+                        emitToTenant: jest.fn(),
                     },
                 },
             ],

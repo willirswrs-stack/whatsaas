@@ -115,12 +115,12 @@ describe('WahaAdapter', () => {
             expect(result.phoneNumber).toBe('5511999999999@s.whatsapp.net');
         });
 
-        it('should return scan_qr for SCAN_QR_CODE', async () => {
+        it('should return qr_pending for SCAN_QR_CODE', async () => {
             mockFetch.mockResolvedValueOnce(mockResponse({ status: 'SCAN_QR_CODE' }));
 
             const result = await adapter.getStatus('test-instance');
 
-            expect(result.status).toBe('scan_qr');
+            expect(result.status).toBe('qr_pending');
         });
 
         it('should return disconnected on error', async () => {

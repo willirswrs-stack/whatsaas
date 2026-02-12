@@ -75,6 +75,12 @@ describe('ContactsService', () => {
             getRawMany: jest.fn().mockResolvedValue([{ tag_id: 'tag-123', count: '5' }]),
         });
 
+        customFieldRepo.createQueryBuilder = jest.fn().mockReturnValue({
+            where: jest.fn().mockReturnThis(),
+            select: jest.fn().mockReturnThis(),
+            getRawOne: jest.fn().mockResolvedValue({ max: 10 }),
+        });
+
         const module: TestingModule = await Test.createTestingModule({
             providers: [
                 ContactsService,
@@ -95,9 +101,10 @@ describe('ContactsService', () => {
     describe('Contacts CRUD', () => {
         describe('findAllContacts', () => {
             it('should return paginated contacts', async () => {
+                contactTagRepo.find!.mockResolvedValue([]);
                 const result = await service.findAllContacts('tenant-123', { page: 1, limit: 10 });
 
-                expect(result.contacts).toHaveLength(1);
+                expect(result.data).toHaveLength(1);
                 expect(result.total).toBe(1);
             });
         });
@@ -105,6 +112,7 @@ describe('ContactsService', () => {
         describe('findContactById', () => {
             it('should return a contact by id', async () => {
                 contactRepo.findOne!.mockResolvedValue(mockContact());
+                contactTagRepo.find!.mockResolvedValue([]);
 
                 const result = await service.findContactById('tenant-123', 'contact-123');
 
@@ -121,8 +129,13 @@ describe('ContactsService', () => {
 
         describe('createContact', () => {
             it('should create a new contact', async () => {
+                const newContact = { ...mockContact(), phone: '5511888888888', name: 'Jane Doe' };
                 contactRepo.create!.mockImplementation((data) => ({ ...mockContact(), ...data }));
                 contactRepo.save!.mockImplementation((data) => Promise.resolve(data));
+
+                // Mocks for: 1. check duplicate (find by phone -> null), 2. return created (find by id -> contact)
+                contactRepo.findOne!.mockResolvedValueOnce(null).mockResolvedValueOnce(newContact);
+                contactTagRepo.find!.mockResolvedValue([]);
 
                 const result = await service.createContact('tenant-123', {
                     phone: '5511888888888',
@@ -136,7 +149,9 @@ describe('ContactsService', () => {
         describe('updateContact', () => {
             it('should update an existing contact', async () => {
                 const contact = mockContact();
-                contactRepo.findOne!.mockResolvedValue(contact);
+                const updatedContact = mockContact({ name: 'Updated Name' });
+                contactRepo.findOne!.mockResolvedValueOnce(contact).mockResolvedValueOnce(updatedContact);
+                contactTagRepo.find!.mockResolvedValue([]);
                 contactRepo.save!.mockImplementation((data) => Promise.resolve(data));
 
                 const result = await service.updateContact('tenant-123', 'contact-123', {
@@ -151,11 +166,13 @@ describe('ContactsService', () => {
             it('should delete a contact', async () => {
                 const contact = mockContact();
                 contactRepo.findOne!.mockResolvedValue(contact);
-                contactRepo.remove!.mockResolvedValue(contact);
+                contactTagRepo.find!.mockResolvedValue([]);
+                contactRepo.delete!.mockResolvedValue({ affected: 1 });
+                contactTagRepo.delete!.mockResolvedValue({ affected: 0 });
 
                 const result = await service.deleteContact('tenant-123', 'contact-123');
 
-                expect(result.deleted).toBe(true);
+                expect(result.message).toBe('Contato excluído com sucesso');
             });
         });
 
@@ -165,7 +182,7 @@ describe('ContactsService', () => {
 
                 const result = await service.bulkDeleteContacts('tenant-123', ['c1', 'c2', 'c3', 'c4', 'c5']);
 
-                expect(result.deleted).toBe(5);
+                expect(result.message).toBe('5 contatos excluídos');
             });
         });
 
@@ -179,6 +196,14 @@ describe('ContactsService', () => {
                     { phone: '5511222222222', name: 'Contact 2' },
                 ];
 
+                contactTagRepo.find!.mockResolvedValue([]);
+                contactRepo.find!.mockResolvedValue([]); // No existing contacts
+                contactRepo.findOne!.mockImplementation((args) => {
+                    const where = args.where as any;
+                    if (where.phone) return Promise.resolve(null); // No duplicate
+                    return Promise.resolve(mockContact()); // Return found contact by ID
+                });
+
                 const result = await service.importContacts('tenant-123', contacts);
 
                 expect(result.imported).toBe(2);
@@ -187,7 +212,7 @@ describe('ContactsService', () => {
 
         describe('exportContacts', () => {
             it('should export contacts', async () => {
-                contactRepo.find!.mockResolvedValue([mockContact()]);
+                contactTagRepo.find!.mockResolvedValue([]);
 
                 const result = await service.exportContacts('tenant-123');
 
@@ -248,7 +273,9 @@ describe('ContactsService', () => {
 
         describe('updateTag', () => {
             it('should update an existing tag', async () => {
-                tagRepo.findOne!.mockResolvedValue(mockTag());
+                const tag = mockTag();
+                const updatedTag = mockTag({ color: '#0000FF' });
+                tagRepo.findOne!.mockResolvedValueOnce(tag).mockResolvedValueOnce(updatedTag);
                 tagRepo.save!.mockImplementation((data) => Promise.resolve(data));
 
                 const result = await service.updateTag('tenant-123', 'tag-123', {
@@ -262,11 +289,12 @@ describe('ContactsService', () => {
         describe('deleteTag', () => {
             it('should delete a tag', async () => {
                 tagRepo.findOne!.mockResolvedValue(mockTag());
-                tagRepo.remove!.mockResolvedValue(mockTag());
+                contactTagRepo.delete!.mockResolvedValue({ affected: 0 });
+                tagRepo.delete!.mockResolvedValue({ affected: 1 });
 
                 const result = await service.deleteTag('tenant-123', 'tag-123');
 
-                expect(result.deleted).toBe(true);
+                expect(result.message).toBe('Tag excluída com sucesso');
             });
         });
     });
@@ -290,7 +318,8 @@ describe('ContactsService', () => {
 
                 const result = await service.createCustomField('tenant-123', {
                     name: 'Birthday',
-                    fieldType: 'date',
+                    key: 'birthday',
+                    type: 'date',
                 });
 
                 expect(result.name).toBe('Birthday');
@@ -299,25 +328,27 @@ describe('ContactsService', () => {
 
         describe('updateCustomField', () => {
             it('should update a custom field', async () => {
-                customFieldRepo.findOne!.mockResolvedValue(mockCustomField());
+                const field = mockCustomField();
+                const updatedField = mockCustomField({ required: true });
+                customFieldRepo.findOne!.mockResolvedValueOnce(field).mockResolvedValueOnce(updatedField);
                 customFieldRepo.save!.mockImplementation((data) => Promise.resolve(data));
 
                 const result = await service.updateCustomField('tenant-123', 'field-123', {
                     required: true,
                 });
 
-                expect(result.required).toBe(true);
+                expect(result!.required).toBe(true);
             });
         });
 
         describe('deleteCustomField', () => {
             it('should delete a custom field', async () => {
                 customFieldRepo.findOne!.mockResolvedValue(mockCustomField());
-                customFieldRepo.remove!.mockResolvedValue(mockCustomField());
+                customFieldRepo.delete!.mockResolvedValue({ affected: 1 });
 
                 const result = await service.deleteCustomField('tenant-123', 'field-123');
 
-                expect(result.deleted).toBe(true);
+                expect(result.message).toBe('Campo excluído com sucesso');
             });
         });
     });
@@ -329,7 +360,7 @@ describe('ContactsService', () => {
 
             const result = await service.getContactStats('tenant-123');
 
-            expect(result.totalContacts).toBe(100);
+            expect(result.total).toBe(100);
         });
     });
 });

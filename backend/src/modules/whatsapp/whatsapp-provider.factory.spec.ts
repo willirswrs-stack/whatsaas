@@ -4,24 +4,17 @@ import { ModuleRef } from '@nestjs/core';
 import { WhatsAppProviderFactory } from './whatsapp-provider.factory';
 import { WahaAdapter } from './adapters/waha.adapter';
 import { EvolutionAdapter } from './adapters/evolution.adapter';
-import { WwebjsAdapter } from './adapters/wwebjs.adapter';
 import { mockWhatsAppProvider } from '../../test-utils';
 
 describe('WhatsAppProviderFactory', () => {
     let factory: WhatsAppProviderFactory;
     let wahaAdapter: jest.Mocked<WahaAdapter>;
     let evolutionAdapter: jest.Mocked<EvolutionAdapter>;
-    let wwebjsAdapter: jest.Mocked<WwebjsAdapter>;
 
     beforeEach(async () => {
-        wahaAdapter = mockWhatsAppProvider() as any;
-        wahaAdapter.providerType = 'waha';
+        wahaAdapter = mockWhatsAppProvider({ providerType: 'waha' }) as any;
 
-        evolutionAdapter = mockWhatsAppProvider() as any;
-        evolutionAdapter.providerType = 'evolution';
-
-        wwebjsAdapter = mockWhatsAppProvider() as any;
-        wwebjsAdapter.providerType = 'wwebjs';
+        evolutionAdapter = mockWhatsAppProvider({ providerType: 'evolution' }) as any;
 
         const module: TestingModule = await Test.createTestingModule({
             providers: [
@@ -29,7 +22,6 @@ describe('WhatsAppProviderFactory', () => {
                 { provide: ModuleRef, useValue: {} },
                 { provide: WahaAdapter, useValue: wahaAdapter },
                 { provide: EvolutionAdapter, useValue: evolutionAdapter },
-                { provide: WwebjsAdapter, useValue: wwebjsAdapter },
             ],
         }).compile();
 
@@ -47,11 +39,6 @@ describe('WhatsAppProviderFactory', () => {
             expect(provider.providerType).toBe('evolution');
         });
 
-        it('should return wwebjs adapter for "wwebjs" type', () => {
-            const provider = factory.getProvider('wwebjs');
-            expect(provider.providerType).toBe('wwebjs');
-        });
-
         it('should throw error for unknown provider type', () => {
             expect(() => factory.getProvider('unknown' as any))
                 .toThrow('Unknown WhatsApp provider: unknown');
@@ -64,8 +51,7 @@ describe('WhatsAppProviderFactory', () => {
 
             expect(providers).toContain('waha');
             expect(providers).toContain('evolution');
-            expect(providers).toContain('wwebjs');
-            expect(providers).toHaveLength(3);
+            expect(providers).toHaveLength(2);
         });
     });
 
@@ -73,7 +59,6 @@ describe('WhatsAppProviderFactory', () => {
         it('should return true for registered providers', () => {
             expect(factory.isProviderAvailable('waha')).toBe(true);
             expect(factory.isProviderAvailable('evolution')).toBe(true);
-            expect(factory.isProviderAvailable('wwebjs')).toBe(true);
         });
 
         it('should return false for unknown providers', () => {

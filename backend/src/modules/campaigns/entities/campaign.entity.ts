@@ -3,6 +3,7 @@ import {
     PrimaryGeneratedColumn,
     Column,
     CreateDateColumn,
+    UpdateDateColumn,
     ManyToOne,
     OneToMany,
     JoinColumn,
@@ -258,4 +259,10 @@ export class CampaignContact {
 
     @Column('jsonb', { name: 'timing_metadata', nullable: true })
     timingMetadata: Record<string, any>;
+
+    @CreateDateColumn({ name: 'created_at' })
+    createdAt: Date;
+
+    @UpdateDateColumn({ name: 'updated_at' })
+    updatedAt: Date;
 }

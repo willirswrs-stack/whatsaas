@@ -71,6 +71,7 @@ export class DispatcherProcessor extends WorkerHost {
     async process(job: Job<DispatchJobData>): Promise<DispatchResult> {
         const { tenantId, campaignContactId, campaignId } = job.data;
 
+        console.log(`🔥 [WORKER-DEBUG] Processing job ${job.id} for contact ${campaignContactId}`);
         this.logger.debug(`Processing job ${job.id} for contact ${campaignContactId}`);
 
         try {
@@ -365,7 +366,7 @@ export class DispatcherProcessor extends WorkerHost {
         try {
             const campaign = await this.campaignRepo.findOne({
                 where: { id: campaignId },
-                select: ['totalContacts', 'sentCount', 'failedCount', 'status']
+                select: ['id', 'tenantId', 'totalContacts', 'sentCount', 'failedCount', 'status']
             });
 
             if (!campaign) return;

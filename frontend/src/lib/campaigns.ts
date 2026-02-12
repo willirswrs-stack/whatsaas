@@ -121,6 +121,11 @@ export const campaignsService = {
         await api.delete(`/campaigns/${id}`);
     },
 
+    async duplicate(id: string): Promise<Campaign> {
+        const response = await api.post<Campaign>(`/campaigns/${id}/duplicate`);
+        return response.data;
+    },
+
     async getStats(id: string): Promise<CampaignStats> {
         const response = await api.get<CampaignStats>(`/campaigns/${id}/stats`);
         return response.data;

@@ -1,11 +1,13 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Flow, FlowExecution, FlowTrigger } from './entities';
 import { CreateFlowDto, UpdateFlowDto, CreateTriggerDto, ExecuteFlowDto } from './dto';
 import { InstancesService } from '../instances/instances.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
+import { AiService } from '../ai/ai.service';
 
 @Injectable()
 export class FlowsService {
@@ -19,6 +21,9 @@ export class FlowsService {
         private instancesService: InstancesService,
         private contactsService: ContactsService,
         private whatsappFactory: WhatsAppProviderFactory,
+        @Inject(AiService)
+        private aiService: AiService,
+        private configService: ConfigService,
     ) { }
 
     // ============ FLOWS ============
@@ -219,20 +224,19 @@ export class FlowsService {
     }
 
     async processExecution(executionId: string) {
+        // 1. Fetch current state
         const execution = await this.executionRepository.findOne({ where: { id: executionId } });
         if (!execution || execution.status !== 'running') return;
 
         const flow = await this.flowRepository.findOne({ where: { id: execution.flowId } });
         if (!flow) return;
 
-        // Find Current Node
-        const currentNode = flow.nodes.find(n => n.id === execution.currentNodeId);
-        if (!currentNode) return;
+        // 2. Find Next Node via Edge
+        const currentNodeId = execution.currentNodeId;
+        const edge = flow.edges.find(e => e.source === currentNodeId);
 
-        // Find Next Connected Node (Single path assumption for MVP)
-        const edge = flow.edges.find(e => e.source === currentNode.id);
         if (!edge) {
-            // End of execution
+            // No more edges = End of flow
             execution.status = 'completed';
             execution.completedAt = new Date();
             await this.executionRepository.save(execution);
@@ -240,34 +244,69 @@ export class FlowsService {
         }
 
         const nextNode = flow.nodes.find(n => n.id === edge.target);
-        if (!nextNode) return;
+        if (!nextNode) {
+            execution.status = 'completed';
+            execution.completedAt = new Date();
+            await this.executionRepository.save(execution);
+            return;
+        }
 
-        // Move to next node
+        // 3. Update execution state to the node we are about to process
+        // This prevents double-processing if processExecution is called again
         execution.currentNodeId = nextNode.id;
+        execution.status = 'running';
+        execution.completedAt = null as any;
+        await this.executionRepository.save(execution);
 
-        // Process Node Logic
-        if (nextNode.data?.type === 'message' || nextNode.type === 'message') { // Handle different node structures
-            try {
+        const nodeType = nextNode.type || nextNode.data?.type;
+        console.log(`[Flow] Processing node: ${nextNode.id}, type: ${nodeType}`);
+        const aiNodeTypes = ['gpt', 'openai', 'anthropic', 'gemini', 'groq', 'customLlm'];
+
+        try {
+            // Process AI Nodes
+            if (aiNodeTypes.includes(nodeType)) {
                 const instance = await this.instancesService.findById(execution.instanceId);
-                const contact = await this.contactsService.findById(execution.contactId); // Assuming internal method exists or findById
+                const contact = await this.contactsService.findById(execution.contactId);
+                const nodeData = nextNode.data as any;
+                const systemPrompt = nodeData?.config?.prompt;
+                const userMessage = execution.variables?.lastUserMessage || 'Olá';
 
-                if (instance && contact && instance.status === 'connected') {
+                let apiKey = nodeData?.config?.apiKey || nodeData?.config?.token;
+                if (!apiKey || apiKey.trim() === '') {
+                    apiKey = this.configService.get<string>('OPENAI_API_KEY');
+                }
+
+                const responseContent = await this.aiService.generateResponseWithKey(
+                    systemPrompt || 'Você é um assistente útil.',
+                    userMessage,
+                    apiKey,
+                    'openai'
+                );
+
+                if (instance?.status === 'connected' && contact) {
+                    const provider = this.whatsappFactory.getProvider(instance.provider);
+                    await provider.sendText(instance.instanceName, contact.phone, responseContent);
+                }
+
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'gpt_response',
+                    timestamp: new Date().toISOString(),
+                    data: { response: responseContent }
+                });
+            }
+
+            // Process Message Node
+            else if (nodeType === 'message') {
+                const instance = await this.instancesService.findById(execution.instanceId);
+                const contact = await this.contactsService.findById(execution.contactId);
+
+                if (instance?.status === 'connected' && contact) {
                     const provider = this.whatsappFactory.getProvider(instance.provider);
                     const nodeData = nextNode.data as any;
-                    const content = nodeData?.config?.message || nodeData?.content || 'Olá'; // Fallback
-
-                    console.log('[FlowExecution] 📤 Sending message:', {
-                        executionId,
-                        nodeId: nextNode.id,
-                        nodeData: JSON.stringify(nodeData),
-                        extractedContent: content,
-                        instanceName: instance.instanceName,
-                        contactPhone: contact.phone,
-                    });
+                    const content = nodeData?.config?.message || nodeData?.content || 'Olá';
 
                     await provider.sendText(instance.instanceName, contact.phone, content);
-
-                    // Log success
                     execution.logs.push({
                         nodeId: nextNode.id,
                         action: 'sent',
@@ -275,22 +314,174 @@ export class FlowsService {
                         data: { type: 'message', status: 'sent' }
                     });
                 }
-            } catch (error) {
-                console.error('Error sending flow message:', error);
-                execution.status = 'failed';
+            }
+
+            // Process Media Node
+            else if (['video', 'media', 'image', 'audio', 'document'].includes(nodeType)) {
+                const instance = await this.instancesService.findById(execution.instanceId);
+                const contact = await this.contactsService.findById(execution.contactId);
+
+                if (instance?.status === 'connected' && contact) {
+                    const provider = this.whatsappFactory.getProvider(instance.provider);
+                    const nodeData = nextNode.data as any;
+                    const mediaUrl = nodeData?.config?.mediaUrl || nodeData?.config?.url || nodeData?.config?.file;
+                    const caption = nodeData?.config?.caption || nodeData?.config?.message || '';
+                    const mediaType = nodeData?.config?.mediaType || nodeType;
+
+                    if (mediaUrl) {
+                        try {
+                            await provider.sendMedia(instance.instanceName, contact.phone, {
+                                type: mediaType as any,
+                                url: mediaUrl,
+                                caption: caption,
+                            });
+                            execution.logs.push({
+                                nodeId: nextNode.id,
+                                action: 'media_sent',
+                                timestamp: new Date().toISOString(),
+                                data: { type: mediaType, status: 'sent' }
+                            });
+                        } catch (mediaErr) {
+                            console.error(`Media Send Error at node ${nextNode.id}:`, mediaErr.message);
+                            execution.logs.push({
+                                nodeId: nextNode.id,
+                                action: 'media_failed',
+                                timestamp: new Date().toISOString(),
+                                data: { type: mediaType, error: mediaErr.message }
+                            });
+                            // We continue even if media fails? For now YES, to avoid blocking links/etc.
+                        }
+                    }
+                }
+            }
+
+            // Process Link Node
+            else if (['link', 'send_link'].includes(nodeType)) {
+                const instance = await this.instancesService.findById(execution.instanceId);
+                const contact = await this.contactsService.findById(execution.contactId);
+
+                if (instance?.status === 'connected' && contact) {
+                    const provider = this.whatsappFactory.getProvider(instance.provider);
+                    const nodeData = nextNode.data as any;
+                    const url = nodeData?.config?.url || nodeData?.config?.link || '';
+                    const caption = nodeData?.config?.caption || nodeData?.config?.message || '';
+                    const fullMessage = caption ? `${caption}\n${url}` : url;
+
+                    if (url) {
+                        await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+                        execution.logs.push({
+                            nodeId: nextNode.id,
+                            action: 'link_sent',
+                            timestamp: new Date().toISOString(),
+                            data: { url, status: 'sent' }
+                        });
+                    }
+                }
+            }
+
+            // Process SMS Node
+            else if (['sms', 'send_sms'].includes(nodeType)) {
+                const instance = await this.instancesService.findById(execution.instanceId);
+                const contact = await this.contactsService.findById(execution.contactId);
+
+                if (instance?.status === 'connected' && contact) {
+                    const provider = this.whatsappFactory.getProvider(instance.provider);
+                    const nodeData = nextNode.data as any;
+                    const message = nodeData?.config?.message || '';
+                    const phoneNumber = nodeData?.config?.phoneNumber || contact.phone;
+
+                    if (message) {
+                        await provider.sendText(instance.instanceName, phoneNumber, `[SMS] ${message}`);
+                        execution.logs.push({
+                            nodeId: nextNode.id,
+                            action: 'sms_sent',
+                            timestamp: new Date().toISOString(),
+                            data: { to: phoneNumber, status: 'sent' }
+                        });
+                    }
+                }
+            }
+
+            // Process Question Node
+            else if (['question', 'pergunta', 'ask_question'].includes(nodeType)) {
+                const instance = await this.instancesService.findById(execution.instanceId);
+                const contact = await this.contactsService.findById(execution.contactId);
+
+                if (instance?.status === 'connected' && contact) {
+                    const provider = this.whatsappFactory.getProvider(instance.provider);
+                    const nodeData = nextNode.data as any;
+                    const questionText = nodeData?.config?.question || 'Qual sua resposta?';
+                    const saveTo = nodeData?.config?.saveTo || 'lastAnswer';
+
+                    await provider.sendText(instance.instanceName, contact.phone, questionText);
+
+                    execution.status = 'waiting_response';
+                    execution.variables = {
+                        ...execution.variables,
+                        waitingForAnswer: true,
+                        waitingNodeId: nextNode.id,
+                        waitingSaveTo: saveTo,
+                    };
+
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'question_sent',
+                        timestamp: new Date().toISOString(),
+                    });
+
+                    await this.executionRepository.save(execution);
+                    return; // Stop auto-advance
+                }
+            }
+
+            // Process Delay Node
+            else if (['delay', 'wait', 'esperar'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                const delaySeconds = parseInt(nodeData?.config?.seconds || '5', 10);
+
+                console.log(`[Flow] Processing Delay Node: ${delaySeconds} seconds`);
+
                 execution.logs.push({
                     nodeId: nextNode.id,
-                    action: 'error',
+                    action: 'delay',
                     timestamp: new Date().toISOString(),
-                    data: { error: error.message }
+                    data: { delaySeconds }
                 });
-            }
-        }
 
-        // Mark as completed for now (Single step execution)
-        execution.status = 'completed';
-        execution.completedAt = new Date();
-        await this.executionRepository.save(execution);
+                // Update execution state
+                execution.status = 'running'; // Keep running as we use setTimeout
+                execution.nextActionAt = new Date(Date.now() + delaySeconds * 1000);
+
+                await this.executionRepository.save(execution);
+
+                setTimeout(() => this.processExecution(executionId), delaySeconds * 1000);
+                return;
+            }
+
+            // Finalize this step
+            await this.executionRepository.save(execution);
+
+            if (nodeType === 'end') {
+                execution.status = 'completed';
+                execution.completedAt = new Date();
+                await this.executionRepository.save(execution);
+                return;
+            }
+
+            // Continue to next node
+            this.processExecution(executionId);
+
+        } catch (error) {
+            console.error(`Error processing flow node ${nodeType}:`, error);
+            execution.status = 'failed';
+            execution.logs.push({
+                nodeId: nextNode.id,
+                action: 'error',
+                timestamp: new Date().toISOString(),
+                data: { error: error.message }
+            });
+            await this.executionRepository.save(execution);
+        }
     }
 
     async getExecutions(tenantId: string, flowId?: string) {

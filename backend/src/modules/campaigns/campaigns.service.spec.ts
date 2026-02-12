@@ -140,18 +140,15 @@ describe('CampaignsService', () => {
     });
 
     describe('findAll', () => {
-        it('should return all campaigns for a tenant', async () => {
+        it('should return paginated campaigns for a tenant', async () => {
             const campaigns = [mockCampaign(), mockCampaign({ id: 'campaign-456' })];
-            campaignRepo.find!.mockResolvedValue(campaigns);
+            campaignRepo.findAndCount!.mockResolvedValue([campaigns, 2]);
 
             const result = await service.findAll('tenant-123');
 
-            expect(result).toHaveLength(2);
-            expect(campaignRepo.find).toHaveBeenCalledWith({
-                where: { tenantId: 'tenant-123' },
-                relations: ['template'],
-                order: { createdAt: 'DESC' },
-            });
+            expect(result.data).toHaveLength(2);
+            expect(result.meta.total).toBe(2);
+            expect(campaignRepo.findAndCount).toHaveBeenCalled();
         });
     });
 
@@ -369,13 +366,14 @@ describe('CampaignsService', () => {
 
     describe('Contacts', () => {
         describe('findAllContacts', () => {
-            it('should return all contacts', async () => {
+            it('should return paginated contacts', async () => {
                 const contacts = [mockContact()];
-                contactRepo.find!.mockResolvedValue(contacts);
+                contactRepo.findAndCount!.mockResolvedValue([contacts, 1]);
 
                 const result = await service.findAllContacts('tenant-123');
 
-                expect(result).toHaveLength(1);
+                expect(result.data).toHaveLength(1);
+                expect(result.meta.total).toBe(1);
             });
         });
 

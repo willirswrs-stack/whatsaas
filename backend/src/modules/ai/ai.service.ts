@@ -389,4 +389,58 @@ export class AiService {
 
         return conversation;
     }
+
+    /**
+     * Generate a single response using AI (Chat Mode)
+     */
+    async generateResponseWithKey(
+        systemPrompt: string,
+        userMessage: string,
+        apiKey: string | null,
+        provider: 'openai' | 'anthropic' = 'openai',
+    ): Promise<string> {
+        // Fallback or Mock
+        if (!apiKey || apiKey.includes('placeholder') || apiKey.length < 10) {
+            this.logger.warn('No valid API key provided, returning mock response');
+            return `[MOCK AI RESPONSE] Processed: ${userMessage} (System: ${systemPrompt})`;
+        }
+
+        if (provider === 'openai') {
+            return this.chatWithOpenAIKey(
+                apiKey,
+                systemPrompt,
+                userMessage
+            );
+        } else {
+            // Default to OpenAI for now
+            return this.chatWithOpenAIKey(
+                apiKey,
+                systemPrompt,
+                userMessage
+            );
+        }
+    }
+
+    private async chatWithOpenAIKey(
+        apiKey: string,
+        systemPrompt: string,
+        userPrompt: string
+    ): Promise<string> {
+        try {
+            const openaiClient = new OpenAI({ apiKey });
+            const response = await openaiClient.chat.completions.create({
+                model: 'gpt-4o',
+                messages: [
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: userPrompt },
+                ],
+                temperature: 0.7,
+            });
+
+            return response.choices[0]?.message?.content || '';
+        } catch (error) {
+            this.logger.error(`OpenAI Chat Error: ${error.message}`);
+            return `[ERROR AI] ${error.message}`;
+        }
+    }
 }

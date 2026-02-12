@@ -201,7 +201,7 @@ describe('EvolutionAdapter', () => {
             expect(result.status).toBe('connecting');
         });
 
-        it('should return scan_qr for qrcode state', async () => {
+        it('should return qr_pending for qrcode state', async () => {
             // Arrange
             mockFetch.mockResolvedValueOnce(mockResponse({
                 instance: { state: 'qrcode' },
@@ -211,7 +211,7 @@ describe('EvolutionAdapter', () => {
             const result = await adapter.getStatus('test-instance');
 
             // Assert
-            expect(result.status).toBe('scan_qr');
+            expect(result.status).toBe('qr_pending');
         });
 
         it('should return disconnected on error', async () => {

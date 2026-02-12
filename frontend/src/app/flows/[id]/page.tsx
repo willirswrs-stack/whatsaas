@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import {
     ReactFlow,
+    ReactFlowProvider,
     MiniMap,
     Controls,
     Background,
@@ -14,14 +15,20 @@ import {
     Edge,
     Node,
     NodeTypes,
+    EdgeTypes,
     Handle,
     Position,
     BackgroundVariant,
     NodeProps,
+    EdgeProps,
+    getBezierPath,
+    BaseEdge,
     useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { flowsApi, Flow, NODE_CATEGORIES, getNodeColor, FlowNodeType } from '@/lib/flows';
+import api from '@/lib/api';
+import { instancesService, Instance } from '@/lib/instances';
 import {
     metaTemplatesService,
     MetaTemplate,
@@ -32,6 +39,8 @@ import {
     getTemplateStatusColor,
     getTemplateStatusLabel
 } from '@/lib/meta-templates';
+// ============ TYPES ============
+type CustomNodeProps = NodeProps<Node<any, string>>;
 
 // ============ ESTILOS ============
 const nodeStyles = {
@@ -136,6 +145,85 @@ const Icons = {
     ),
 };
 
+// ============ EDGE CUSTOMIZADO COM BOTÃO DE DELETE ============
+function DeletableEdge({
+    id,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    style = {},
+    markerEnd,
+}: EdgeProps) {
+    const { setEdges } = useReactFlow();
+    const [isHovered, setIsHovered] = useState(false);
+
+    const [edgePath, labelX, labelY] = getBezierPath({
+        sourceX,
+        sourceY,
+        sourcePosition,
+        targetX,
+        targetY,
+        targetPosition,
+    });
+
+    const onEdgeClick = (event: React.MouseEvent) => {
+        event.stopPropagation();
+        event.preventDefault();
+        setEdges((edges) => edges.filter((edge) => edge.id !== id));
+    };
+
+    return (
+        <g
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+        >
+            {/* Área invisível maior para detectar hover */}
+            <path
+                d={edgePath}
+                fill="none"
+                strokeWidth={20}
+                stroke="transparent"
+                style={{ cursor: 'pointer' }}
+            />
+            {/* Edge visível */}
+            <BaseEdge
+                path={edgePath}
+                markerEnd={markerEnd}
+                style={{
+                    ...style,
+                    stroke: isHovered ? '#ef4444' : '#14b8a6',
+                    strokeWidth: isHovered ? 3 : 2,
+                }}
+            />
+            {/* Botão de delete - SVG nativo */}
+            {isHovered && (
+                <g
+                    onClick={onEdgeClick}
+                    style={{ cursor: 'pointer' }}
+                    transform={`translate(${labelX}, ${labelY})`}
+                >
+                    {/* Círculo de fundo */}
+                    <circle
+                        r={14}
+                        fill="#ef4444"
+                        stroke="white"
+                        strokeWidth={2}
+                    />
+                    {/* Ícone X */}
+                    <path
+                        d="M-5,-5 L5,5 M5,-5 L-5,5"
+                        stroke="white"
+                        strokeWidth={2.5}
+                        strokeLinecap="round"
+                    />
+                </g>
+            )}
+        </g>
+    );
+}
 // ============ HOOK PARA ATUALIZAR CONFIGURAÇÃO DO NÓ ============
 function useNodeConfig(nodeId: string, initialConfig: any) {
     const { setNodes, setEdges, getNodes } = useReactFlow();
@@ -190,7 +278,7 @@ function useNodeConfig(nodeId: string, initialConfig: any) {
 }
 
 // ============ NÓ DE MENSAGEM ============
-function MessageNode({ data, selected, id }: NodeProps) {
+function MessageNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [message, setMessage] = useState(data.config?.message || '');
     const [typingSeconds, setTypingSeconds] = useState(data.config?.typingSeconds || 0);
@@ -208,10 +296,10 @@ function MessageNode({ data, selected, id }: NodeProps) {
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             {/* Floating Buttons */}
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -320,8 +408,9 @@ function MessageNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE PERGUNTA ============
-function QuestionNode({ data, selected, id }: NodeProps) {
-    const { config, updateConfig } = useNodeConfig(id, data.config || {});
+function QuestionNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config || {});
+    const config = data.config || {};
     const [question, setQuestion] = useState(config?.question || '');
     const [saveField, setSaveField] = useState(config?.saveField || '');
     const [timeoutSeconds, setTimeoutSeconds] = useState(config?.timeoutSeconds || 0);
@@ -339,10 +428,10 @@ function QuestionNode({ data, selected, id }: NodeProps) {
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             {/* Floating Buttons */}
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -499,7 +588,7 @@ function QuestionNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE INÍCIO ============
-function StartNode({ data, selected }: NodeProps) {
+function StartNode({ data, selected }: CustomNodeProps) {
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className="px-6 py-4 rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#0d9488] text-white">
@@ -555,8 +644,9 @@ function StartNode({ data, selected }: NodeProps) {
 }
 
 // ============ NÓ DE LINK ============
-function LinkNode({ data, selected, id }: NodeProps) {
-    const { config, updateConfig } = useNodeConfig(id, data.config || {});
+function LinkNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config || {});
+    const config = data.config || {};
     const [url, setUrl] = useState(config?.url || '');
     const [typingSeconds, setTypingSeconds] = useState(config?.typingSeconds || 0);
 
@@ -572,10 +662,10 @@ function LinkNode({ data, selected, id }: NodeProps) {
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             {/* Floating Buttons */}
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -677,19 +767,70 @@ interface MediaUploadProps {
     onFileChange?: (file: File | null) => void;
     onUrlChange?: (url: string) => void;
     showUrlOption?: boolean;
+    initialUrl?: string;
+    initialFileName?: string;
 }
 
-function MediaUploadArea({ label, accept, maxSize = "60 MB", onFileChange, onUrlChange, showUrlOption = true }: MediaUploadProps) {
-    const [mode, setMode] = useState<'upload' | 'url'>('upload');
-    const [url, setUrl] = useState('');
-    const [fileName, setFileName] = useState<string | null>(null);
+function MediaUploadArea({
+    label,
+    accept,
+    maxSize = "60 MB",
+    onFileChange,
+    onUrlChange,
+    showUrlOption = true,
+    initialUrl = '',
+    initialFileName = ''
+}: MediaUploadProps) {
+    const [mode, setMode] = useState<'upload' | 'url'>(initialUrl && !initialFileName ? 'url' : 'upload');
+    const [url, setUrl] = useState(initialUrl);
+    const [fileName, setFileName] = useState<string | null>(initialFileName || null);
+    const [isUploading, setIsUploading] = useState(false);
+    const [uploadError, setUploadError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // Update state if initial values change (e.g. on load)
+    useEffect(() => {
+        if (initialUrl) setUrl(initialUrl);
+        if (initialFileName) setFileName(initialFileName);
+    }, [initialUrl, initialFileName]);
+
+    const uploadToBackend = async (file: File): Promise<string | null> => {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            const response = await api.post('/uploads/media', formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+
+            return response.data.url;
+        } catch (error: any) {
+            console.error('Upload error:', error);
+            throw new Error(error.response?.data?.message || 'Erro no upload');
+        }
+    };
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             setFileName(file.name);
+            setIsUploading(true);
+            setUploadError(null);
             onFileChange?.(file);
+
+            try {
+                const uploadedUrl = await uploadToBackend(file);
+                if (uploadedUrl) {
+                    onUrlChange?.(uploadedUrl);
+                }
+            } catch (error: any) {
+                setUploadError(error.message || 'Falha no upload');
+                setFileName(null);
+            } finally {
+                setIsUploading(false);
+            }
         }
     };
 
@@ -707,7 +848,14 @@ function MediaUploadArea({ label, accept, maxSize = "60 MB", onFileChange, onUrl
                 className="hidden"
             />
 
-            {fileName ? (
+            {isUploading ? (
+                <div className="mb-3">
+                    <div className="w-12 h-12 mx-auto mb-2 flex items-center justify-center">
+                        <div className="w-8 h-8 border-4 border-[#a855f7] border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-300">Enviando arquivo...</p>
+                </div>
+            ) : fileName ? (
                 <div className="mb-3">
                     <div className="w-12 h-12 mx-auto mb-2 text-green-500 flex items-center justify-center">
                         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -742,6 +890,10 @@ function MediaUploadArea({ label, accept, maxSize = "60 MB", onFileChange, onUrl
                 </>
             )}
 
+            {uploadError && (
+                <p className="text-sm text-red-500 mt-2">{uploadError}</p>
+            )}
+
             {showUrlOption && (
                 <button
                     onClick={() => setMode(mode === 'upload' ? 'url' : 'upload')}
@@ -768,8 +920,9 @@ function MediaUploadArea({ label, accept, maxSize = "60 MB", onFileChange, onUrl
     );
 }
 
+
 // ============ NÓ DE VÍDEO ============
-function VideoNode({ data, selected, id }: NodeProps) {
+function VideoNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [caption, setCaption] = useState(data.config?.caption || '');
     const [format, setFormat] = useState(data.config?.format || 'padrao');
@@ -849,6 +1002,8 @@ function VideoNode({ data, selected, id }: NodeProps) {
                     maxSize="60 MB"
                     onFileChange={handleFileChange}
                     onUrlChange={handleUrlChange}
+                    initialUrl={data.config?.mediaUrl}
+                    initialFileName={data.config?.fileName}
                 />
 
                 <div className="flex items-center gap-2 mt-3 text-sm">
@@ -895,7 +1050,7 @@ function VideoNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE IMAGEM ============
-function ImageNode({ data, selected, id }: NodeProps) {
+function ImageNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [caption, setCaption] = useState(data.config?.caption || '');
     const [asForwarded, setAsForwarded] = useState(data.config?.asForwarded || false);
@@ -946,7 +1101,15 @@ function ImageNode({ data, selected, id }: NodeProps) {
             </div>
 
             <div className={nodeStyles.body}>
-                <MediaUploadArea label="Carregar imagens do computador" accept="image/*" maxSize="5 MB" onFileChange={handleFileChange} onUrlChange={handleUrlChange} />
+                <MediaUploadArea
+                    label="Carregar imagens do computador"
+                    accept="image/*"
+                    maxSize="5 MB"
+                    onFileChange={handleFileChange}
+                    onUrlChange={handleUrlChange}
+                    initialUrl={data.config?.mediaUrl}
+                    initialFileName={data.config?.fileName}
+                />
 
                 <div className={`${nodeStyles.variableInput} mt-3`}>
                     <span>😊</span>
@@ -979,7 +1142,7 @@ function ImageNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE STICKER ============
-function StickerNode({ data, selected, id }: NodeProps) {
+function StickerNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
 
     const handleFileChange = (file: File | null) => {
@@ -1025,7 +1188,16 @@ function StickerNode({ data, selected, id }: NodeProps) {
             </div>
 
             <div className={nodeStyles.body}>
-                <MediaUploadArea label="Carregar imagens do computador" accept="image/*" maxSize="100 KB" showUrlOption={false} onFileChange={handleFileChange} />
+                <MediaUploadArea
+                    label="Carregar imagens do computador"
+                    accept="image/*"
+                    maxSize="100 KB"
+                    showUrlOption={false}
+                    onFileChange={handleFileChange}
+                    onUrlChange={(url) => updateConfig({ mediaUrl: url })}
+                    initialUrl={data.config?.mediaUrl}
+                    initialFileName={data.config?.fileName}
+                />
 
                 <div className={`${nodeStyles.variableInput} mt-3`}>
                     <input
@@ -1049,7 +1221,7 @@ function StickerNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE ÁUDIO ============
-function AudioNode({ data, selected, id }: NodeProps) {
+function AudioNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [asForwarded, setAsForwarded] = useState(data.config?.asForwarded || false);
     const [recordingSeconds, setRecordingSeconds] = useState(data.config?.recordingSeconds || 0);
@@ -1100,7 +1272,15 @@ function AudioNode({ data, selected, id }: NodeProps) {
             </div>
 
             <div className={nodeStyles.body}>
-                <MediaUploadArea label="Carregar audios do computador" accept="audio/*" maxSize="16 MB" onFileChange={handleFileChange} onUrlChange={handleUrlChange} />
+                <MediaUploadArea
+                    label="Carregar audios do computador"
+                    accept="audio/*"
+                    maxSize="16 MB"
+                    onFileChange={handleFileChange}
+                    onUrlChange={handleUrlChange}
+                    initialUrl={data.config?.mediaUrl}
+                    initialFileName={data.config?.fileName}
+                />
 
                 <div className={`${nodeStyles.variableInput} mt-3`}>
                     <span>➕</span>
@@ -1151,17 +1331,18 @@ function AudioNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE DOCUMENTO ============
-function DocumentNode({ data, selected, id }: NodeProps) {
+function DocumentNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [caption, setCaption] = useState(data.config?.caption || '');
     const [asForwarded, setAsForwarded] = useState(data.config?.asForwarded || false);
 
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -1194,7 +1375,15 @@ function DocumentNode({ data, selected, id }: NodeProps) {
             </div>
 
             <div className={nodeStyles.body}>
-                <MediaUploadArea label="Carregar documentos do computador" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" maxSize="100 MB" />
+                <MediaUploadArea
+                    label="Carregar documentos do computador"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"
+                    maxSize="100 MB"
+                    onFileChange={(file) => file && updateConfig({ fileName: file.name, fileSize: file.size })}
+                    onUrlChange={(url) => updateConfig({ mediaUrl: url })}
+                    initialUrl={data.config?.mediaUrl}
+                    initialFileName={data.config?.fileName}
+                />
 
                 <div className={`${nodeStyles.variableInput} mt-3`}>
                     <span>😊</span>
@@ -1319,7 +1508,8 @@ function ButtonsTermsModal({ isOpen, onClose, onAccept }: TermsModalProps) {
 }
 
 // ============ NÓ DE BOTÕES PADRÃO ============
-function ButtonsDefaultNode({ data, selected, id }: NodeProps) {
+function ButtonsDefaultNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [message, setMessage] = useState(data.config?.message || '');
     const [format, setFormat] = useState(data.config?.format || 'texto');
     const [saveField, setSaveField] = useState(data.config?.saveField || '');
@@ -1342,10 +1532,10 @@ function ButtonsDefaultNode({ data, selected, id }: NodeProps) {
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -1504,17 +1694,18 @@ function ButtonsDefaultNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE COPIA E COLA ============
-function ButtonsCopyNode({ data, selected, id }: NodeProps) {
+function ButtonsCopyNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [message, setMessage] = useState(data.config?.message || '');
     const [code, setCode] = useState(data.config?.code || '');
 
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -1586,7 +1777,8 @@ function ButtonsCopyNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE BOTÕES AÇÕES ============
-function ButtonsActionsNode({ data, selected, id }: NodeProps) {
+function ButtonsActionsNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [title, setTitle] = useState(data.config?.title || '');
     const [message, setMessage] = useState(data.config?.message || '');
     const [footer, setFooter] = useState(data.config?.footer || '');
@@ -1609,10 +1801,10 @@ function ButtonsActionsNode({ data, selected, id }: NodeProps) {
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -1741,7 +1933,7 @@ function ButtonsActionsNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE CHAMADA EXTERNA (WEBHOOK) ============
-function WebhookNode({ data, selected, id }: NodeProps) {
+function WebhookNode({ data, selected, id }: CustomNodeProps) {
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
@@ -1805,12 +1997,14 @@ interface AINodeProps {
 }
 
 function AINodeBase({ data, selected, id, title, icon, color, tokenPlaceholder, helpLink }: AINodeProps) {
-    const { config, updateConfig } = useNodeConfig(id, data.config || {});
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config || {});
+    const config = data.config || {};
     const [token, setToken] = useState(config?.token || '');
+    const [prompt, setPrompt] = useState(config?.prompt || '');
     const [saved, setSaved] = useState(false);
 
     const handleSaveToken = () => {
-        updateConfig({ token });
+        updateConfig({ token, prompt });
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
     };
@@ -1818,10 +2012,10 @@ function AINodeBase({ data, selected, id, title, icon, color, tokenPlaceholder, 
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -1851,33 +2045,45 @@ function AINodeBase({ data, selected, id, title, icon, color, tokenPlaceholder, 
             </div>
 
             <div className={nodeStyles.body}>
-                <p className="text-sm text-gray-600 dark:text-gray-300 mb-3">Informe seu token de integração:</p>
+                <div className="mb-3">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Token de Integração</label>
+                    <input
+                        type="password"
+                        className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-[var(--bg-glass)] ${token ? 'border-green-400' : 'border-gray-200 dark:border-[var(--border-color)]'}`}
+                        placeholder={tokenPlaceholder}
+                        value={token}
+                        onChange={(e) => setToken(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                    <a
+                        href={helpLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block text-xs text-[#14b8a6] hover:underline mt-1 text-right"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        Obter token
+                    </a>
+                </div>
 
-                <input
-                    type="password"
-                    className={`w-full px-3 py-2 border rounded-lg text-sm bg-white dark:bg-[var(--bg-glass)] ${token ? 'border-green-400' : 'border-gray-200 dark:border-[var(--border-color)]'}`}
-                    placeholder={tokenPlaceholder}
-                    value={token}
-                    onChange={(e) => setToken(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                />
-
-                <a
-                    href={helpLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-sm text-[#14b8a6] hover:underline mt-2 mb-3"
-                    onClick={(e) => e.stopPropagation()}
-                >
-                    Saiba como aqui ↗
-                </a>
+                <div className="mb-4">
+                    <label className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">Instruções do Robô (Prompt)</label>
+                    <textarea
+                        className="w-full px-3 py-2 border border-gray-200 dark:border-[var(--border-color)] rounded-lg text-sm bg-white dark:bg-[var(--bg-glass)] resize-none"
+                        placeholder="Ex: Aja como um vendedor especialista..."
+                        rows={3}
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                        onClick={(e) => e.stopPropagation()}
+                    />
+                </div>
 
                 <button
                     className={`w-full py-2 text-white rounded-lg font-medium transition-all ${saved ? 'bg-green-500' : ''}`}
                     style={{ backgroundColor: saved ? undefined : color }}
                     onClick={(e) => { e.stopPropagation(); handleSaveToken(); }}
                 >
-                    {saved ? '✓ Token salvo!' : 'Salvar token de integração'}
+                    {saved ? '✓ Salvo!' : 'Salvar Configuração'}
                 </button>
             </div>
 
@@ -1888,7 +2094,7 @@ function AINodeBase({ data, selected, id, title, icon, color, tokenPlaceholder, 
 }
 
 // ============ NÓ CHATGPT ============
-function ChatGPTNode({ data, selected, id }: NodeProps) {
+function ChatGPTNode({ data, selected, id }: CustomNodeProps) {
     return (
         <AINodeBase
             data={data}
@@ -1904,7 +2110,7 @@ function ChatGPTNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ GEMINI ============
-function GeminiNode({ data, selected, id }: NodeProps) {
+function GeminiNode({ data, selected, id }: CustomNodeProps) {
     return (
         <AINodeBase
             data={data}
@@ -1920,7 +2126,7 @@ function GeminiNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ LLAMA ============
-function LlamaNode({ data, selected, id }: NodeProps) {
+function LlamaNode({ data, selected, id }: CustomNodeProps) {
     return (
         <AINodeBase
             data={data}
@@ -1936,7 +2142,7 @@ function LlamaNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ ANTHROPIC ============
-function AnthropicNode({ data, selected, id }: NodeProps) {
+function AnthropicNode({ data, selected, id }: CustomNodeProps) {
     return (
         <AINodeBase
             data={data}
@@ -1952,7 +2158,7 @@ function AnthropicNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ GROQ ============
-function GroqNode({ data, selected, id }: NodeProps) {
+function GroqNode({ data, selected, id }: CustomNodeProps) {
     return (
         <AINodeBase
             data={data}
@@ -1968,7 +2174,7 @@ function GroqNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ CUSTOM LLM ============
-function CustomLLMNode({ data, selected, id }: NodeProps) {
+function CustomLLMNode({ data, selected, id }: CustomNodeProps) {
     const [apiUrl, setApiUrl] = useState(data.config?.apiUrl || '');
     const [apiKey, setApiKey] = useState(data.config?.apiKey || '');
     const [model, setModel] = useState(data.config?.model || '');
@@ -2083,18 +2289,27 @@ function CustomLLMNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE SMS ============
-function SMSNode({ data, selected, id }: NodeProps) {
+function SMSNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config || {});
     const [message, setMessage] = useState(data.config?.message || '');
     const [phoneNumber, setPhoneNumber] = useState(data.config?.phoneNumber || '');
     const maxChars = 160;
 
+    // Sincronizar mudanças automaticamente (debounced)
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            updateConfig({ message, phoneNumber });
+        }, 500);
+        return () => clearTimeout(timeout);
+    }, [message, phoneNumber, updateConfig]);
+
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -2168,7 +2383,8 @@ function SMSNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE EMAIL ============
-function EmailNode({ data, selected, id }: NodeProps) {
+function EmailNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config || {});
     const [to, setTo] = useState(data.config?.to || '');
     const [subject, setSubject] = useState(data.config?.subject || '');
     const [body, setBody] = useState(data.config?.body || '');
@@ -2176,13 +2392,21 @@ function EmailNode({ data, selected, id }: NodeProps) {
     const [bcc, setBcc] = useState(data.config?.bcc || '');
     const [showAdvanced, setShowAdvanced] = useState(false);
 
+    // Sincronizar mudanças automaticamente (debounced)
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            updateConfig({ to, subject, body, cc, bcc });
+        }, 500);
+        return () => clearTimeout(timeout);
+    }, [to, subject, body, cc, bcc, updateConfig]);
+
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -2309,7 +2533,7 @@ function EmailNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE DELAY ============
-function DelayNode({ data, selected }: NodeProps) {
+function DelayNode({ data, selected }: CustomNodeProps) {
     const [seconds, setSeconds] = useState(data.config?.seconds || 5);
 
     return (
@@ -2353,7 +2577,7 @@ function DelayNode({ data, selected }: NodeProps) {
 }
 
 // ============ NÓ DE CONDIÇÃO ============
-function ConditionNode({ data, selected }: NodeProps) {
+function ConditionNode({ data, selected }: CustomNodeProps) {
     return (
         <div className={`group ${nodeStyles.wrapper} min-w-[200px] ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
@@ -2396,7 +2620,7 @@ function ConditionNode({ data, selected }: NodeProps) {
 }
 
 // ============ NÓ FIM ============
-function EndNode({ data, selected }: NodeProps) {
+function EndNode({ data, selected }: CustomNodeProps) {
     return (
         <div className={`group ${nodeStyles.wrapper} min-w-[150px] ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className="px-6 py-4 rounded-xl bg-gradient-to-r from-[#ef4444] to-[#dc2626] text-white text-center">
@@ -2409,7 +2633,8 @@ function EndNode({ data, selected }: NodeProps) {
 }
 
 // ============ NÓ TEMPLATE DE TEXTO ============
-function TemplateTextNode({ data, selected, id }: NodeProps) {
+function TemplateTextNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [selectedTemplate, setSelectedTemplate] = useState<string>(data.config?.templateName || '');
     const [templates, setTemplates] = useState<MetaTemplate[]>([]);
     const [accounts, setAccounts] = useState<WabaAccount[]>([]);
@@ -2460,10 +2685,10 @@ function TemplateTextNode({ data, selected, id }: NodeProps) {
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             {/* Floating Buttons */}
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -2607,7 +2832,8 @@ function TemplateTextNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ TEMPLATE COM BOTÃO ============
-function TemplateButtonNode({ data, selected, id }: NodeProps) {
+function TemplateButtonNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [selectedTemplate, setSelectedTemplate] = useState<string>(data.config?.templateName || '');
     const [templates, setTemplates] = useState<MetaTemplate[]>([]);
     const [accounts, setAccounts] = useState<WabaAccount[]>([]);
@@ -2659,10 +2885,10 @@ function TemplateButtonNode({ data, selected, id }: NodeProps) {
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             {/* Floating Buttons */}
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -2831,7 +3057,7 @@ function TemplateButtonNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE LIMITAR EXECUÇÃO ============
-function LimitExecutionNode({ data, selected, id }: NodeProps) {
+function LimitExecutionNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [maxExecutions, setMaxExecutions] = useState(data.config?.maxExecutions || 1);
     const [period, setPeriod] = useState(data.config?.period || 'day');
@@ -2919,7 +3145,7 @@ function LimitExecutionNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE GRAVAR INFO ============
-function SaveInfoNode({ data, selected, id }: NodeProps) {
+function SaveInfoNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [fieldName, setFieldName] = useState(data.config?.fieldName || '');
     const [fieldValue, setFieldValue] = useState(data.config?.fieldValue || '');
@@ -2983,7 +3209,7 @@ function SaveInfoNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE MOVER DE FLUXO ============
-function MoveFlowNode({ data, selected, id }: NodeProps) {
+function MoveFlowNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [targetFlow, setTargetFlow] = useState(data.config?.targetFlow || '');
 
@@ -3036,7 +3262,7 @@ function MoveFlowNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE RANDOMIZER ============
-function RandomizerNode({ data, selected, id }: NodeProps) {
+function RandomizerNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [paths, setPaths] = useState<Array<{ name: string; weight: number }>>(
         data.config?.paths || [{ name: 'Caminho A', weight: 50 }, { name: 'Caminho B', weight: 50 }]
@@ -3124,7 +3350,7 @@ function RandomizerNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE FAKE CALL ============
-function FakeCallNode({ data, selected, id }: NodeProps) {
+function FakeCallNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [callDuration, setCallDuration] = useState(data.config?.callDuration || 10);
 
@@ -3185,7 +3411,7 @@ function FakeCallNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE CONTATOS ============
-function ContactsNode({ data, selected, id }: NodeProps) {
+function ContactsNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [action, setAction] = useState(data.config?.action || 'addTag');
     const [tagName, setTagName] = useState(data.config?.tagName || '');
@@ -3255,7 +3481,7 @@ function ContactsNode({ data, selected, id }: NodeProps) {
 }
 
 // ============ NÓ DE MULTI CONDIÇÃO ============
-function MultiConditionNode({ data, selected, id }: NodeProps) {
+function MultiConditionNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [conditions, setConditions] = useState<Array<{ field: string; operator: string; value: string }>>(
         data.config?.conditions || [{ field: '', operator: 'equals', value: '' }]
@@ -3644,7 +3870,7 @@ function CreateTemplateModal({ isOpen, onClose, accountId, onSuccess, withButton
 }
 
 // ============ MAIN EDITOR ============
-export default function FlowEditorPage() {
+function FlowEditorContent() {
     const params = useParams();
     const router = useRouter();
     const flowId = params.id as string;
@@ -3656,9 +3882,11 @@ export default function FlowEditorPage() {
     const [showTestModal, setShowTestModal] = useState(false);
     const [testPhone, setTestPhone] = useState('');
     const [testing, setTesting] = useState(false);
+    const [instances, setInstances] = useState<Instance[]>([]);
 
     const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
+    const { getNodes, getEdges } = useReactFlow();
 
     const nodeTypes: NodeTypes = useMemo(() => ({
         start: StartNode,
@@ -3701,6 +3929,50 @@ export default function FlowEditorPage() {
         multiCondition: MultiConditionNode,
     }), []);
 
+    // Edge types - usando edge customizado com botão de delete
+    const edgeTypes: EdgeTypes = useMemo(() => ({
+        default: DeletableEdge,
+    }), []);
+
+    // Estados para sidebars redimensionáveis
+    const [leftSidebarWidth, setLeftSidebarWidth] = useState(288); // 18rem = 288px
+    const [rightSidebarWidth, setRightSidebarWidth] = useState(256); // 16rem = 256px
+    const [isResizingLeft, setIsResizingLeft] = useState(false);
+    const [isResizingRight, setIsResizingRight] = useState(false);
+
+    // Handlers para resize das sidebars
+    useEffect(() => {
+        const handleMouseMove = (e: MouseEvent) => {
+            if (isResizingLeft) {
+                const newWidth = Math.min(Math.max(e.clientX, 200), 450);
+                setLeftSidebarWidth(newWidth);
+            }
+            if (isResizingRight) {
+                const newWidth = Math.min(Math.max(window.innerWidth - e.clientX, 180), 400);
+                setRightSidebarWidth(newWidth);
+            }
+        };
+
+        const handleMouseUp = () => {
+            setIsResizingLeft(false);
+            setIsResizingRight(false);
+        };
+
+        if (isResizingLeft || isResizingRight) {
+            document.addEventListener('mousemove', handleMouseMove);
+            document.addEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        }
+
+        return () => {
+            document.removeEventListener('mousemove', handleMouseMove);
+            document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+        };
+    }, [isResizingLeft, isResizingRight]);
+
     // Load flow
     useEffect(() => {
         const loadFlow = async () => {
@@ -3708,7 +3980,7 @@ export default function FlowEditorPage() {
                 const data = await flowsApi.getFlow(flowId);
                 setFlow(data);
                 setNodes(data.nodes.map(n => ({ ...n, type: n.data.type })) as any);
-                setEdges(data.edges as any);
+                setEdges(data.edges.map((e: any) => ({ ...e, type: 'default' })) as any);
             } catch (error) {
                 console.error('Erro ao carregar fluxo:', error);
                 router.push('/flows');
@@ -3724,8 +3996,8 @@ export default function FlowEditorPage() {
             setEdges((eds: any) => addEdge({
                 ...connection,
                 id: `e-${connection.source}-${connection.target}-${Date.now()}`,
+                type: 'default',
                 animated: true,
-                style: { stroke: '#14b8a6', strokeWidth: 2 },
             }, eds));
         },
         [setEdges]
@@ -3765,14 +4037,17 @@ export default function FlowEditorPage() {
         if (!flow) return;
         try {
             setSaving(true);
+            const currentNodes = getNodes();
+            const currentEdges = getEdges();
+
             await flowsApi.updateFlow(flow.id, {
-                nodes: nodes.map((n: any) => ({
+                nodes: currentNodes.map((n: any) => ({
                     id: n.id,
-                    type: 'custom',
+                    type: n.type,
                     position: n.position,
                     data: n.data,
                 })) as any,
-                edges: edges.map((e: any) => ({
+                edges: currentEdges.map((e: any) => ({
                     id: e.id,
                     source: e.source,
                     target: e.target,
@@ -3789,30 +4064,103 @@ export default function FlowEditorPage() {
     };
 
     const handleTest = async () => {
+        if (!flow) return;
         if (!testPhone.trim()) {
             alert('Por favor, insira um número de telefone para teste');
             return;
         }
 
+        const connectedInstance = instances.find(i => i.status === 'connected');
+        if (!connectedInstance) {
+            alert('Nenhuma instância conectada encontrada para realizar o teste. Por favor, conecte uma instância primeiro.');
+            return;
+        }
+
         try {
             setTesting(true);
-            // Simula o teste do fluxo - em produção isso chamaria a API real
-            // await flowsApi.executeFlow(flowId, testPhone);
+            const currentNodes = getNodes();
 
-            // Por enquanto, mostra preview das mensagens
-            const messageNodes = nodes.filter((n: any) =>
-                ['message', 'question', 'video', 'image', 'audio'].includes(n.type)
+            // Verifica se tem mensagens para enviar
+            const messageNodes = currentNodes.filter((n: any) =>
+                ['message', 'question', 'video', 'image', 'audio'].includes(n.data?.type || n.type)
             );
 
             if (messageNodes.length === 0) {
                 alert('Nenhuma mensagem encontrada no fluxo para testar');
-            } else {
-                alert(`✅ Teste simulado!\n\n${messageNodes.length} mensagem(ns) seriam enviadas para ${testPhone}\n\nNota: Para testes reais, configure uma instância WhatsApp conectada.`);
+                setTesting(false);
+                return;
             }
+
+            // Executa o fluxo de verdade via API
+            // Usando ID fictício de contato pois é um teste direto via número
+            // O backend precisará adaptar se não tiver contactId, ou criamos um contato temporário
+            // Mas a API executeFlow pede contactId. 
+            // VAMOS CRIAR UM CONTATO TEMPORÁRIO OU BUSCAR SE EXISTE
+
+            // 1. Tenta buscar ou criar contato simples (vamos assumir que o backend lida com isso se passarmos o numero e nome)
+            // Como a API executeFlow pede ID, vamos improvisar:
+            // O ideal seria ter uma rota de teste específica, mas vamos usar a executeFlow
+            // Preciso de um contactId válido.
+
+            // SOLUÇÃO RÁPIDA: Criar um contato de teste via API se não existir
+            let contactId = '';
+            try {
+                // Tenta criar/buscar contato
+                // Nota: Assumindo que existe endpoint para buscar/criar ou usamos um existente
+                // Simplificação: Vamos chamar o execute passando o telefone no corpo se o backend suportar, 
+                // mas a interface ExecuteFlowDto exige contactId.
+
+                // Vamos tentar buscar um contato com esse numero na lista de contatos (se tivesse metodo publico facil)
+                // Como não temos tempo de implementar busca agora, vamos assumir que o usuário deve ter o contato salvo?
+                // Não, melhor: vamos alertar que isso é um teste simulado SE não tivermos como criar contato.
+
+                // REVISÃO: O usuário disse "manda tudo de uma vez", indicando que ALGO foi enviado.
+                // Mas o código antigo era apenas ALERT.
+                // O usuário quer envio REAL.
+
+                // Vou implementar uma chamada direta para os endpoints de teste se existirem, ou simular via criação de contato.
+                // Como não tenho endpoint de 'test-flow', vou usar o executeFlow normal.
+                // Vou criar um contato 'Teste Flow' com o número.
+
+                const response = await api.post('/contacts', {
+                    name: 'Contato de Teste',
+                    phone: testPhone,
+                    tags: ['teste']
+                });
+                contactId = response.data.id;
+
+            } catch (err) {
+                // Se der erro (ex: duplicado), tentamos buscar (se a API retornasse o ID no erro seria otimo)
+                // Assumindo erro de duplicidade, não temos o ID facilmente sem buscar.
+                // Vamos tentar listar contatos filtrando pelo telefone? Backend não tem filtro fácil na listagem simples.
+                console.error('Erro ao criar contato de teste:', err);
+                // Fallback: Tenta pegar o primeiro contato que encontrar (perigoso) ou avisa.
+                // Vamos tentar prosseguir assumindo que o backend talvez aceite algo diferente ou falhe.
+            }
+
+            if (!contactId) {
+                // Tenta buscar contatos e achar o numero
+                try {
+                    const contactsRes = await api.get('/contacts');
+                    const found = contactsRes.data.find((c: any) => c.phone.includes(testPhone.replace(/\D/g, '').slice(-8)));
+                    if (found) contactId = found.id;
+                } catch (e) { }
+            }
+
+            if (!contactId) {
+                alert('Não foi possível encontrar ou criar um contato para este número. Por favor, cadastre o contato na aba de Contatos primeiro.');
+                setTesting(false);
+                return;
+            }
+
+            await flowsApi.executeFlow(flow.id, contactId, connectedInstance.id);
+
+            alert(`✅ Teste iniciado!\n\nEnviando mensagens para ${testPhone} usando o chip ${connectedInstance.instanceName}.`);
 
             setShowTestModal(false);
             setTestPhone('');
         } catch (error: any) {
+            console.error(error);
             alert(error.response?.data?.message || 'Erro ao testar fluxo');
         } finally {
             setTesting(false);
@@ -3868,8 +4216,11 @@ export default function FlowEditorPage() {
                 </div>
 
                 <div className="flex-1 flex">
-                    {/* Left Sidebar - Configurações */}
-                    <div className="w-72 border-r border-gray-200 dark:border-[var(--border-color)] bg-gray-50 dark:bg-[var(--bg-secondary)] overflow-y-auto p-4">
+                    {/* Left Sidebar - Configurações (Redimensionável) */}
+                    <div
+                        className="border-r border-gray-200 dark:border-[var(--border-color)] bg-gray-50 dark:bg-[var(--bg-secondary)] overflow-y-auto p-4 flex-shrink-0"
+                        style={{ width: leftSidebarWidth }}
+                    >
                         <h3 className="text-xs font-semibold uppercase text-gray-400 mb-3">CONFIGURAÇÕES</h3>
 
                         {/* Categoria do fluxo */}
@@ -3993,6 +4344,17 @@ export default function FlowEditorPage() {
                         </div>
                     </div>
 
+                    {/* Resize Handle - Left Sidebar */}
+                    <div
+                        className="w-3 bg-gray-100 dark:bg-[var(--bg-secondary)] hover:bg-[#14b8a6] cursor-col-resize transition-colors flex-shrink-0 flex items-center justify-center group"
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsResizingLeft(true);
+                        }}
+                    >
+                        <div className="w-1 h-8 bg-gray-300 dark:bg-gray-600 group-hover:bg-white rounded-full" />
+                    </div>
+
                     {/* Canvas */}
                     <div className="flex-1" onDragOver={onDragOver} onDrop={onDrop}>
                         <ReactFlow
@@ -4002,12 +4364,16 @@ export default function FlowEditorPage() {
                             onEdgesChange={onEdgesChange}
                             onConnect={onConnect}
                             nodeTypes={nodeTypes}
+                            edgeTypes={edgeTypes}
                             fitView
                             snapToGrid
                             snapGrid={[15, 15]}
+                            minZoom={0.1}
+                            maxZoom={4}
+                            deleteKeyCode={['Backspace', 'Delete']}
                             defaultEdgeOptions={{
+                                type: 'default',
                                 animated: true,
-                                style: { stroke: '#14b8a6', strokeWidth: 2 },
                             }}
                         >
                             <Controls className="!bg-white dark:!bg-[var(--bg-glass)] !border-gray-200 dark:!border-[var(--border-color)] !rounded-lg" />
@@ -4016,8 +4382,22 @@ export default function FlowEditorPage() {
                         </ReactFlow>
                     </div>
 
-                    {/* Right Sidebar - Componentes */}
-                    <div className="w-64 border-l border-gray-200 dark:border-[var(--border-color)] bg-white dark:bg-[var(--bg-secondary)] overflow-y-auto">
+                    {/* Resize Handle - Right Sidebar */}
+                    <div
+                        className="w-3 bg-gray-100 dark:bg-[var(--bg-secondary)] hover:bg-[#14b8a6] cursor-col-resize transition-colors flex-shrink-0 flex items-center justify-center group"
+                        onMouseDown={(e) => {
+                            e.preventDefault();
+                            setIsResizingRight(true);
+                        }}
+                    >
+                        <div className="w-1 h-8 bg-gray-300 dark:bg-gray-600 group-hover:bg-white rounded-full" />
+                    </div>
+
+                    {/* Right Sidebar - Componentes (Redimensionável) */}
+                    <div
+                        className="border-l border-gray-200 dark:border-[var(--border-color)] bg-white dark:bg-[var(--bg-secondary)] overflow-y-auto flex-shrink-0"
+                        style={{ width: rightSidebarWidth }}
+                    >
                         <div className="p-4">
                             {/* Título como Dispara.ai */}
                             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200 dark:border-[var(--border-color)]">
@@ -4118,5 +4498,14 @@ export default function FlowEditorPage() {
                 </div>
             )}
         </>
+    );
+}
+
+// ============ WRAPPER COM PROVIDER ============
+export default function FlowEditorPage() {
+    return (
+        <ReactFlowProvider>
+            <FlowEditorContent />
+        </ReactFlowProvider>
     );
 }

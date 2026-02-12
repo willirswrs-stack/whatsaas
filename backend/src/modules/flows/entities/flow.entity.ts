@@ -11,6 +11,11 @@ export type FlowNodeType =
     | 'start'           // Nó inicial
     | 'message'         // Enviar mensagem de texto
     | 'media'           // Enviar mídia (imagem, vídeo, áudio, documento)
+    | 'link'            // Enviar link
+    | 'image'           // Enviar imagem
+    | 'video'           // Enviar vídeo
+    | 'audio'           // Enviar áudio
+    | 'document'        // Enviar documento
     | 'delay'           // Aguardar intervalo
     | 'buttons'         // Mensagem com botões
     | 'question'        // Fazer pergunta e salvar resposta
@@ -104,8 +109,8 @@ export class FlowExecution {
     @Column({ name: 'instance_id', type: 'uuid', nullable: true })
     instanceId: string;
 
-    @Column({ type: 'varchar', length: 20, default: 'running' })
-    status: 'running' | 'completed' | 'failed' | 'paused';
+    @Column({ type: 'varchar', length: 30, default: 'running' })
+    status: 'running' | 'completed' | 'failed' | 'paused' | 'waiting_response';
 
     @Column({ name: 'current_node_id', type: 'varchar', length: 100, nullable: true })
     currentNodeId: string;

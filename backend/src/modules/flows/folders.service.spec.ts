@@ -103,7 +103,6 @@ describe('FoldersService', () => {
 
             const result = await service.create('tenant-123', {
                 name: 'New Folder',
-                color: '#FF0000',
             });
 
             expect(result.name).toBe('New Folder');

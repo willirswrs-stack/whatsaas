@@ -163,8 +163,8 @@ describe('InstancesService', () => {
             // Act
             await service.create('tenant-123', createData);
 
-            // Assert
-            expect(providerFactory.getProvider).toHaveBeenCalledWith('wwebjs');
+            // Assert - evolution is now the default provider
+            expect(providerFactory.getProvider).toHaveBeenCalledWith('evolution');
         });
 
         it('should store evolutionConfig with instanceId', async () => {

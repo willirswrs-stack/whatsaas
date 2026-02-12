@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException } from '@nestjs/comm
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Like, ILike } from 'typeorm';
 import { Contact, Tag, ContactTag, CustomField } from './entities/contact.entity';
+import * as XLSX from 'xlsx';
 import {
     CreateContactDto,
     UpdateContactDto,
@@ -214,29 +215,192 @@ export class ContactsService {
     async importContacts(tenantId: string, contacts: CreateContactDto[]) {
         const results = { imported: 0, skipped: 0, errors: [] as string[] };
 
+        // 1. Normalize phones and prepare map
+        const contactMap = new Map<string, CreateContactDto>();
+        const phonesToCheck: string[] = [];
+
         for (const dto of contacts) {
             try {
-                const normalizedPhone = this.normalizePhone(dto.phone);
-
-                const existing = await this.contactRepository.findOne({
-                    where: { tenantId, phone: normalizedPhone }
-                });
-
-                if (existing) {
-                    results.skipped++;
+                if (!dto.phone) continue;
+                const normalized = this.normalizePhone(dto.phone);
+                // Simple validation
+                if (normalized.length < 10) {
+                    results.errors.push(`${dto.phone}: Telefone inválido`);
                     continue;
                 }
 
-                // Update DTO with normalized phone
-                dto.phone = normalizedPhone;
-                await this.createContact(tenantId, dto);
-                results.imported++;
-            } catch (error) {
-                results.errors.push(`${dto.phone}: ${error.message}`);
+                // Deduplicate within the file itself
+                if (contactMap.has(normalized)) {
+                    continue;
+                }
+
+                dto.phone = normalized;
+                contactMap.set(normalized, dto);
+                phonesToCheck.push(normalized);
+            } catch (e) {
+                results.errors.push(`${dto.phone}: Erro ao normalizar`);
             }
         }
 
+        if (phonesToCheck.length === 0) {
+            return results;
+        }
+
+        // 2. Find existing contacts in DB (Batch)
+        // Split into chunks if too many phones (e.g. 500)
+        const chunkSize = 500;
+        const protectionSet = new Set<string>(); // Phones that already exist
+
+        for (let i = 0; i < phonesToCheck.length; i += chunkSize) {
+            const chunk = phonesToCheck.slice(i, i + chunkSize);
+            const existingContacts = await this.contactRepository.find({
+                where: {
+                    tenantId,
+                    phone: In(chunk)
+                },
+                select: ['phone']
+            });
+            existingContacts.forEach(c => protectionSet.add(c.phone));
+        }
+
+        // 3. Filter valid new contacts
+        const newContacts: Contact[] = [];
+        const contactTagsToInsert: { contactIndex: number, tagIds: string[] }[] = [];
+
+        let index = 0;
+        for (const [phone, dto] of contactMap.entries()) {
+            if (protectionSet.has(phone)) {
+                results.skipped++;
+                continue;
+            }
+
+            const contact = this.contactRepository.create({
+                tenantId,
+                phone: dto.phone,
+                name: dto.name,
+                email: dto.email,
+                customFields: dto.customFields || {},
+                onWhatsapp: true, // Optimistic assumption for imported contacts
+            });
+
+            newContacts.push(contact);
+
+            if (dto.tagIds && dto.tagIds.length > 0) {
+                contactTagsToInsert.push({ contactIndex: index, tagIds: dto.tagIds });
+            }
+            index++;
+        }
+
+        // 4. Batch Insert Contacts
+        if (newContacts.length > 0) {
+            // Save in chunks to avoid query limits
+            for (let i = 0; i < newContacts.length; i += chunkSize) {
+                const chunk = newContacts.slice(i, i + chunkSize);
+                try {
+                    const savedChunk = await this.contactRepository.save(chunk);
+                    results.imported += savedChunk.length;
+
+                    // Handle Tags for this chunk
+                    // We need to map saved entities back to their tag requests
+                    // This is tricky because order might be preserved but IDs are generated.
+                    // Assuming save returns in same order.
+
+                    const chunkTags: ContactTag[] = [];
+                    savedChunk.forEach((savedContact, idx) => {
+                        const originalIndex = i + idx;
+                        // Find if this specific contact index had tags
+                        const tagReq = contactTagsToInsert.find(t => t.contactIndex === originalIndex);
+                        if (tagReq) {
+                            tagReq.tagIds.forEach(tagId => {
+                                chunkTags.push(this.contactTagRepository.create({
+                                    contactId: savedContact.id,
+                                    tagId
+                                }));
+                            });
+                        }
+                    });
+
+                    if (chunkTags.length > 0) {
+                        await this.contactTagRepository.save(chunkTags);
+                    }
+
+                } catch (err) {
+                    // Try fallback to individual insert if batch fail?
+                    // For now, log error and count as failed
+                    // This is rare unless there's a constraint violation not caught
+                    results.errors.push(`Erro ao salvar lote ${i / chunkSize}: ${err.message}`);
+                    results.imported -= chunk.length;
+                }
+            }
+        }
+
+        // Update tag counts if we added tags
+        // Optimization: Collect all unique tag IDs from imports and update them once
+        // TODO: Implement later for performance
+
         return results;
+    }
+
+    async parseAndImportHeaderFile(tenantId: string, buffer: Buffer, mimetype: string) {
+        // Parse buffer using XLSX
+        const workbook = XLSX.read(buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+
+        // Convert to JSON
+        const rawData = XLSX.utils.sheet_to_json<any>(sheet);
+
+        const contactsToImport: CreateContactDto[] = [];
+        const tagCache = new Map<string, string>(); // Name -> ID
+
+        // 1. Process rows
+        for (const row of rawData) {
+            // Map columns dynamically
+            // Supported: phone/telefone/celular, name/nome, email, tags (comma separated)
+
+            let phone = row['phone'] || row['Phone'] || row['telefone'] || row['Telefone'] || row['celular'] || row['Celular'] || row['whatsapp'] || row['mobile'];
+            const name = row['name'] || row['Name'] || row['nome'] || row['Nome'] || row['cliente'];
+            const email = row['email'] || row['Email'] || row['e-mail'];
+            const tagsStr = row['tags'] || row['Tags'] || row['etiquetas'];
+
+            if (!phone) continue; // Skip empty phones
+
+            // Convert phone to string just in case
+            phone = String(phone).replace(/\D/g, '');
+
+            const dto: CreateContactDto = {
+                phone,
+                name: name ? String(name) : undefined,
+                email: email ? String(email) : undefined,
+                customFields: {}, // TODO: Map other columns
+                tagIds: []
+            };
+
+            // Process Tags
+            if (tagsStr) {
+                const tagNames = String(tagsStr).split(',').map(t => t.trim()).filter(t => t.length > 0);
+                for (const tagName of tagNames) {
+                    if (!tagCache.has(tagName)) {
+                        // Find or Create Tag
+                        let tag = await this.tagRepository.findOne({ where: { tenantId, name: tagName } });
+                        if (!tag) {
+                            tag = await this.tagRepository.save(this.tagRepository.create({
+                                tenantId,
+                                name: tagName,
+                                color: '#' + Math.floor(Math.random() * 16777215).toString(16) // Random color
+                            }));
+                        }
+                        tagCache.set(tagName, tag.id);
+                    }
+                    const tagId = tagCache.get(tagName);
+                    if (tagId) dto.tagIds?.push(tagId);
+                }
+            }
+
+            contactsToImport.push(dto);
+        }
+
+        return this.importContacts(tenantId, contactsToImport);
     }
 
     async exportContacts(tenantId: string, tagIds?: string[]) {

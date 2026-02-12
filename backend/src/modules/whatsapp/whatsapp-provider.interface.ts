@@ -55,6 +55,16 @@ export interface IWhatsAppProvider {
     sendText(instanceName: string, to: string, text: string): Promise<SendMessageResult>;
 
     /**
+     * Send media message (image, video, audio, document)
+     */
+    sendMedia(instanceName: string, to: string, media: {
+        type: 'image' | 'video' | 'audio' | 'document';
+        url: string;
+        caption?: string;
+        filename?: string;
+    }): Promise<SendMessageResult>;
+
+    /**
      * Send presence (typing, recording)
      */
     sendPresence(

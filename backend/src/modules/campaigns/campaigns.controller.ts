@@ -208,6 +208,15 @@ export class CampaignsController {
         return this.campaignsService.cancel(id, tenantId);
     }
 
+    @Post(':id/duplicate')
+    @ApiOperation({ summary: 'Duplicate campaign' })
+    async duplicate(
+        @Param('id') id: string,
+        @CurrentTenant() tenantId: string,
+    ) {
+        return this.campaignsService.duplicate(id, tenantId);
+    }
+
     @Delete(':id')
     @ApiOperation({ summary: 'Delete campaign' })
     async delete(

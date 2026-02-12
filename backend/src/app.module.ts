@@ -9,6 +9,8 @@ import { TenantThrottlerGuard } from './common/guards/tenant-throttler.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { v4 as uuidv4 } from 'uuid';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -32,6 +34,8 @@ import { FlowsModule } from './modules/flows/flows.module';
 import { AntiBanModule } from './modules/anti-ban/anti-ban.module';
 import { EventsModule } from './modules/events/events.module';
 import { ReconnectionModule } from './modules/reconnection/reconnection.module';
+import { UploadsModule } from './modules/uploads/uploads.module';
+import { OrderWebhooksModule } from './modules/order-webhooks/order-webhooks.module';
 
 
 @Module({
@@ -65,6 +69,12 @@ import { ReconnectionModule } from './modules/reconnection/reconnection.module';
       }),
     }),
 
+    // Serve Static Files (Uploads)
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+    }),
+
     // Database (PostgreSQL)
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
@@ -88,22 +98,26 @@ import { ReconnectionModule } from './modules/reconnection/reconnection.module';
     // Queue (Redis + BullMQ)
     BullModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: async (configService: ConfigService) => ({
-        connection: {
-          host: configService.get<string>('REDIS_HOST'),
+      useFactory: async (configService: ConfigService) => {
+        const redisConfig = {
+          host: configService.get<string>('REDIS_HOST', '127.0.0.1'),
           port: parseInt(configService.get<string>('REDIS_PORT') || '6379', 10),
           password: configService.get<string>('REDIS_PASSWORD'),
-        },
-        defaultJobOptions: {
-          removeOnComplete: 1000,
-          removeOnFail: 5000,
-          attempts: 3,
-          backoff: {
-            type: 'exponential',
-            delay: 5000,
+        };
+        console.log('🔌 [APP-MODULE] Connection:', redisConfig);
+        return {
+          connection: redisConfig,
+          defaultJobOptions: {
+            removeOnComplete: 1000,
+            removeOnFail: 5000,
+            attempts: 3,
+            backoff: {
+              type: 'exponential',
+              delay: 5000,
+            },
           },
-        },
-      }),
+        };
+      },
       inject: [ConfigService],
     }),
 
@@ -132,6 +146,8 @@ import { ReconnectionModule } from './modules/reconnection/reconnection.module';
     FlowsModule,
     AntiBanModule,
     ReconnectionModule,
+    UploadsModule,
+    OrderWebhooksModule,
   ],
   controllers: [AppController],
   providers: [

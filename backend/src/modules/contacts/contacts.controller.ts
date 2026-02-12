@@ -11,8 +11,12 @@ import {
     Request,
     HttpCode,
     HttpStatus,
+    UseInterceptors,
+    UploadedFile,
+    BadRequestException,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ContactsService } from './contacts.service';
 import {
     CreateContactDto,
@@ -58,6 +62,31 @@ export class ContactsController {
     @Post('import')
     async importContacts(@Request() req, @Body() dto: ImportContactsDto) {
         return this.contactsService.importContacts(req.user.tenantId, dto.contacts);
+    }
+
+    @Post('import/file')
+    @UseInterceptors(FileInterceptor('file', {
+        limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+        fileFilter: (req, file, callback) => {
+            if (file.mimetype.includes('spreadsheet') ||
+                file.mimetype.includes('excel') ||
+                file.mimetype.includes('csv') ||
+                file.originalname.match(/\.(xlsx|csv|xls)$/)) {
+                callback(null, true);
+            } else {
+                callback(new BadRequestException('Apenas arquivos .csv, .xls ou .xlsx são permitidos'), false);
+            }
+        }
+    }))
+    @HttpCode(HttpStatus.OK)
+    async importContactsFile(
+        @Request() req,
+        @UploadedFile() file: Express.Multer.File
+    ) {
+        if (!file) {
+            throw new BadRequestException('Nenhum arquivo enviado');
+        }
+        return this.contactsService.parseAndImportHeaderFile(req.user.tenantId, file.buffer, file.mimetype);
     }
 
     @Post('bulk/add-tags')

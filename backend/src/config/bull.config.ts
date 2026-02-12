@@ -2,22 +2,26 @@ import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 
 export const BullConfig = BullModule.forRootAsync({
-    useFactory: (configService: ConfigService) => ({
-        connection: {
+    useFactory: (configService: ConfigService) => {
+        const redisConfig = {
             host: configService.get('REDIS_HOST', 'localhost'),
             port: configService.get('REDIS_PORT', 6379),
             password: configService.get('REDIS_PASSWORD'),
-        },
-        defaultJobOptions: {
-            removeOnComplete: 1000,
-            removeOnFail: 5000,
-            attempts: 3,
-            backoff: {
-                type: 'exponential',
-                delay: 5000,
+        };
+        console.log('🔌 [BULL-CONFIG] Connection:', redisConfig);
+        return {
+            connection: redisConfig,
+            defaultJobOptions: {
+                removeOnComplete: 1000,
+                removeOnFail: 5000,
+                attempts: 3,
+                backoff: {
+                    type: 'exponential',
+                    delay: 5000,
+                },
             },
-        },
-    }),
+        };
+    },
     inject: [ConfigService],
 });
 

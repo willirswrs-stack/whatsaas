@@ -1,10 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { NotFoundException, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
 import { FlowsService } from './flows.service';
 import { Flow, FlowExecution, FlowTrigger } from './entities';
 import { createMockRepository, MockRepository } from '../../test-utils';
+import { InstancesService } from '../instances/instances.service';
+import { ContactsService } from '../contacts/contacts.service';
+import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
+import { AiService } from '../ai/ai.service';
 
 const mockFlow = (overrides = {}) => ({
     id: 'flow-123',
@@ -57,6 +62,31 @@ describe('FlowsService', () => {
     let executionRepo: MockRepository<FlowExecution>;
     let triggerRepo: MockRepository<FlowTrigger>;
 
+    const mockInstancesService = {
+        findById: jest.fn(),
+    };
+
+    const mockContactsService = {
+        findById: jest.fn(),
+    };
+
+    const mockProvider = {
+        sendText: jest.fn(),
+        sendMedia: jest.fn(),
+    };
+
+    const mockWhatsAppFactory = {
+        getProvider: jest.fn().mockReturnValue(mockProvider),
+    };
+
+    const mockAiService = {
+        generateResponseWithKey: jest.fn(),
+    };
+
+    const mockConfigService = {
+        get: jest.fn(),
+    };
+
     beforeEach(async () => {
         flowRepo = createMockRepository<Flow>();
         executionRepo = createMockRepository<FlowExecution>();
@@ -77,6 +107,11 @@ describe('FlowsService', () => {
                 { provide: getRepositoryToken(Flow), useValue: flowRepo },
                 { provide: getRepositoryToken(FlowExecution), useValue: executionRepo },
                 { provide: getRepositoryToken(FlowTrigger), useValue: triggerRepo },
+                { provide: InstancesService, useValue: mockInstancesService },
+                { provide: ContactsService, useValue: mockContactsService },
+                { provide: WhatsAppProviderFactory, useValue: mockWhatsAppFactory },
+                { provide: AiService, useValue: mockAiService },
+                { provide: ConfigService, useValue: mockConfigService },
             ],
         }).compile();
 
@@ -223,11 +258,11 @@ describe('FlowsService', () => {
 
                 const result = await service.createTrigger('tenant-123', {
                     flowId: 'flow-123',
-                    type: 'message',
-                    config: { keyword: 'START' },
+                    type: 'keyword',
+                    config: { keywords: ['START'], matchType: 'exact' },
                 });
 
-                expect(result.type).toBe('message');
+                expect(result.type).toBe('keyword');
             });
         });
 

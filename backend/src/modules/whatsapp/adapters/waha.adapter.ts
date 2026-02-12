@@ -141,6 +141,31 @@ export class WahaAdapter implements IWhatsAppProvider {
         };
     }
 
+    async sendMedia(instanceName: string, to: string, media: {
+        type: 'image' | 'video' | 'audio' | 'document';
+        url: string;
+        caption?: string;
+        filename?: string;
+    }): Promise<SendMessageResult> {
+        // WAHA uses sendFile endpoint for media
+        const response = await this.request<WahaSendTextResponse>('POST', `/api/default/sendFile`, {
+            chatId: this.formatJid(to),
+            file: {
+                mimetype: media.type === 'video' ? 'video/mp4' : media.type === 'audio' ? 'audio/mpeg' : media.type === 'image' ? 'image/jpeg' : 'application/pdf',
+                url: media.url,
+                filename: media.filename || `file.${media.type === 'video' ? 'mp4' : media.type === 'audio' ? 'mp3' : media.type === 'image' ? 'jpg' : 'pdf'}`,
+            },
+            caption: media.caption || '',
+        });
+
+        this.logger.log(`Sent ${media.type} to ${to} via WAHA API`);
+
+        return {
+            messageId: response.id || response.key?.id || 'unknown',
+            status: 'sent',
+        };
+    }
+
     async sendPresence(
         instanceName: string,
         to: string,

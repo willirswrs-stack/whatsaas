@@ -5,13 +5,15 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { Logger, LoggerErrorInterceptor } from 'nestjs-pino';
+import * as express from 'express';
+import * as path from 'path';
 
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 
 async function bootstrap() {
   // Buffer logs during startup to avoid losing them
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  const app = await NestFactory.create(AppModule, { bufferLogs: false });
 
   // Use Structured Logging (Pino)
   app.useLogger(app.get(Logger));
@@ -50,6 +52,10 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Request-ID'],
   });
 
+  // Serve uploaded files statically (before global prefix to avoid /api/v1 prefix)
+  const uploadsPath = path.join(process.cwd(), 'uploads');
+  app.use('/uploads', express.static(uploadsPath));
+
   // Global Prefix
   app.setGlobalPrefix('api/v1');
 
@@ -75,6 +81,23 @@ async function bootstrap() {
   const logger = app.get(Logger);
   logger.log(`🚀 WhatSaas API is running on: ${await app.getUrl()}`);
   logger.log(`📄 Swagger Docs available at: ${await app.getUrl()}/docs`);
+  logger.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+
+  // Graceful Shutdown - Critical for production (Docker SIGTERM)
+  const shutdown = async (signal: string) => {
+    logger.log(`⚠️ Received ${signal}. Starting graceful shutdown...`);
+    try {
+      await app.close();
+      logger.log('✅ Application closed gracefully.');
+      process.exit(0);
+    } catch (error) {
+      logger.error('❌ Error during shutdown:', error);
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 bootstrap();

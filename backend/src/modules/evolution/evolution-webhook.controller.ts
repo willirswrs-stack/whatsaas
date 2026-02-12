@@ -6,6 +6,9 @@ import { Repository } from 'typeorm';
 import { Instance } from '../instances/entities/instance.entity';
 import { Campaign, CampaignContact } from '../campaigns/entities/campaign.entity';
 import { InstanceStatus } from '../../common/enums/instance-status.enum';
+import { FlowExecution } from '../flows/entities/flow.entity';
+import { FlowsService } from '../flows/flows.service';
+import { Contact } from '../contacts/entities/contact.entity';
 
 interface EvolutionWebhookPayload {
     instance: string;
@@ -13,7 +16,7 @@ interface EvolutionWebhookPayload {
     data: any;
 }
 
-import { EventsGateway } from '../../events/events.gateway';
+import { EventsGateway } from '../events/events.gateway';
 
 @Controller('webhooks')
 export class EvolutionWebhookController {
@@ -26,7 +29,12 @@ export class EvolutionWebhookController {
         private campaignContactRepo: Repository<CampaignContact>,
         @InjectRepository(Campaign)
         private campaignRepo: Repository<Campaign>,
+        @InjectRepository(FlowExecution)
+        private flowExecutionRepo: Repository<FlowExecution>,
+        @InjectRepository(Contact)
+        private contactRepo: Repository<Contact>,
         private eventsGateway: EventsGateway,
+        private flowsService: FlowsService,
     ) { }
 
     @Post('evolution')
@@ -51,6 +59,11 @@ export class EvolutionWebhookController {
 
                 case 'SEND_MESSAGE':
                     await this.handleSendMessage(data);
+                    break;
+
+                case 'MESSAGES_UPSERT':
+                case 'messages.upsert':
+                    await this.handleIncomingMessage(instance, data);
                     break;
 
                 default:
@@ -191,5 +204,91 @@ export class EvolutionWebhookController {
         // Message sent confirmation
         const wamid = data.key?.id;
         this.logger.debug(`Message sent event: ${wamid}`);
+    }
+
+    private async handleIncomingMessage(instanceName: string, data: any) {
+        // Handle incoming messages to resume flows waiting for answer
+        try {
+            // Extract message details
+            const messages = data.messages || [data];
+
+            for (const msg of messages) {
+                // Only process incoming messages (not sent by us)
+                if (msg.key?.fromMe) continue;
+
+                const remoteJid = msg.key?.remoteJid;
+                if (!remoteJid) continue;
+
+                // Extract phone number
+                const phone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+
+                // Get message content
+                const messageContent =
+                    msg.message?.conversation ||
+                    msg.message?.extendedTextMessage?.text ||
+                    msg.message?.imageMessage?.caption ||
+                    msg.message?.videoMessage?.caption ||
+                    '[Mídia]';
+
+                this.logger.log(`📥 Incoming message from ${phone}: ${messageContent.substring(0, 50)}`);
+
+                // Find instance to get tenantId
+                const instance = await this.instanceRepo.findOne({ where: { instanceName } });
+                if (!instance) continue;
+
+                // Find contact by phone
+                const contact = await this.contactRepo.findOne({
+                    where: {
+                        phone,
+                        tenantId: instance.tenantId
+                    }
+                });
+                if (!contact) {
+                    this.logger.debug(`Contact not found for phone ${phone}`);
+                    continue;
+                }
+
+                // Find any flow execution waiting for response from this contact
+                const execution = await this.flowExecutionRepo.findOne({
+                    where: {
+                        contactId: contact.id,
+                        status: 'waiting_response' as any
+                    }
+                });
+
+                if (execution) {
+                    this.logger.log(`📝 Resuming flow execution ${execution.id} with answer: ${messageContent.substring(0, 30)}`);
+
+                    // Save the user's answer in variables
+                    const saveTo = execution.variables?.waitingSaveTo || 'lastAnswer';
+                    execution.variables = {
+                        ...execution.variables,
+                        [saveTo]: messageContent,
+                        lastUserMessage: messageContent,
+                        waitingForAnswer: false,
+                    };
+
+                    // Add log entry
+                    execution.logs = execution.logs || [];
+                    execution.logs.push({
+                        nodeId: execution.currentNodeId,
+                        action: 'answer_received',
+                        timestamp: new Date().toISOString(),
+                        data: { answer: messageContent, savedTo: saveTo }
+                    });
+
+                    // Change status back to running
+                    execution.status = 'running';
+                    await this.flowExecutionRepo.save(execution);
+
+                    // Resume flow processing
+                    this.flowsService.processExecution(execution.id).catch(err => {
+                        this.logger.error(`Error resuming flow: ${err.message}`);
+                    });
+                }
+            }
+        } catch (error) {
+            this.logger.error(`Error handling incoming message: ${error.message}`);
+        }
     }
 }
