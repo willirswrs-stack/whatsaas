@@ -132,10 +132,10 @@ export class FlowExecution {
     startedAt: Date;
 
     @Column({ name: 'completed_at', type: 'timestamp', nullable: true })
-    completedAt: Date;
+    completedAt: Date | null;
 
     @Column({ name: 'next_action_at', type: 'timestamp', nullable: true })
-    nextActionAt: Date; // Para delays
+    nextActionAt: Date | null; // Para delays
 }
 
 @Entity('flow_triggers')

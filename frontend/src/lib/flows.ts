@@ -223,6 +223,11 @@ export const flowsApi = {
         const response = await api.post('/flows/execute', { flowId, contactId, instanceId });
         return response.data;
     },
+
+    async testFlow(flowId: string, phone: string, instanceId?: string): Promise<any> {
+        const response = await api.post('/flows/test', { flowId, phone, instanceId });
+        return response.data;
+    },
 };
 
 // ============ NODE DEFINITIONS ============
@@ -291,7 +296,7 @@ export const NODE_CATEGORIES = [
         nodes: [
             { type: 'limitExecution', label: 'Limitar execução', icon: '🚫', color: '#ef4444' },
             { type: 'saveInfo', label: 'Gravar info', icon: '💾', color: '#3b82f6' },
-            { type: 'delay', label: 'Intervalo', icon: '⏱️', color: '#f59e0b' },
+            { type: 'delay', label: 'Aguardar (Delay)', icon: '⏱️', color: '#f59e0b' },
             { type: 'condition', label: 'Condição', icon: '🔀', color: '#f97316' },
             { type: 'multiCondition', label: 'Multi condição', icon: '🔀', color: '#ec4899' },
             { type: 'moveFlow', label: 'Mover de fluxo', icon: '↗️', color: '#8b5cf6' },

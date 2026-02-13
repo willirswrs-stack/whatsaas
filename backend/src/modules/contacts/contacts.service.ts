@@ -112,6 +112,13 @@ export class ContactsService {
         return this.contactRepository.findOne({ where: { id } });
     }
 
+    async findByPhone(tenantId: string, phone: string) {
+        const normalized = this.normalizePhone(phone);
+        return this.contactRepository.findOne({
+            where: { tenantId, phone: normalized }
+        });
+    }
+
     async findContactById(tenantId: string, id: string) {
         const contact = await this.contactRepository.findOne({
             where: { id, tenantId }

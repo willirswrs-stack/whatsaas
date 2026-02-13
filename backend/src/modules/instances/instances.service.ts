@@ -31,6 +31,12 @@ export class InstancesService {
         }
     }
 
+    async findConnected(tenantId: string) {
+        return this.instanceRepo.findOne({
+            where: { tenantId, status: InstanceStatus.CONNECTED }
+        });
+    }
+
     async findById(id: string) {
         return this.instanceRepo.findOne({
             where: { id },

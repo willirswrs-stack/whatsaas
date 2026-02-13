@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Inject, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -10,7 +10,7 @@ import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
 import { AiService } from '../ai/ai.service';
 
 @Injectable()
-export class FlowsService {
+export class FlowsService implements OnModuleInit {
     constructor(
         @InjectRepository(Flow)
         private flowRepository: Repository<Flow>,
@@ -27,6 +27,32 @@ export class FlowsService {
     ) { }
 
     // ============ FLOWS ============
+
+    onModuleInit() {
+        // Recover delayed executions periodically (every minute)
+        setInterval(() => {
+            this.recoverDelayedExecutions();
+        }, 60000);
+    }
+
+    async recoverDelayedExecutions() {
+        try {
+            const delayedExecutions = await this.executionRepository
+                .createQueryBuilder('execution')
+                .where("execution.status = 'running'")
+                .andWhere('execution.nextActionAt <= :now', { now: new Date() })
+                .getMany();
+
+            if (delayedExecutions.length > 0) {
+                console.log(`[Flow] Recovering ${delayedExecutions.length} delayed executions`);
+                delayedExecutions.forEach(exec => {
+                    this.processExecution(exec.id).catch(err => console.error(`Error recovering execution ${exec.id}:`, err));
+                });
+            }
+        } catch (error) {
+            console.error('Error recovering delayed executions:', error);
+        }
+    }
 
     async findAll(tenantId: string) {
         return this.flowRepository.find({
@@ -48,6 +74,62 @@ export class FlowsService {
         const triggers = await this.triggerRepository.find({
             where: { flowId: id },
         });
+
+        // Get execution stats
+        try {
+            // Executing count: grouped by currentNodeId regarding active executions
+            const executingStats = await this.executionRepository
+                .createQueryBuilder('execution')
+                .select('execution.currentNodeId', 'nodeId')
+                .addSelect('COUNT(*)', 'count')
+                .where('execution.flowId = :flowId', { flowId: id })
+                .andWhere("execution.status IN ('running', 'waiting_response')")
+                .andWhere('execution.currentNodeId IS NOT NULL')
+                .groupBy('execution.currentNodeId')
+                .getRawMany();
+
+            // Sent count: grouped by nodeId from logs (using raw query for jsonb array elements)
+            // Note: This assumes Postgres database with JSONB support
+            const sentStats = await this.executionRepository.query(
+                `SELECT log->>'nodeId' as node_id, count(*) as count 
+                 FROM flow_executions, jsonb_array_elements(logs) as log 
+                 WHERE flow_id = $1 
+                 GROUP BY log->>'nodeId'`,
+                [id]
+            );
+
+            // Create stats map
+            const statsMap: Record<string, { executing: number, sent: number }> = {};
+
+            // Process executing stats
+            executingStats.forEach(stat => {
+                const nodeId = stat.nodeId;
+                if (!statsMap[nodeId]) statsMap[nodeId] = { executing: 0, sent: 0 };
+                statsMap[nodeId].executing = parseInt(stat.count, 10);
+            });
+
+            // Process sent stats
+            sentStats.forEach((stat: any) => {
+                const nodeId = stat.node_id;
+                if (!statsMap[nodeId]) statsMap[nodeId] = { executing: 0, sent: 0 };
+                statsMap[nodeId].sent = parseInt(stat.count, 10);
+            });
+
+            // Inject stats into flow nodes
+            if (flow.nodes && Array.isArray(flow.nodes)) {
+                flow.nodes = flow.nodes.map(node => ({
+                    ...node,
+                    data: {
+                        ...node.data,
+                        stats: statsMap[node.id] || { executing: 0, sent: 0 }
+                    }
+                }));
+            }
+
+        } catch (error) {
+            console.error('Error fetching flow stats:', error);
+            // Continue without stats if error occurs
+        }
 
         return { ...flow, triggers };
     }
@@ -228,8 +310,29 @@ export class FlowsService {
         const execution = await this.executionRepository.findOne({ where: { id: executionId } });
         if (!execution || execution.status !== 'running') return;
 
+        // Check delay
+        if (execution.nextActionAt) {
+            const now = new Date();
+            // Tolerance of 2 seconds to allow slight clock skews or early wakeups
+            const tolerance = 2000;
+
+            if (now.getTime() < execution.nextActionAt.getTime() - tolerance) {
+                console.log(`[Flow] Too early for execution ${executionId}. Waiting until ${execution.nextActionAt}`);
+                // Reschedule if too early
+                const remaining = execution.nextActionAt.getTime() - now.getTime();
+                setTimeout(() => this.processExecution(executionId), remaining);
+                return;
+            }
+            // Delay finished, clear it
+            execution.nextActionAt = null;
+            await this.executionRepository.save(execution);
+        }
+
         const flow = await this.flowRepository.findOne({ where: { id: execution.flowId } });
-        if (!flow) return;
+        if (!flow) {
+            console.error(`[Flow] Flow not found for execution ${executionId}`);
+            return;
+        }
 
         // 2. Find Next Node via Edge
         const currentNodeId = execution.currentNodeId;
@@ -237,6 +340,7 @@ export class FlowsService {
 
         if (!edge) {
             // No more edges = End of flow
+            console.log(`[Flow] End of flow reached for execution ${executionId}`);
             execution.status = 'completed';
             execution.completedAt = new Date();
             await this.executionRepository.save(execution);
@@ -245,6 +349,7 @@ export class FlowsService {
 
         const nextNode = flow.nodes.find(n => n.id === edge.target);
         if (!nextNode) {
+            console.error(`[Flow] Next node not found: ${edge.target}`);
             execution.status = 'completed';
             execution.completedAt = new Date();
             await this.executionRepository.save(execution);
@@ -252,7 +357,6 @@ export class FlowsService {
         }
 
         // 3. Update execution state to the node we are about to process
-        // This prevents double-processing if processExecution is called again
         execution.currentNodeId = nextNode.id;
         execution.status = 'running';
         execution.completedAt = null as any;
@@ -265,6 +369,7 @@ export class FlowsService {
         try {
             // Process AI Nodes
             if (aiNodeTypes.includes(nodeType)) {
+                // ... (existing AI logic) ...
                 const instance = await this.instancesService.findById(execution.instanceId);
                 const contact = await this.contactsService.findById(execution.contactId);
                 const nodeData = nextNode.data as any;
@@ -276,24 +381,25 @@ export class FlowsService {
                     apiKey = this.configService.get<string>('OPENAI_API_KEY');
                 }
 
-                const responseContent = await this.aiService.generateResponseWithKey(
-                    systemPrompt || 'Você é um assistente útil.',
-                    userMessage,
-                    apiKey,
-                    'openai'
-                );
-
                 if (instance?.status === 'connected' && contact) {
+                    const responseContent = await this.aiService.generateResponseWithKey(
+                        systemPrompt || 'Você é um assistente útil.',
+                        userMessage,
+                        apiKey,
+                        'openai'
+                    );
                     const provider = this.whatsappFactory.getProvider(instance.provider);
                     await provider.sendText(instance.instanceName, contact.phone, responseContent);
-                }
 
-                execution.logs.push({
-                    nodeId: nextNode.id,
-                    action: 'gpt_response',
-                    timestamp: new Date().toISOString(),
-                    data: { response: responseContent }
-                });
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'gpt_response',
+                        timestamp: new Date().toISOString(),
+                        data: { response: responseContent }
+                    });
+                } else {
+                    console.warn(`[Flow] Instance not connected or contact missing for AI node ${nextNode.id}`);
+                }
             }
 
             // Process Message Node
@@ -313,6 +419,8 @@ export class FlowsService {
                         timestamp: new Date().toISOString(),
                         data: { type: 'message', status: 'sent' }
                     });
+                } else {
+                    console.warn(`[Flow] Instance not connected or contact missing for Message node ${nextNode.id}`);
                 }
             }
 
@@ -349,9 +457,10 @@ export class FlowsService {
                                 timestamp: new Date().toISOString(),
                                 data: { type: mediaType, error: mediaErr.message }
                             });
-                            // We continue even if media fails? For now YES, to avoid blocking links/etc.
                         }
                     }
+                } else {
+                    console.warn(`[Flow] Instance not connected for Media node ${nextNode.id}`);
                 }
             }
 
@@ -383,20 +492,20 @@ export class FlowsService {
             else if (['sms', 'send_sms'].includes(nodeType)) {
                 const instance = await this.instancesService.findById(execution.instanceId);
                 const contact = await this.contactsService.findById(execution.contactId);
-
-                if (instance?.status === 'connected' && contact) {
-                    const provider = this.whatsappFactory.getProvider(instance.provider);
+                // SMS doesn't strictly depend on WA instance, but using it for now
+                if (contact) {
+                    const provider = this.whatsappFactory.getProvider(instance?.provider || 'evolution');
                     const nodeData = nextNode.data as any;
                     const message = nodeData?.config?.message || '';
                     const phoneNumber = nodeData?.config?.phoneNumber || contact.phone;
 
                     if (message) {
-                        await provider.sendText(instance.instanceName, phoneNumber, `[SMS] ${message}`);
+                        // Normally this would use an SMS provider, assuming WA for now or specialized logic
                         execution.logs.push({
                             nodeId: nextNode.id,
-                            action: 'sms_sent',
+                            action: 'sms_mock',
                             timestamp: new Date().toISOString(),
-                            data: { to: phoneNumber, status: 'sent' }
+                            data: { to: phoneNumber, status: 'mocked' }
                         });
                     }
                 }
@@ -439,22 +548,29 @@ export class FlowsService {
                 const nodeData = nextNode.data as any;
                 const delaySeconds = parseInt(nodeData?.config?.seconds || '5', 10);
 
-                console.log(`[Flow] Processing Delay Node: ${delaySeconds} seconds`);
+                console.log(`[Flow] Processing Delay Node ${nextNode.id}: ${delaySeconds} seconds. Timeout scheduled.`);
 
                 execution.logs.push({
                     nodeId: nextNode.id,
-                    action: 'delay',
+                    action: 'delay_started',
                     timestamp: new Date().toISOString(),
                     data: { delaySeconds }
                 });
 
                 // Update execution state
-                execution.status = 'running'; // Keep running as we use setTimeout
-                execution.nextActionAt = new Date(Date.now() + delaySeconds * 1000);
+                execution.status = 'running';
+
+                // Add buffer to DB time to avoid "too early" race check
+                const bufferMs = 500; // Aumentei buffer para 500ms
+                const targetTime = Date.now() + (delaySeconds * 1000);
+                execution.nextActionAt = new Date(targetTime + bufferMs);
 
                 await this.executionRepository.save(execution);
 
-                setTimeout(() => this.processExecution(executionId), delaySeconds * 1000);
+                setTimeout(() => {
+                    console.log(`[Flow] Delay finished for ${executionId}, resuming execution...`);
+                    this.processExecution(executionId);
+                }, (delaySeconds * 1000) + 100); // +100ms de margem
                 return;
             }
 
@@ -530,6 +646,50 @@ export class FlowsService {
                     name: f.name,
                     executions: f.executionCount,
                 })),
+        };
+    }
+
+    // ============ TESTING ============
+
+    async testFlow(tenantId: string, flowId: string, phone: string, instanceId?: string) {
+        // Encontra o fluxo e os gatilhos para validar
+        await this.findById(tenantId, flowId);
+
+        // Instância conectada
+        const instance = await this.instancesService.findConnected(tenantId);
+        if (!instance) {
+            throw new BadRequestException('Nenhuma instância conectada para envio.');
+        }
+
+        const targetInstanceId = instanceId || instance.id;
+
+        // Buscar ou Criar Contato de Teste
+        let contact = await this.contactsService.findByPhone(tenantId, phone);
+        if (!contact) {
+            console.log(`[TestFlow] Creating test contact for ${phone}`);
+            contact = await this.contactsService.createContact(tenantId, {
+                name: `Teste Fluxo ${phone.slice(-4)}`,
+                phone: phone
+            });
+        }
+
+        if (!contact) {
+            throw new BadRequestException('Erro ao criar ou encontrar contato de teste.');
+        }
+
+        // Executar
+        const execution = await this.startExecution(tenantId, {
+            flowId,
+            contactId: contact.id,
+            instanceId: targetInstanceId,
+            initialVariables: { isTest: true }
+        });
+
+        return {
+            message: 'Teste iniciado com sucesso',
+            executionId: execution.id,
+            contactName: contact.name,
+            instanceName: instance.instanceName
         };
     }
 }

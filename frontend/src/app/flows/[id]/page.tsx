@@ -308,11 +308,11 @@ function MessageNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#14b8a6' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -440,11 +440,11 @@ function QuestionNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#14b8a6' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -674,11 +674,11 @@ function LinkNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#14b8a6' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -971,11 +971,11 @@ function VideoNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#a855f7' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -1076,11 +1076,11 @@ function ImageNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#a855f7' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -1163,11 +1163,11 @@ function StickerNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#a855f7' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -1247,11 +1247,11 @@ function AudioNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#a855f7' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -1350,11 +1350,11 @@ function DocumentNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#a855f7' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -1543,11 +1543,11 @@ function ButtonsDefaultNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#0f766e' }}>
                 <div className="flex justify-between text-white text-center">
                     <div className="flex-1">
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center justify-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div className="flex-1">
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center justify-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                     <div className="flex-1">
@@ -1713,11 +1713,11 @@ function ButtonsCopyNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#0f766e' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -1812,11 +1812,11 @@ function ButtonsActionsNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#0f766e' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -1934,16 +1934,15 @@ function ButtonsActionsNode({ data, selected, id }: CustomNodeProps) {
 
 // ============ NÓ DE CHAMADA EXTERNA (WEBHOOK) ============
 function WebhookNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
+
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
-                    ✏️ Editar
-                </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -1951,11 +1950,11 @@ function WebhookNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#3b82f6' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -1969,7 +1968,10 @@ function WebhookNode({ data, selected, id }: CustomNodeProps) {
                         <div className="text-xs opacity-80">Integração</div>
                     </div>
                 </div>
-                <button className="p-1 hover:bg-white/20 rounded text-white"><Icons.Play /></button>
+                <div className="flex items-center gap-2 text-white">
+                    <button className="p-1 hover:bg-white/20 rounded"><Icons.Help /></button>
+                    <button className="p-1 hover:bg-white/20 rounded"><Icons.Play /></button>
+                </div>
             </div>
 
             <div className={nodeStyles.body}>
@@ -2023,11 +2025,11 @@ function AINodeBase({ data, selected, id, title, icon, color, tokenPlaceholder, 
             <div className={nodeStyles.header} style={{ backgroundColor: color }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -2175,18 +2177,27 @@ function GroqNode({ data, selected, id }: CustomNodeProps) {
 
 // ============ NÓ CUSTOM LLM ============
 function CustomLLMNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [apiUrl, setApiUrl] = useState(data.config?.apiUrl || '');
     const [apiKey, setApiKey] = useState(data.config?.apiKey || '');
     const [model, setModel] = useState(data.config?.model || '');
     const [systemPrompt, setSystemPrompt] = useState(data.config?.systemPrompt || '');
 
+    // Sincronizar mudanças automaticamente (debounced)
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            updateConfig({ apiUrl, apiKey, model, systemPrompt });
+        }, 500);
+        return () => clearTimeout(timeout);
+    }, [apiUrl, apiKey, model, systemPrompt, updateConfig]);
+
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
                     <Icons.Duplicate /> Duplicar
                 </button>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -2194,11 +2205,11 @@ function CustomLLMNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#6366f1' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -2317,11 +2328,11 @@ function SMSNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#22C55E' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -2414,11 +2425,11 @@ function EmailNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#EA4335' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -2533,32 +2544,52 @@ function EmailNode({ data, selected, id }: CustomNodeProps) {
 }
 
 // ============ NÓ DE DELAY ============
-function DelayNode({ data, selected }: CustomNodeProps) {
+function DelayNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
     const [seconds, setSeconds] = useState(data.config?.seconds || 5);
 
     return (
         <div className={`group ${nodeStyles.wrapper} min-w-[200px] ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs">
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                    <Icons.Duplicate /> Duplicar
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
 
             <div className="px-4 py-3 rounded-t-xl bg-[#f59e0b] text-white">
-                <div className="flex items-center gap-2">
-                    <span className="text-2xl">⏱️</span>
-                    <div className="font-semibold">Intervalo</div>
+                <div className="flex justify-between items-center mb-2">
+                    <div className="flex items-center gap-2">
+                        <span className="text-2xl">⏱️</span>
+                        <div className="font-semibold">Aguardar (Delay)</div>
+                    </div>
+                </div>
+                <div className="flex justify-between text-center text-white/90 text-xs">
+                    <div>
+                        <div className="font-bold text-lg">{data.stats?.executing || 0}</div>
+                        <div>Aguardando</div>
+                    </div>
+                    <div>
+                        <div className="font-bold text-lg">{data.stats?.sent || 0}</div>
+                        <div>Concluídos</div>
+                    </div>
                 </div>
             </div>
 
             <div className={nodeStyles.body}>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 justify-center">
                     <span>Aguardar</span>
                     <input
                         type="number"
-                        className="w-16 bg-transparent border border-gray-200 dark:border-[var(--border-color)] rounded px-2 py-1 text-center"
+                        className="w-20 bg-gray-50 dark:bg-[var(--bg-secondary)] border border-gray-200 dark:border-[var(--border-color)] rounded px-2 py-1 text-center"
                         value={seconds}
-                        onChange={(e) => setSeconds(Number(e.target.value))}
+                        onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setSeconds(val);
+                            updateConfig({ seconds: val });
+                        }}
                         onClick={(e) => e.stopPropagation()}
                     />
                     <span>segundos</span>
@@ -2697,11 +2728,11 @@ function TemplateTextNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#8b5cf6' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -2897,11 +2928,11 @@ function TemplateButtonNode({ data, selected, id }: CustomNodeProps) {
             <div className={nodeStyles.header} style={{ backgroundColor: '#8b5cf6' }}>
                 <div className={nodeStyles.stats}>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
                         <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
                     </div>
                     <div>
-                        <div className="text-2xl font-bold">0</div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
                         <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
                     </div>
                 </div>
@@ -4070,12 +4101,6 @@ function FlowEditorContent() {
             return;
         }
 
-        const connectedInstance = instances.find(i => i.status === 'connected');
-        if (!connectedInstance) {
-            alert('Nenhuma instância conectada encontrada para realizar o teste. Por favor, conecte uma instância primeiro.');
-            return;
-        }
-
         try {
             setTesting(true);
             const currentNodes = getNodes();
@@ -4091,77 +4116,16 @@ function FlowEditorContent() {
                 return;
             }
 
-            // Executa o fluxo de verdade via API
-            // Usando ID fictício de contato pois é um teste direto via número
-            // O backend precisará adaptar se não tiver contactId, ou criamos um contato temporário
-            // Mas a API executeFlow pede contactId. 
-            // VAMOS CRIAR UM CONTATO TEMPORÁRIO OU BUSCAR SE EXISTE
+            // Usar endpoint de teste do backend que já resolve contato e instância
+            const result = await flowsApi.testFlow(flow.id, testPhone);
 
-            // 1. Tenta buscar ou criar contato simples (vamos assumir que o backend lida com isso se passarmos o numero e nome)
-            // Como a API executeFlow pede ID, vamos improvisar:
-            // O ideal seria ter uma rota de teste específica, mas vamos usar a executeFlow
-            // Preciso de um contactId válido.
-
-            // SOLUÇÃO RÁPIDA: Criar um contato de teste via API se não existir
-            let contactId = '';
-            try {
-                // Tenta criar/buscar contato
-                // Nota: Assumindo que existe endpoint para buscar/criar ou usamos um existente
-                // Simplificação: Vamos chamar o execute passando o telefone no corpo se o backend suportar, 
-                // mas a interface ExecuteFlowDto exige contactId.
-
-                // Vamos tentar buscar um contato com esse numero na lista de contatos (se tivesse metodo publico facil)
-                // Como não temos tempo de implementar busca agora, vamos assumir que o usuário deve ter o contato salvo?
-                // Não, melhor: vamos alertar que isso é um teste simulado SE não tivermos como criar contato.
-
-                // REVISÃO: O usuário disse "manda tudo de uma vez", indicando que ALGO foi enviado.
-                // Mas o código antigo era apenas ALERT.
-                // O usuário quer envio REAL.
-
-                // Vou implementar uma chamada direta para os endpoints de teste se existirem, ou simular via criação de contato.
-                // Como não tenho endpoint de 'test-flow', vou usar o executeFlow normal.
-                // Vou criar um contato 'Teste Flow' com o número.
-
-                const response = await api.post('/contacts', {
-                    name: 'Contato de Teste',
-                    phone: testPhone,
-                    tags: ['teste']
-                });
-                contactId = response.data.id;
-
-            } catch (err) {
-                // Se der erro (ex: duplicado), tentamos buscar (se a API retornasse o ID no erro seria otimo)
-                // Assumindo erro de duplicidade, não temos o ID facilmente sem buscar.
-                // Vamos tentar listar contatos filtrando pelo telefone? Backend não tem filtro fácil na listagem simples.
-                console.error('Erro ao criar contato de teste:', err);
-                // Fallback: Tenta pegar o primeiro contato que encontrar (perigoso) ou avisa.
-                // Vamos tentar prosseguir assumindo que o backend talvez aceite algo diferente ou falhe.
-            }
-
-            if (!contactId) {
-                // Tenta buscar contatos e achar o numero
-                try {
-                    const contactsRes = await api.get('/contacts');
-                    const found = contactsRes.data.find((c: any) => c.phone.includes(testPhone.replace(/\D/g, '').slice(-8)));
-                    if (found) contactId = found.id;
-                } catch (e) { }
-            }
-
-            if (!contactId) {
-                alert('Não foi possível encontrar ou criar um contato para este número. Por favor, cadastre o contato na aba de Contatos primeiro.');
-                setTesting(false);
-                return;
-            }
-
-            await flowsApi.executeFlow(flow.id, contactId, connectedInstance.id);
-
-            alert(`✅ Teste iniciado!\n\nEnviando mensagens para ${testPhone} usando o chip ${connectedInstance.instanceName}.`);
+            alert(`✅ Teste iniciado!\n\nID da Execução: ${result.executionId}\nContato: ${result.contactName}\nInstância: ${result.instanceName}`);
 
             setShowTestModal(false);
             setTestPhone('');
         } catch (error: any) {
             console.error(error);
-            alert(error.response?.data?.message || 'Erro ao testar fluxo');
+            alert(error.response?.data?.message || 'Erro ao testar fluxo. Verifique se há uma instância conectada.');
         } finally {
             setTesting(false);
         }

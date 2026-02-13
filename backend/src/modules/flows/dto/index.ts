@@ -90,3 +90,4 @@ export class ExecuteFlowDto {
     @IsOptional()
     initialVariables?: Record<string, any>;
 }
+export * from './test-flow.dto';

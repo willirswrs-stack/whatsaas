@@ -104,4 +104,11 @@ export class FlowsController {
     async execute(@Request() req, @Body() dto: ExecuteFlowDto) {
         return this.flowsService.startExecution(req.user.tenantId, dto);
     }
+
+    @Post('test')
+    async testFlow(@Request() req, @Body() dto: any) {
+        // Find or create contact
+        // We handle this in service for better logic
+        return this.flowsService.testFlow(req.user.tenantId, dto.flowId, dto.phone, dto.instanceId);
+    }
 }
