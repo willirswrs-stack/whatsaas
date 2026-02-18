@@ -38,13 +38,10 @@ export interface CreateCampaignDto {
     };
 }
 
-export interface Template {
+export interface Tag {
     id: string;
     name: string;
-    content: string;
-    variables: string[];
-    category: string;
-    createdAt: string;
+    color: string;
 }
 
 export interface Contact {
@@ -52,8 +49,17 @@ export interface Contact {
     name: string;
     phone: string;
     email?: string;
-    tags: string[];
+    tags: Tag[];
     hasWhatsApp: boolean;
+    createdAt: string;
+}
+
+export interface Template {
+    id: string;
+    name: string;
+    content: string;
+    variables: string[];
+    category: string;
     createdAt: string;
 }
 
@@ -137,6 +143,11 @@ export const campaignsService = {
         return response.data;
     },
 
+    async listTags(): Promise<Tag[]> {
+        const response = await api.get<Tag[]>('/contacts/tags');
+        return response.data;
+    },
+
     async createTemplate(data: Omit<Template, 'id' | 'createdAt'>): Promise<Template> {
         const response = await api.post<Template>('/campaigns/templates', data);
         return response.data;
@@ -149,7 +160,7 @@ export const campaignsService = {
 
     // Contacts
     async listContacts(): Promise<Contact[]> {
-        const response = await api.get<any>('/campaigns/contacts?limit=100'); // Limite maior para contatos
+        const response = await api.get<any>('/campaigns/contacts?limit=1000'); // Limit increased to 1000
         return response.data?.data || response.data;
     },
 

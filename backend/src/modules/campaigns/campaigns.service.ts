@@ -1,7 +1,9 @@
-import { Injectable, NotFoundException, Inject, forwardRef, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHash } from 'crypto';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 
 import {
@@ -11,9 +13,11 @@ import {
     Contact,
     Template,
 } from './entities/campaign.entity';
+import { ContactsService } from '../contacts/contacts.service';
 import { AiService } from '../ai/ai.service';
 import { DispatcherService } from '../dispatcher/dispatcher.service';
 import { SettingsService } from '../settings/settings.service';
+import { SCHEDULER_QUEUE } from '../../config/bull.config';
 
 @Injectable()
 export class CampaignsService {
@@ -30,10 +34,12 @@ export class CampaignsService {
         private contactRepo: Repository<Contact>,
         @InjectRepository(Template)
         private templateRepo: Repository<Template>,
+        @InjectQueue(SCHEDULER_QUEUE) private schedulerQueue: Queue,
         private aiService: AiService,
         private dispatcherService: DispatcherService,
         @Inject(forwardRef(() => SettingsService))
         private settingsService: SettingsService,
+        private readonly contactsService: ContactsService,
     ) { }
 
     async findAll(tenantId: string, query?: PaginationQueryDto) {
@@ -354,8 +360,8 @@ export class CampaignsService {
             qb.andWhere('cc.status = :status', { status: query.status });
         }
 
-        qb.orderBy('cc.updated_at', 'DESC') // Most recent updates first (failures usually happen last)
-            .addOrderBy('cc.created_at', 'ASC')
+        qb.orderBy('cc.updatedAt', 'DESC') // Most recent updates first (failures usually happen last)
+            .addOrderBy('cc.createdAt', 'ASC')
             .take(limit)
             .skip(skip);
 
@@ -374,45 +380,109 @@ export class CampaignsService {
 
     // Contacts
     async findAllContacts(tenantId: string, query?: PaginationQueryDto) {
-        const page = Number(query?.page) || 1;
-        const limit = Number(query?.limit) || 10;
-        const skip = (page - 1) * limit;
-
-
-        const [data, total] = await this.contactRepo.findAndCount({
-            where: { tenantId },
-            order: { createdAt: 'DESC' },
-            take: limit,
-            skip,
-        });
-
-        return {
-            data,
-            meta: {
-                total,
-                page,
-                last_page: Math.ceil(total / limit),
-                limit,
-            },
-        };
+        return this.contactsService.findAllContacts(tenantId, query as any);
     }
 
     async createContact(tenantId: string, data: Partial<Contact>) {
-        const contact = this.contactRepo.create({ ...data, tenantId });
-        return this.contactRepo.save(contact);
+        return this.contactsService.createContact(tenantId, data as any);
     }
 
     async importContacts(tenantId: string, contacts: Array<{ phone: string; name?: string; email?: string; tags?: string[] }>) {
-        const entities = contacts.map((c) =>
-            this.contactRepo.create({
-                phone: c.phone,
-                name: c.name,
-                tenantId,
-                onWhatsapp: true,
-                isValid: true,
-                customFields: { email: c.email, tags: c.tags },
-            }),
+        const createContactDtos = contacts.map(c => ({
+            phone: c.phone,
+            name: c.name,
+            email: c.email,
+            tagIds: [] as string[],
+            customFields: { email: c.email, tags: c.tags }
+        }));
+
+        const result = await this.contactsService.importContacts(tenantId, createContactDtos);
+
+        // Controller expects an array to check .length
+        return new Array(result.imported).fill({});
+    }
+    async retryFailed(id: string, tenantId: string) {
+        const campaign = await this.findOne(id, tenantId);
+
+        // 1. Resetar contatos com falha
+        const result = await this.campaignContactRepo.update(
+            { campaignId: id, status: 'failed' },
+            {
+                status: 'queued',
+                errorMessage: null as any,
+                failedAt: null as any,
+                retryCount: 0,
+            }
         );
-        return this.contactRepo.save(entities);
+
+        if (result.affected === 0) {
+            return { message: 'No failed contacts to retry', count: 0 };
+        }
+
+        this.logger.log(`🌀 Resetting ${result.affected} failed contacts for campaign ${id}`);
+
+        // 2. Atualizar status da campanha se necessário
+        // Decrementar contagem de falhas (aproximado)
+        await this.campaignRepo.decrement({ id }, 'failedCount', result.affected || 0);
+
+        // Se estava completed ou paused, volta para running
+        if (campaign.status === 'completed' || campaign.status === 'paused') {
+            await this.campaignRepo.update(id, {
+                status: 'running',
+                completedAt: null as any,
+            });
+        }
+
+        // 3. Enfileirar novamente
+        const queued = await this.dispatcherService.enqueueCampaign(id, tenantId);
+
+        return {
+            message: `Retrying ${queued} contacts`,
+            count: queued,
+            affected: result.affected,
+        };
+    }
+    async schedule(id: string, tenantId: string, scheduledAtStr: string) {
+        const campaign = await this.findOne(id, tenantId);
+        const scheduledAt = new Date(scheduledAtStr);
+
+        if (isNaN(scheduledAt.getTime())) {
+            throw new BadRequestException('Data inválida');
+        }
+
+        const now = Date.now();
+        if (scheduledAt.getTime() <= now) {
+            throw new BadRequestException('A data de agendamento deve ser futura');
+        }
+
+        // Delay in ms
+        const delay = scheduledAt.getTime() - now;
+        const jobId = `schedule-${id}`;
+
+        // Atualizar campanha
+        await this.campaignRepo.update(id, {
+            status: 'scheduled',
+            scheduledAt,
+        });
+
+        this.logger.log(`📅 Scheduling campaign ${id} for ${scheduledAt.toISOString()} (delay: ${delay}ms)`);
+
+        // Remover job anterior se existir
+        const oldJob = await this.schedulerQueue.getJob(jobId);
+        if (oldJob) {
+            await oldJob.remove();
+        }
+
+        await this.schedulerQueue.add(
+            'start-campaign',
+            { campaignId: id, tenantId },
+            {
+                jobId,
+                delay,
+                removeOnComplete: true,
+            }
+        );
+
+        return this.findOne(id, tenantId);
     }
 }

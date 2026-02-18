@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Header } from '@/components/Header';
-import { campaignsService, Campaign, Template, Contact } from '@/lib/campaigns';
+import { campaignsService, Campaign, Template, Contact, Tag } from '@/lib/campaigns';
 import { instancesService, Instance } from '@/lib/instances';
 import { flowsApi, Flow } from '@/lib/flows';
 import { getErrorMessage } from '@/lib/auth';
@@ -22,6 +22,7 @@ export default function CampaignsPage() {
     const [templates, setTemplates] = useState<Template[]>([]);
     const [flows, setFlows] = useState<Flow[]>([]);
     const [contacts, setContacts] = useState<Contact[]>([]);
+    const [tags, setTags] = useState<Tag[]>([]);
     const [instances, setInstances] = useState<Instance[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -55,15 +56,17 @@ export default function CampaignsPage() {
     const [isCreating, setIsCreating] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [contactSearch, setContactSearch] = useState('');
+    const [selectedTagId, setSelectedTagId] = useState<string>('');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Filtrar contatos por nome ou telefone
     const filteredContacts = contacts.filter(contact => {
-        if (!contactSearch.trim()) return true;
+        const tagMatch = !selectedTagId || contact.tags?.some(tag => tag.id === selectedTagId);
+        if (!contactSearch.trim()) return tagMatch;
         const searchLower = contactSearch.toLowerCase().trim();
         const nameMatch = contact.name?.toLowerCase().includes(searchLower);
         const phoneMatch = contact.phone?.includes(contactSearch.trim());
-        return nameMatch || phoneMatch;
+        return (nameMatch || phoneMatch) && tagMatch;
     });
 
     useEffect(() => {
@@ -154,18 +157,20 @@ export default function CampaignsPage() {
         try {
             setIsLoading(true);
             setError('');
-            const [campaignsRes, templatesData, flowsData, contactsData, instancesData] = await Promise.all([
+            const [campaignsRes, templatesData, flowsData, contactsData, instancesData, tagsData] = await Promise.all([
                 campaignsService.listPaginated(page, 10).catch(() => ({ data: [], meta: {} })),
                 campaignsService.listTemplates().catch(() => []),
                 flowsApi.getFlows().catch(() => []),
                 campaignsService.listContacts().catch(() => []),
-                instancesService.list().catch(() => [])
+                instancesService.list().catch(() => []),
+                campaignsService.listTags().catch(() => [])
             ]);
             setCampaigns(campaignsRes.data || []);
             setMeta(campaignsRes.meta || {});
             setTemplates(templatesData);
             setFlows(flowsData);
             setContacts(contactsData);
+            setTags(tagsData);
             setInstances(instancesData.filter((i: Instance) => i.status === 'connected'));
         } catch (err) {
             setError(getErrorMessage(err));
@@ -1032,27 +1037,40 @@ export default function CampaignsPage() {
                                 </div>
 
                                 {/* Campo de Busca de Contatos */}
-                                <div className="relative mb-2">
-                                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                                        <circle cx="11" cy="11" r="8" />
-                                        <path d="m21 21-4.35-4.35" />
-                                    </svg>
-                                    <input
-                                        type="text"
-                                        placeholder="Buscar por nome ou telefone..."
-                                        value={contactSearch}
-                                        onChange={(e) => setContactSearch(e.target.value)}
-                                        className="input w-full pl-10 py-2 text-sm"
-                                    />
-                                    {contactSearch && (
-                                        <button
-                                            type="button"
-                                            onClick={() => setContactSearch('')}
-                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
-                                        >
-                                            ✕
-                                        </button>
-                                    )}
+                                {/* Filtros: Busca + Tags */}
+                                <div className="flex gap-2 mb-2">
+                                    <div className="relative flex-1">
+                                        <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                            <circle cx="11" cy="11" r="8" />
+                                            <path d="m21 21-4.35-4.35" />
+                                        </svg>
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar por nome ou telefone..."
+                                            value={contactSearch}
+                                            onChange={(e) => setContactSearch(e.target.value)}
+                                            className="input w-full pl-10 py-2 text-sm"
+                                        />
+                                        {contactSearch && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setContactSearch('')}
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-primary)]"
+                                            >
+                                                ✕
+                                            </button>
+                                        )}
+                                    </div>
+                                    <select
+                                        className="input w-40 text-sm py-2 px-3"
+                                        value={selectedTagId}
+                                        onChange={(e) => setSelectedTagId(e.target.value)}
+                                    >
+                                        <option value="">Todas etiquetas</option>
+                                        {tags.map(tag => (
+                                            <option key={tag.id} value={tag.id}>{tag.name}</option>
+                                        ))}
+                                    </select>
                                 </div>
                                 {contactSearch && (
                                     <p className="text-xs text-[var(--text-muted)] mb-2">

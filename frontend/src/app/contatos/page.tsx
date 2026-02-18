@@ -18,6 +18,8 @@ export default function ContactsPage() {
     const [total, setTotal] = useState(0);
     const [search, setSearch] = useState('');
     const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+    const [bulkSelectedTags, setBulkSelectedTags] = useState<string[]>([]); // For bulk actions
+    const [filterCategory, setFilterCategory] = useState('');
     const [filterOptedOut, setFilterOptedOut] = useState<boolean | undefined>(undefined);
 
     // Selection
@@ -37,6 +39,7 @@ export default function ContactsPage() {
         phone: '',
         name: '',
         email: '',
+        category: '',
         tagIds: [] as string[],
         customFields: {} as Record<string, any>,
     });
@@ -57,6 +60,7 @@ export default function ContactsPage() {
                 limit: 25,
                 search: search || undefined,
                 tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
+                category: filterCategory || undefined,
                 optedOut: filterOptedOut,
             };
             const response = await contactsApi.getContacts(params);
@@ -69,7 +73,7 @@ export default function ContactsPage() {
         } finally {
             setLoading(false);
         }
-    }, [page, search, selectedTagIds, filterOptedOut]);
+    }, [page, search, selectedTagIds, filterCategory, filterOptedOut]);
 
     const loadTags = async () => {
         try {
@@ -137,7 +141,7 @@ export default function ContactsPage() {
 
     const handleCreateContact = () => {
         setEditingContact(null);
-        setFormData({ phone: '', name: '', email: '', tagIds: [], customFields: {} });
+        setFormData({ phone: '', name: '', email: '', category: '', tagIds: [], customFields: {} });
         setShowContactModal(true);
     };
 
@@ -147,6 +151,7 @@ export default function ContactsPage() {
             phone: contact.phone,
             name: contact.name || '',
             email: contact.email || '',
+            category: contact.category || '',
             tagIds: contact.tags.map(t => t.id),
             customFields: contact.customFields || {},
         });
@@ -256,11 +261,12 @@ export default function ContactsPage() {
     };
 
     const convertToCSV = (data: Contact[]) => {
-        const headers = ['Telefone', 'Nome', 'Email', 'Tags', 'Válido', 'Criado em'];
+        const headers = ['Telefone', 'Nome', 'Email', 'Categoria', 'Tags', 'Válido', 'Criado em'];
         const rows = data.map(c => [
             c.phone,
             c.name || '',
             c.email || '',
+            c.category || '',
             c.tags.map(t => t.name).join('; '),
             c.isValid ? 'Sim' : 'Não',
             new Date(c.createdAt).toLocaleDateString('pt-BR'),
@@ -279,61 +285,13 @@ export default function ContactsPage() {
 
     const handleImport = async (file: File) => {
         try {
-            const text = await file.text();
-            const lines = text.split(/\r?\n/);
+            const result = await contactsApi.importContactsFile(file);
+            alert(`Processamento Concluído!\n\nImportados/Atualizados: ${result.imported}\nPulados (Duplicados): ${result.skipped || 0}\nErros: ${result.errors?.length || 0}`);
 
-            if (lines.length < 2) {
-                alert('Arquivo vazio ou sem dados');
-                return;
+            if (result.errors?.length > 0) {
+                console.warn('Erros na importação:', result.errors);
             }
 
-            // Detect separator (comma or semicolon)
-            const headerLine = lines[0].toLowerCase();
-            const separator = headerLine.includes(';') ? ';' : ',';
-
-            // Parse header to find column indices
-            const headers = headerLine.split(separator).map(h => h.trim());
-            const phoneIdx = headers.findIndex(h => h.includes('telefone') || h.includes('phone') || h.includes('celular'));
-            const nameIdx = headers.findIndex(h => h.includes('nome') || h.includes('name'));
-            const emailIdx = headers.findIndex(h => h.includes('email') || h.includes('e-mail'));
-
-            if (phoneIdx === -1) {
-                alert('Coluna de telefone não encontrada no header. Use "telefone", "phone" ou "celular".');
-                return;
-            }
-
-            const dataLines = lines.slice(1); // Skip header
-
-            const contacts = dataLines
-                .filter(l => l.trim())
-                .map(line => {
-                    const parts = line.split(separator).map(s => s.trim().replace(/^["']|["']$/g, ''));
-
-                    // Get values by column index
-                    const phone = parts[phoneIdx] || '';
-                    const name = nameIdx >= 0 ? (parts[nameIdx] || '') : '';
-                    const email = emailIdx >= 0 ? (parts[emailIdx] || '') : '';
-
-                    // Clean phone number - remove non-digits except +
-                    const cleanPhone = phone.replace(/[^\d+]/g, '');
-
-                    return {
-                        phone: cleanPhone,
-                        name: name,
-                        email: email
-                    };
-                })
-                .filter(c => c.phone && c.phone.length >= 10);
-
-            if (contacts.length === 0) {
-                alert('Nenhum contato válido encontrado. Verifique se os telefones têm pelo menos 10 dígitos.');
-                return;
-            }
-
-            console.log(`Importando ${contacts.length} contatos...`, contacts.slice(0, 3));
-
-            const result = await contactsApi.importContacts(contacts);
-            alert(`Importados: ${result.imported}, Ignorados: ${result.skipped}`);
             setShowImportModal(false);
             loadContacts();
             loadStats();
@@ -432,6 +390,17 @@ export default function ContactsPage() {
                         </div>
                     </form>
 
+                    {/* Category Filter */}
+                    <div className="w-[200px]">
+                        <input
+                            type="text"
+                            placeholder="Filtrar categoria..."
+                            value={filterCategory}
+                            onChange={(e) => setFilterCategory(e.target.value)}
+                            className="input w-full"
+                        />
+                    </div>
+
                     {/* Tag Filter */}
                     <div className="flex items-center gap-2">
                         <span className="text-sm text-[var(--text-secondary)]">Tags:</span>
@@ -475,6 +444,7 @@ export default function ContactsPage() {
                             onClick={() => {
                                 setSearch('');
                                 setSelectedTagIds([]);
+                                setFilterCategory('');
                                 setPage(1);
                             }}
                             className="text-sm text-[var(--text-muted)] hover:text-[var(--primary)]"
@@ -522,6 +492,7 @@ export default function ContactsPage() {
                                 />
                             </th>
                             <th>Contato</th>
+                            <th>Categoria</th>
                             <th>Tags</th>
                             <th>Status</th>
                             <th>Adicionado</th>
@@ -531,13 +502,13 @@ export default function ContactsPage() {
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan={6} className="text-center py-8 text-[var(--text-muted)]">
+                                <td colSpan={7} className="text-center py-8 text-[var(--text-muted)]">
                                     Carregando...
                                 </td>
                             </tr>
                         ) : contacts.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="text-center py-8 text-[var(--text-muted)]">
+                                <td colSpan={7} className="text-center py-8 text-[var(--text-muted)]">
                                     Nenhum contato encontrado
                                 </td>
                             </tr>
@@ -565,6 +536,9 @@ export default function ContactsPage() {
                                                 )}
                                             </div>
                                         </div>
+                                    </td>
+                                    <td>
+                                        <span className="text-sm">{contact.category || '-'}</span>
                                     </td>
                                     <td>
                                         <div className="flex flex-wrap gap-1">
@@ -675,6 +649,16 @@ export default function ContactsPage() {
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                     placeholder="Nome do contato"
+                                    className="input w-full"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Categoria</label>
+                                <input
+                                    type="text"
+                                    value={formData.category}
+                                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                                    placeholder="Ex: Clientes VIP"
                                     className="input w-full"
                                 />
                             </div>
@@ -863,17 +847,23 @@ export default function ContactsPage() {
                         </p>
                         <div className="flex flex-wrap gap-2 mb-6">
                             {tags.map(tag => {
-                                const [isSelected, setIsSelected] = useState(false);
+                                const isSelected = bulkSelectedTags.includes(tag.id);
                                 return (
                                     <button
                                         key={tag.id}
-                                        onClick={() => setIsSelected(!isSelected)}
-                                        data-selected={isSelected}
-                                        className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${isSelected ? 'ring-2' : 'opacity-60'
+                                        onClick={() => {
+                                            setBulkSelectedTags(prev =>
+                                                isSelected
+                                                    ? prev.filter(id => id !== tag.id)
+                                                    : [...prev, tag.id]
+                                            );
+                                        }}
+                                        className={`px-3 py-1 rounded-full text-sm font-medium transition-all ${isSelected ? 'ring-2 ring-offset-1' : 'opacity-60'
                                             }`}
                                         style={{
                                             backgroundColor: `${tag.color}20`,
                                             color: tag.color,
+                                            borderColor: tag.color
                                         }}
                                     >
                                         {tag.name}
@@ -882,17 +872,23 @@ export default function ContactsPage() {
                             })}
                         </div>
                         <div className="flex justify-end gap-3">
-                            <button onClick={() => setShowBulkTagModal(false)} className="btn btn-ghost">
+                            <button
+                                onClick={() => {
+                                    setShowBulkTagModal(false);
+                                    setBulkSelectedTags([]);
+                                }}
+                                className="btn btn-ghost"
+                            >
                                 Cancelar
                             </button>
                             <button
                                 onClick={() => {
-                                    const selectedTags = Array.from(document.querySelectorAll('[data-selected="true"]'))
-                                        .map(el => tags.find(t => t.name === el.textContent)?.id)
-                                        .filter(Boolean) as string[];
-                                    handleBulkAddTags(selectedTags);
+                                    handleBulkAddTags(bulkSelectedTags);
+                                    setBulkSelectedTags([]);
+                                    setShowBulkTagModal(false);
                                 }}
                                 className="btn btn-primary"
+                                disabled={bulkSelectedTags.length === 0}
                             >
                                 Adicionar
                             </button>

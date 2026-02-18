@@ -1,5 +1,6 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 
 import {
     Campaign,
@@ -8,11 +9,14 @@ import {
     Contact,
     Template,
 } from './entities/campaign.entity';
+import { ContactsModule } from '../contacts/contacts.module';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsService } from './campaigns.service';
 import { AiModule } from '../ai/ai.module';
 import { DispatcherModule } from '../dispatcher/dispatcher.module';
 import { SettingsModule } from '../settings/settings.module';
+import { SCHEDULER_QUEUE } from '../../config/bull.config';
+import { CampaignSchedulerProcessor } from './campaign-scheduler.processor';
 
 @Module({
     imports: [
@@ -23,12 +27,16 @@ import { SettingsModule } from '../settings/settings.module';
             Contact,
             Template,
         ]),
+        BullModule.registerQueue({
+            name: SCHEDULER_QUEUE,
+        }),
         AiModule,
         DispatcherModule,
         forwardRef(() => SettingsModule),
+        ContactsModule,
     ],
     controllers: [CampaignsController],
-    providers: [CampaignsService],
+    providers: [CampaignsService, CampaignSchedulerProcessor],
     exports: [CampaignsService],
 })
 export class CampaignsModule { }

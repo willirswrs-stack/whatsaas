@@ -26,6 +26,7 @@ export interface Contact {
     phone: string;
     name?: string;
     email?: string;
+    category?: string;
     customFields: Record<string, any>;
     isValid: boolean;
     onWhatsapp?: boolean;
@@ -58,6 +59,7 @@ export interface CreateContactDto {
     phone: string;
     name?: string;
     email?: string;
+    category?: string;
     customFields?: Record<string, any>;
     tagIds?: string[];
 }
@@ -70,6 +72,7 @@ export interface UpdateContactDto extends Partial<CreateContactDto> {
 export interface ContactQueryParams {
     search?: string;
     tagIds?: string[];
+    category?: string;
     isValid?: boolean;
     optedOut?: boolean;
     page?: number;
@@ -84,6 +87,7 @@ export const contactsApi = {
         const queryParams = new URLSearchParams();
         if (params?.search) queryParams.append('search', params.search);
         if (params?.tagIds?.length) queryParams.append('tagIds', params.tagIds.join(','));
+        if (params?.category) queryParams.append('category', params.category);
         if (params?.isValid !== undefined) queryParams.append('isValid', String(params.isValid));
         if (params?.optedOut !== undefined) queryParams.append('optedOut', String(params.optedOut));
         if (params?.page) queryParams.append('page', String(params.page));
@@ -118,6 +122,17 @@ export const contactsApi = {
 
     async importContacts(contacts: CreateContactDto[]): Promise<{ imported: number; skipped: number; errors: string[] }> {
         const response = await api.post('/contacts/import', { contacts });
+        return response.data;
+    },
+
+    async importContactsFile(file: File): Promise<{ imported: number; skipped: number; errors: string[] }> {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await api.post('/contacts/import/file', formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
+        });
         return response.data;
     },
 
