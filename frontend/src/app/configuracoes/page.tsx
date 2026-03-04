@@ -87,11 +87,14 @@ export default function SettingsPage() {
             <Header />
 
             {/* Page Header */}
-            <div className="mb-8">
-                <h1 className="page-title">Configurações</h1>
-                <p className="text-[var(--text-muted)]">
-                    Gerencie as configurações da sua conta e plataforma
-                </p>
+            <div className="mb-8 flex items-center gap-3">
+                <img src="/icons/sidebar/settings.png" alt="Configurações" className="w-10 h-10 object-contain drop-shadow-md" />
+                <div>
+                    <h1 className="page-title mb-0">Configurações</h1>
+                    <p className="text-[var(--text-muted)]">
+                        Gerencie as configurações da sua conta e plataforma
+                    </p>
+                </div>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">

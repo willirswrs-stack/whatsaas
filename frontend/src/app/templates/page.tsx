@@ -21,8 +21,14 @@ export default function TemplatesPage() {
     const loadTemplates = async () => {
         try {
             setIsLoading(true);
-            const data = await campaignsService.listTemplates();
-            setTemplates(data);
+            const responseData = await campaignsService.listTemplates();
+            if (Array.isArray(responseData)) {
+                setTemplates(responseData);
+            } else if (responseData && typeof responseData === 'object' && Array.isArray((responseData as any).data)) {
+                setTemplates((responseData as any).data);
+            } else {
+                setTemplates([]);
+            }
         } catch (err) {
             setError(getErrorMessage(err));
             setTemplates([]);
@@ -53,9 +59,9 @@ export default function TemplatesPage() {
         }
     };
 
-    const filteredTemplates = templates.filter((t) =>
+    const filteredTemplates = Array.isArray(templates) ? templates.filter((t) =>
         t.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ) : [];
 
     const contentTypeIcons: Record<string, string> = {
         text: '📝',
@@ -72,11 +78,14 @@ export default function TemplatesPage() {
 
             {/* Page Header */}
             <div className="flex items-center justify-between mb-8">
-                <div>
-                    <h1 className="page-title">Templates</h1>
-                    <p className="text-[var(--text-muted)]">
-                        Gerencie seus templates de mensagens reutilizáveis
-                    </p>
+                <div className="flex items-center gap-3">
+                    <img src="/icons/sidebar/templates.png" alt="Templates" className="w-10 h-10 object-contain drop-shadow-md" />
+                    <div>
+                        <h1 className="page-title">Templates</h1>
+                        <p className="text-[var(--text-muted)]">
+                            Gerencie seus templates de mensagens reutilizáveis
+                        </p>
+                    </div>
                 </div>
                 <button
                     className="btn btn-primary"

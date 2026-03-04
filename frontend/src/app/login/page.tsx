@@ -55,16 +55,19 @@ export default function LoginPage() {
                 <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-500/20 rounded-full blur-3xl" />
             </div>
 
-            <div className="glass-card p-8 w-full max-w-md relative z-10">
+            <div className="glass-card p-10 w-full max-w-md relative z-10 my-8">
                 {/* Logo */}
-                <div className="text-center mb-8">
+                <div className="text-center mb-10">
                     <img
                         src="/logo.png"
                         alt="WhatSaas"
-                        className="h-16 mx-auto object-contain drop-shadow-lg mb-4"
+                        className="h-32 w-auto max-w-[90%] mx-auto object-contain drop-shadow-[0_20px_20px_rgba(255,255,255,0.15)] mb-6 hover:scale-110 transition-transform duration-500"
                     />
-                    <p className="text-[var(--text-muted)] mt-2">
-                        {isLogin ? 'Entre na sua conta' : 'Crie sua conta'}
+                    <h2 className="text-2xl font-bold text-white mb-2">
+                        {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}
+                    </h2>
+                    <p className="text-[var(--text-muted)]">
+                        {isLogin ? 'Faça login para acessar sua conta' : 'Preencha os dados para começar'}
                     </p>
                 </div>
 

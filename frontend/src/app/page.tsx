@@ -68,7 +68,10 @@ export default function DashboardPage() {
 
       {/* Page Title */}
       <div className="page-header">
-        <h1 className="page-title">Dashboard</h1>
+        <div className="flex items-center gap-3">
+          <img src="/icons/sidebar/dashboard.png" alt="Dashboard" className="w-10 h-10 object-contain drop-shadow-md" />
+          <h1 className="page-title mb-0">Dashboard</h1>
+        </div>
         <div className="flex items-center gap-2 text-sm text-[var(--text-muted)]">
           <span>Última atualização:</span>
           <span className="text-[var(--text-secondary)]">Agora</span>

@@ -269,6 +269,7 @@ export default function FlowsPage() {
             <div className="bg-white dark:bg-[var(--bg-secondary)] border-b border-gray-200 dark:border-[var(--border-color)] px-6 py-4">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
+                        <img src="/icons/sidebar/flows.png" alt="Fluxos" className="w-10 h-10 object-contain drop-shadow-md" />
                         <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Fluxos</h1>
                         <button
                             onClick={() => setShowChannelModal(true)}

@@ -50,11 +50,14 @@ export class MetaTemplatesService {
 
         // Validate access token by fetching phone info
         try {
+            console.log('[DEBUG] Validating Meta Token...', { phoneNumberId: dto.phoneNumberId });
             const phoneInfo = await this.metaGraphApiService.getPhoneNumberInfo(dto.phoneNumberId, dto.accessToken);
+            console.log('[DEBUG] Meta Token Validated:', phoneInfo);
 
             // Encrypt the access token before storing
             const encryptedToken = this.cryptoService.encrypt(dto.accessToken);
 
+            console.log('[DEBUG] Inserting into DB...');
             const result = await this.pool.query(
                 `INSERT INTO waba_accounts 
          (tenant_id, name, waba_id, phone_number_id, phone_number, access_token, app_id, display_name, quality_rating, status)
@@ -68,17 +71,29 @@ export class MetaTemplatesService {
                     dto.phoneNumber,
                     encryptedToken,
                     dto.appId || null,
-                    phoneInfo.verified_name || dto.name,
-                    phoneInfo.quality_rating || 'UNKNOWN',
+                    phoneInfo?.verified_name || dto.name,
+                    phoneInfo?.quality_rating || 'UNKNOWN',
                 ],
             );
 
+            console.log('[DEBUG] Inserted successfully');
             return this.mapToWabaAccount(result.rows[0]);
         } catch (error) {
+            const fs = require('fs');
+            const logMsg = `[${new Date().toISOString()}] Error creating WABA Account:\n${error.stack || error.message}\nDTO: ${JSON.stringify(dto, null, 2)}\n\n`;
+            fs.appendFileSync('waba_creation_error.log', logMsg);
+
+            this.logger.error(`Failed to create WABA account: ${error.message}`, error.stack);
+
             if (error.status === 401) {
                 throw new BadRequestException('Access token inválido ou expirado');
             }
-            throw error;
+
+            if (error.message && error.message.includes('does not exist')) {
+                throw new BadRequestException('ID do Telefone inválido. Verifique se você não inverteu "Phone Number ID" com o "Número de Telefone". O ID deve conter apenas números fornecidos pela Meta.');
+            }
+
+            throw new BadRequestException(`Erro na API Oficial (Meta): ${error.message || 'Erro desconhecido'}`);
         }
     }
 
@@ -131,7 +146,8 @@ export class MetaTemplatesService {
      */
     async updateProfile(tenantId: string, accountId: string, dto: UpdateWabaProfileDto): Promise<WabaAccount> {
         const account = await this.getWabaAccount(tenantId, accountId);
-        const accessToken = await this.getDecryptedAccessToken(accountId);
+        const currentDbToken = await this.getDecryptedAccessToken(accountId);
+        const accessTokenToUse = dto.accessToken || currentDbToken;
 
         // Update profile via Meta API
         const profileData: any = {};
@@ -145,12 +161,17 @@ export class MetaTemplatesService {
         if (Object.keys(profileData).length > 0) {
             await this.metaGraphApiService.updateBusinessProfile(
                 account.phoneNumberId,
-                accessToken,
+                accessTokenToUse,
                 profileData,
             );
         }
 
         // Update local database
+        let encryptedToken: string | null = null;
+        if (dto.accessToken) {
+            encryptedToken = this.cryptoService.encrypt(dto.accessToken);
+        }
+
         await this.pool.query(
             `UPDATE waba_accounts SET
         about = COALESCE($1, about),
@@ -158,9 +179,10 @@ export class MetaTemplatesService {
         category = COALESCE($3, category),
         email = COALESCE($4, email),
         app_id = COALESCE($5, app_id),
+        access_token = COALESCE($6, access_token),
         updated_at = NOW()
-       WHERE id = $6`,
-            [dto.about, dto.description, dto.category, dto.email, dto.appId, accountId],
+       WHERE id = $7`,
+            [dto.about || null, dto.description || null, dto.category || null, dto.email || null, dto.appId || null, encryptedToken, accountId],
         );
 
         return this.getWabaAccount(tenantId, accountId);

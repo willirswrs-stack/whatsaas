@@ -188,11 +188,14 @@ export default function TemplatesMetaPage() {
 
             {/* Page Header */}
             <div className="flex items-center justify-between mb-8">
-                <div>
-                    <h1 className="page-title">Templates Meta</h1>
-                    <p className="text-[var(--text-muted)]">
-                        Gerencie seus templates da API Oficial do WhatsApp
-                    </p>
+                <div className="flex items-center gap-3">
+                    <img src="/icons/sidebar/templates_meta.png" alt="Templates Meta" className="w-10 h-10 object-contain drop-shadow-md" />
+                    <div>
+                        <h1 className="page-title mb-0">Templates Meta</h1>
+                        <p className="text-[var(--text-muted)]">
+                            Gerencie seus templates da API Oficial do WhatsApp
+                        </p>
+                    </div>
                 </div>
                 <button
                     className="btn btn-primary"
