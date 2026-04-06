@@ -31,7 +31,7 @@ export interface IWhatsAppProvider {
     /**
      * Create a new WhatsApp instance/session
      */
-    createInstance(instanceName: string): Promise<InstanceResult>;
+    createInstance(instanceName: string, config?: Record<string, any>): Promise<InstanceResult>;
 
     /**
      * Get QR Code for connecting WhatsApp

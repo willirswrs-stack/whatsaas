@@ -276,7 +276,12 @@ export default function ChipsPage() {
             <Header />
 
             <div className="page-header">
-                <h1 className="page-title">Gestão de Chips</h1>
+                <div className="flex items-center gap-3">
+                    <img src="/icons/sidebar/chips.png" alt="Gestão de Chips" className="w-10 h-10 object-contain drop-shadow-md" />
+                    <div>
+                        <h1 className="page-title">Gestão de Chips</h1>
+                    </div>
+                </div>
                 <div className="flex gap-2">
                     <a
                         href="http://localhost:8081/manager"
@@ -382,10 +387,16 @@ export default function ChipsPage() {
                                 dailySent={instance.dailySent || 0}
                                 instanceId={instance.id}
                                 warmupDay={instance.warmupDay}
+                                warmupEnabled={instance.warmupEnabled ?? true}
                                 proxy={instance.proxy?.host || 'Sem proxy'}
                                 onQrCode={fetchQrCode}
                                 onConfig={openConfig}
                                 onDelete={deleteInstance}
+                                onWarmupToggle={(id, enabled) => {
+                                    setInstances(prev => prev.map(i =>
+                                        i.id === id ? { ...i, warmupEnabled: enabled } : i
+                                    ));
+                                }}
                             />
                         ))}
 

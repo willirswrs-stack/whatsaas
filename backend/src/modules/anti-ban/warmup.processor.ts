@@ -11,6 +11,7 @@ import { Job } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { WarmupService } from './warmup.service';
 import { WARMUP_QUEUE } from '../../config/bull.config';
+import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
 
 @Processor(WARMUP_QUEUE)
 @Injectable()
@@ -19,6 +20,7 @@ export class WarmupProcessor extends WorkerHost {
 
     constructor(
         private readonly warmupService: WarmupService,
+        private readonly whatsappFactory: WhatsAppProviderFactory,
     ) {
         super();
     }
@@ -30,7 +32,8 @@ export class WarmupProcessor extends WorkerHost {
             case 'daily-warmup-routine':
                 return this.handleDailyWarmup(job);
 
-            // Future: case 'generate-warmup-conversation':
+            case 'execute-warmup-message':
+                return this.handleWarmupMessage(job);
 
             default:
                 this.logger.warn(`Unknown job name: ${job.name}`);
@@ -45,6 +48,25 @@ export class WarmupProcessor extends WorkerHost {
             return result;
         } catch (error) {
             this.logger.error(`❌ Warmup Routine Failed: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    private async handleWarmupMessage(job: Job): Promise<any> {
+        const { instanceName, toPhone, content, provider } = job.data;
+        // Fallback: instâncias antigas podem não ter 'provider' salvo no banco
+        const resolvedProvider = provider || 'evolution';
+        this.logger.log(`💌 Sending Warmup Message: ${instanceName} -> ${toPhone} (provider: ${resolvedProvider})`);
+
+        try {
+            const client = this.whatsappFactory.getProvider(resolvedProvider);
+            const result = await client.sendText(instanceName, toPhone, content);
+            this.logger.log(`✅ Warmup Message Sent | instanceName=${instanceName} | to=${toPhone} | messageId=${result?.messageId}`);
+            return result;
+        } catch (error) {
+            this.logger.error(`❌ Failed to send warmup message | instance=${instanceName} | to=${toPhone} | error=${error.message}`);
+            // ⚠️ IMPORTANTE: Re-lançar o erro para que o BullMQ marque o job como FAILED
+            // e aplique a política de retry. Sem isso, jobs com falha são marcados como 'completed'.
             throw error;
         }
     }

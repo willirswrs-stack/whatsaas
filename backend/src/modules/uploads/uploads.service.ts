@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import sharp from 'sharp';
 
 @Injectable()
 export class UploadsService {
@@ -21,10 +22,10 @@ export class UploadsService {
         if (enforcedBaseUrl) {
             this.baseUrl = enforcedBaseUrl.endsWith('/') ? enforcedBaseUrl.slice(0, -1) : enforcedBaseUrl;
         } else {
-            // Development fallback
+            // Development: Use host.docker.internal so Docker containers (Evolution API, etc.)
+            // can always reach the backend regardless of IP changes.
             const port = configService.get('PORT', 3333);
-            const publicHost = configService.get('PUBLIC_HOST', 'host.docker.internal');
-            this.baseUrl = `http://${publicHost}:${port}/uploads`;
+            this.baseUrl = `http://host.docker.internal:${port}/uploads`;
         }
 
         this.logger.log(`Uploads base URL: ${this.baseUrl}`);
@@ -50,16 +51,31 @@ export class UploadsService {
         const filename = `${tenantId}_${uuidv4()}${ext}`;
         const filePath = path.join(this.uploadDir, filename);
 
-        // Write file to disk
-        fs.writeFileSync(filePath, file.buffer);
+        let finalSize = file.size;
 
-        this.logger.log(`Saved file: ${filename} (${file.mimetype}, ${file.size} bytes)`);
+        if (file.mimetype.startsWith('image/')) {
+            try {
+                // Remove meta to avoid blocks (by default sharp removes metadata)
+                const processedBuffer = await sharp(file.buffer, { animated: true }).toBuffer();
+                fs.writeFileSync(filePath, processedBuffer);
+                finalSize = processedBuffer.length;
+                this.logger.log(`Image processed & metadata stripped with sharp: ${filename}`);
+            } catch (err: any) {
+                this.logger.warn(`Failed to process image with sharp, saving original: ${err.message}`);
+                fs.writeFileSync(filePath, file.buffer);
+            }
+        } else {
+            // Write file to disk normally
+            fs.writeFileSync(filePath, file.buffer);
+        }
+
+        this.logger.log(`Saved file: ${filename} (${file.mimetype}, ${finalSize} bytes)`);
 
         return {
             filename,
             url: `${this.baseUrl}/${filename}`,
             mimetype: file.mimetype,
-            size: file.size,
+            size: finalSize,
         };
     }
 

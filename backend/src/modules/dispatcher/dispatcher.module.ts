@@ -1,11 +1,12 @@
-import { Module } from '@nestjs/common';
+import { Module, OnModuleInit } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 
 import { DispatcherProcessor } from './dispatcher.processor';
 import { DispatcherService } from './dispatcher.service';
-import { Instance, Proxy, WarmupSchedule } from '../instances/entities/instance.entity';
-import { Campaign, CampaignContact, MessageVariation, Contact } from '../campaigns/entities/campaign.entity';
+import { Instance, Proxy } from '../instances/entities/instance.entity';
+import { Campaign, CampaignContact, MessageVariation } from '../campaigns/entities/campaign.entity';
+import { Contact } from '../contacts/entities/contact.entity';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { DISPATCH_QUEUE } from '../../config/bull.config';
 
@@ -31,6 +32,6 @@ import { FlowsModule } from '../flows/flows.module';
         FlowsModule,
     ],
     providers: [DispatcherProcessor, DispatcherService],
-    exports: [DispatcherService],
+    exports: [DispatcherService, DispatcherProcessor],
 })
 export class DispatcherModule { }

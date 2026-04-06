@@ -71,6 +71,10 @@ export class UpdateWabaProfileDto {
     @IsOptional()
     appId?: string;
 
+    @IsString()
+    @IsOptional()
+    accessToken?: string;
+
     @IsOptional()
     websites?: string[];
 

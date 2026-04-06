@@ -2,6 +2,7 @@ import {
     Controller,
     Get,
     Post,
+    Patch,
     Delete,
     Param,
     Body,
@@ -16,7 +17,9 @@ import { ApiTags, ApiOperation, ApiBearerAuth, ApiConsumes } from '@nestjs/swagg
 import { FileInterceptor } from '@nestjs/platform-express';
 
 import { CampaignsService } from './campaigns.service';
+import { DispatcherProcessor } from '../dispatcher/dispatcher.processor';
 import { CreateCampaignDto } from './dto/create-campaign.dto';
+import { UpdateCampaignDto } from './dto/update-campaign.dto';
 import { PaginationQueryDto } from '../../common/dto/pagination.dto';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { CurrentTenant } from '../auth/decorators/current-tenant.decorator';
@@ -35,7 +38,10 @@ interface UploadedFileType {
 @Controller('campaigns')
 @UseGuards(AuthGuard('jwt'), TenantGuard)
 export class CampaignsController {
-    constructor(private readonly campaignsService: CampaignsService) { }
+    constructor(
+        private readonly campaignsService: CampaignsService,
+        private readonly dispatcherProcessor: DispatcherProcessor,
+    ) { }
 
     @Get()
     @ApiOperation({ summary: 'List all campaigns' })
@@ -44,6 +50,16 @@ export class CampaignsController {
         @CurrentTenant() tenantId: string,
     ) {
         return this.campaignsService.findAll(tenantId, query);
+    }
+
+    @Get('contact-stats')
+    async getGlobalContactStats(@CurrentTenant() tenantId: string) {
+        const stats = await this.campaignsService.getGlobalContactStats(tenantId);
+        const list = await this.campaignsService.findAllContacts(tenantId, { limit: 5 } as any);
+        return {
+            stats,
+            sampleList: list
+        };
     }
 
     // Templates - DEVE VIR ANTES de :id para evitar conflito
@@ -143,6 +159,24 @@ export class CampaignsController {
         };
     }
 
+    @Post('warmup-override')
+    @ApiOperation({ summary: 'Respond to warmup limit alert (override or pause)' })
+    async warmupOverride(
+        @Body() body: { instanceId: string; action: 'override' | 'pause' },
+        @CurrentTenant() tenantId: string,
+    ) {
+        if (!body.instanceId || !['override', 'pause'].includes(body.action)) {
+            throw new BadRequestException('instanceId and action (override|pause) are required');
+        }
+        this.dispatcherProcessor.handleWarmupLimitResponse(body.instanceId, body.action);
+        return {
+            success: true,
+            message: body.action === 'override'
+                ? `Warmup limit override granted for instance ${body.instanceId}. Sending will continue.`
+                : `Instance ${body.instanceId} will remain paused to protect chip health.`,
+        };
+    }
+
     // Rotas com :id - DEVEM VIR POR ÚLTIMO
     @Get(':id')
     @ApiOperation({ summary: 'Get campaign by ID' })
@@ -160,6 +194,16 @@ export class CampaignsController {
         @CurrentTenant() tenantId: string,
     ) {
         return this.campaignsService.create(tenantId, createCampaignDto);
+    }
+
+    @Patch(':id')
+    @ApiOperation({ summary: 'Update an existing campaign' })
+    async update(
+        @Param('id') id: string,
+        @Body() updateCampaignDto: UpdateCampaignDto,
+        @CurrentTenant() tenantId: string,
+    ) {
+        return this.campaignsService.update(id, tenantId, updateCampaignDto);
     }
 
     @Post(':id/generate-variations')
@@ -208,6 +252,26 @@ export class CampaignsController {
         return this.campaignsService.cancel(id, tenantId);
     }
 
+    @Post(':id/retry')
+    @ApiOperation({ summary: 'Retry failed contacts' })
+    async retryFailed(
+        @Param('id') id: string,
+        @CurrentTenant() tenantId: string,
+    ) {
+        return this.campaignsService.retryFailed(id, tenantId);
+    }
+
+
+    @Post(':id/schedule')
+    @ApiOperation({ summary: 'Schedule campaign start' })
+    async schedule(
+        @Param('id') id: string,
+        @Body() body: { scheduledAt: string },
+        @CurrentTenant() tenantId: string,
+    ) {
+        return this.campaignsService.schedule(id, tenantId, body.scheduledAt);
+    }
+
     @Post(':id/duplicate')
     @ApiOperation({ summary: 'Duplicate campaign' })
     async duplicate(
@@ -244,4 +308,15 @@ export class CampaignsController {
     ) {
         return this.campaignsService.getStats(id, tenantId);
     }
+
+    @Get(':id/estimate')
+    @ApiOperation({ summary: 'Get campaign completion estimate' })
+    async getEstimate(
+        @Param('id') id: string,
+        @CurrentTenant() tenantId: string,
+    ) {
+        return this.campaignsService.getEstimate(id, tenantId);
+    }
 }
+
+

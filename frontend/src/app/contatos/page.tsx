@@ -319,11 +319,14 @@ export default function ContactsPage() {
         <div className="animate-fadeIn">
             {/* Header */}
             <div className="page-header">
-                <div>
-                    <h1 className="page-title">Contatos</h1>
-                    <p className="text-[var(--text-secondary)] mt-1">
-                        {total.toLocaleString()} contatos cadastrados
-                    </p>
+                <div className="flex items-center gap-3">
+                    <img src="/icons/sidebar/contacts.png" alt="Contatos" className="w-10 h-10 object-contain drop-shadow-md" />
+                    <div>
+                        <h1 className="page-title">Contatos</h1>
+                        <p className="text-[var(--text-secondary)] mt-1">
+                            {total.toLocaleString()} contatos cadastrados
+                        </p>
+                    </div>
                 </div>
                 <div className="flex gap-3">
                     <button className="btn btn-secondary" onClick={() => setShowImportModal(true)}>

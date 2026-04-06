@@ -14,7 +14,7 @@ export class PaginationQueryDto {
     @IsOptional()
     @IsInt()
     @Min(1)
-    @Max(100) // Limite de 100 itens por página por segurança
+    @Max(5000) // Aumentado para suportar listas grandes (ex: contatos)
     @Type(() => Number)
     limit?: number = 10;
 }

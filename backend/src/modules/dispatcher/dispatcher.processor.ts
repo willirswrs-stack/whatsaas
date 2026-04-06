@@ -46,6 +46,13 @@ export class DispatcherProcessor extends WorkerHost {
     // Round-Robin state per tenant
     private instanceIndex = new Map<string, number>();
 
+    // Track warmup alerts already sent (instanceId -> timestamp) to avoid spamming the user
+    private warmupAlertSent = new Map<string, number>();
+
+    // Track instances that the user explicitly allowed to exceed warmup limits
+    // Key: instanceId, Value: timestamp when override was granted
+    private warmupOverrides = new Map<string, number>();
+
     constructor(
         @InjectRepository(Instance)
         private instanceRepo: Repository<Instance>,
@@ -66,6 +73,11 @@ export class DispatcherProcessor extends WorkerHost {
         private eventsGateway: EventsGateway,
     ) {
         super();
+        this.logger.log('✅ DispatcherProcessor INSTANTIATED');
+    }
+
+    onModuleInit() {
+        this.logger.log(`🔧 DispatcherProcessor initialized for queue: ${DISPATCH_QUEUE}`);
     }
 
     async process(job: Job<DispatchJobData>): Promise<DispatchResult> {
@@ -98,7 +110,7 @@ export class DispatcherProcessor extends WorkerHost {
             /*
             const activeHoursStart = campaign?.settings?.activeHoursStart || '08:00';
             const activeHoursEnd = campaign?.settings?.activeHoursEnd || '20:00';
-
+            
             if (!this.humanBehavior.isWithinActiveHours(activeHoursStart, activeHoursEnd)) {
                 this.logger.warn(`Desativado temporariamente: Fora da janela horária.`);
                 // const nextActive = this.humanBehavior.getNextActiveTime(activeHoursStart, activeHoursEnd);
@@ -109,7 +121,7 @@ export class DispatcherProcessor extends WorkerHost {
             */
 
             // 3. Selecionar Instância
-            const instance = await this.selectInstance(tenantId, campaign?.instanceId);
+            const instance = await this.selectInstance(tenantId, campaign?.instanceId, campaign?.instanceIds, campaignId);
             if (!instance) {
                 this.logger.warn(`No available instance for tenant ${tenantId}`);
                 throw new Error('NO_AVAILABLE_INSTANCE');
@@ -117,25 +129,54 @@ export class DispatcherProcessor extends WorkerHost {
 
             // 4. Sortear Variação de Texto first (needed for routing input)
             if (campaign.flowId) {
+                // 4.1 Apply Delay for Flow Campaigns
+                const warmupDay = instance.warmupDay || 14;
+                const warmupDelays = this.delayGenerator.calculateWarmupDelay(
+                    warmupDay,
+                    campaign?.minDelayMs ? campaign.minDelayMs / 1000 : 30, // Default 30s
+                    campaign?.maxDelayMs ? campaign.maxDelayMs / 1000 : 90, // Default 90s
+                );
+
+                const delaySeconds = this.delayGenerator.generateGaussianDelay(
+                    warmupDelays.minSeconds,
+                    warmupDelays.maxSeconds
+                );
+                const delayMs = Math.round(delaySeconds * 1000);
+
+                this.logger.log(`⏳ Flow Campaign: Waiting ${delayMs}ms (${(delayMs / 1000).toFixed(1)}s) before starting flow for contact ${contact.id} (Warmup Day: ${warmupDay}, Range: ${warmupDelays.minSeconds}s-${warmupDelays.maxSeconds}s)`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+
                 this.logger.log(`🌀 Executing Flow ${campaign.flowId} for contact ${contact.id}`);
 
                 try {
                     await this.flowsService.startExecution(tenantId, {
                         flowId: campaign.flowId,
                         contactId: contact.id,
-                        instanceId: instance.id
+                        instanceId: instance.id,
+                        initialVariables: {
+                            campaignId: campaign.id,
+                            campaignContactId: campaignContactId
+                        }
                     });
 
-                    // Atualizar status para sent (delegado para o fluxo)
+                    // Atualizar status para sent (delegado para o fluxo) + salvar timing metadata
                     await this.campaignContactRepo.update(campaignContactId, {
                         status: 'sent',
                         instanceId: instance.id,
                         sentAt: new Date(),
+                        timingMetadata: {
+                            delayBeforeSendMs: delayMs,
+                            warmupDay,
+                            warmupDelayRange: `${warmupDelays.minSeconds}s-${warmupDelays.maxSeconds}s`,
+                            stackUsed: instance.provider,
+                        },
                     } as any);
 
                     // Incrementar contadores
                     await this.instanceRepo.increment({ id: instance.id }, 'dailySent', 1);
                     await this.campaignRepo.increment({ id: campaignId }, 'sentCount', 1);
+
+                    await this.checkCampaignCompletion(campaignId);
 
                     return { success: true };
                 } catch (flowError) {
@@ -257,7 +298,8 @@ export class DispatcherProcessor extends WorkerHost {
                     finalContent,
                 );
                 messageId = result?.messageId;
-                this.logger.log(`✅ Mensagem enviada via ${instance.provider} para ${contact.phone}`);
+                console.log(`📡 [DISPATCHER-DEBUG] Provider response for ${contact.phone}:`, JSON.stringify(result));
+                this.logger.log(`✅ Mensagem enviada via ${instance.provider} para ${contact.phone} (ID: ${messageId})`);
 
                 // 📊 Record analytics - SUCCESS
                 this.analytics.recordSent(
@@ -288,6 +330,7 @@ export class DispatcherProcessor extends WorkerHost {
                 status: 'sent',
                 instanceId: instance.id,
                 variationId: variation.id,
+                messageId, // Savor o messageId para rastreamento de status (entregue/lido)
                 sentAt: new Date(),
                 contentHash: brokenMessage.contentHash,
                 timingMetadata: {
@@ -360,7 +403,9 @@ export class DispatcherProcessor extends WorkerHost {
     }
 
     /**
-     * Verifica se a campanha terminou e atualiza status
+     * Verifica se a campanha terminou e atualiza status.
+     * Conta diretamente na tabela campaign_contacts para evitar race conditions
+     * com os increments concorrentes em sentCount/failedCount.
      */
     private async checkCampaignCompletion(campaignId: string) {
         try {
@@ -369,12 +414,20 @@ export class DispatcherProcessor extends WorkerHost {
                 select: ['id', 'tenantId', 'totalContacts', 'sentCount', 'failedCount', 'status']
             });
 
-            if (!campaign) return;
+            if (!campaign || campaign.status !== 'running') return;
 
-            const processed = (campaign.sentCount || 0) + (campaign.failedCount || 0);
+            // Contar diretamente dos campaign_contacts (fonte da verdade)
+            const processedCount = await this.campaignContactRepo.count({
+                where: [
+                    { campaignId, status: 'sent' },
+                    { campaignId, status: 'delivered' },
+                    { campaignId, status: 'read' },
+                    { campaignId, status: 'failed' },
+                ]
+            });
 
-            if (campaign.status === 'running' && processed >= campaign.totalContacts) {
-                this.logger.log(`🏁 Campanha ${campaignId} concluída! (${processed}/${campaign.totalContacts})`);
+            if (processedCount >= campaign.totalContacts) {
+                this.logger.log(`🏁 Campanha ${campaignId} concluída! (${processedCount}/${campaign.totalContacts})`);
 
                 await this.campaignRepo.update(campaignId, {
                     status: 'completed',
@@ -396,49 +449,282 @@ export class DispatcherProcessor extends WorkerHost {
     }
 
     /**
-     * Seleção de Instância - USA APENAS a instância da campanha (SEM FALLBACK)
-     * Se a instância não estiver disponível, retorna erro claro
+     * Seleção de Instância - Round-Robin ou Single
      */
-    private async selectInstance(tenantId: string, campaignInstanceId?: string): Promise<Instance | null> {
-        // OBRIGATÓRIO: Campanha DEVE ter uma instância configurada
-        if (!campaignInstanceId) {
+    /**
+     * Returns the effective daily limit for an instance, considering warmup.
+     * If warmup is enabled and user hasn't overridden, uses the warmup limit.
+     * Otherwise uses the configured dailyLimit.
+     */
+    private getEffectiveLimit(instance: Instance): { limit: number; isWarmupLimit: boolean } {
+        if (instance.warmupEnabled && instance.warmupDay !== undefined && instance.warmupDay > 0) {
+            const hasOverride = this.warmupOverrides.has(instance.id);
+            if (!hasOverride) {
+                const warmupLimit = this.getWarmupDailyLimit(instance.warmupDay);
+                return { limit: warmupLimit, isWarmupLimit: true };
+            }
+        }
+        return { limit: instance.dailyLimit || 200, isWarmupLimit: false };
+    }
+
+    /**
+     * Emits a warmup alert to the user via WebSocket.
+     * Throttled: only sends once per instance per 10 minutes.
+     */
+    private emitWarmupAlert(
+        tenantId: string,
+        instance: Instance,
+        campaignId: string,
+        alertType: 'warning' | 'limit_reached' | 'all_chips_exhausted',
+        details: Record<string, any>,
+    ) {
+        const throttleKey = `${instance.id}-${alertType}`;
+        const lastSent = this.warmupAlertSent.get(throttleKey);
+        const now = Date.now();
+
+        // Throttle: don't send same alert for same instance within 10 minutes
+        if (lastSent && (now - lastSent) < 10 * 60 * 1000) {
+            return;
+        }
+
+        this.warmupAlertSent.set(throttleKey, now);
+
+        if (this.eventsGateway) {
+            this.eventsGateway.emitToTenant(tenantId, 'warmup.alert', {
+                type: alertType,
+                instanceId: instance.id,
+                instanceName: instance.instanceName,
+                instancePhone: instance.phone,
+                campaignId,
+                warmupDay: instance.warmupDay,
+                dailySent: instance.dailySent,
+                ...details,
+                timestamp: new Date().toISOString(),
+            });
+        }
+
+        this.logger.warn(
+            `🚨 [WARMUP ALERT] ${alertType.toUpperCase()} | Instance: ${instance.instanceName} ` +
+            `| Sent: ${instance.dailySent} | ${JSON.stringify(details)}`
+        );
+    }
+
+    /**
+     * Called by the campaigns controller when user responds to a warmup alert.
+     * action: 'override' = allow this instance to exceed warmup limit for today
+     * action: 'pause' = keep the instance paused (default behavior)
+     */
+    public handleWarmupLimitResponse(instanceId: string, action: 'override' | 'pause') {
+        if (action === 'override') {
+            this.warmupOverrides.set(instanceId, Date.now());
+            this.logger.warn(`⚠️ User OVERRODE warmup limit for instance ${instanceId}. Sending will continue beyond warmup limit.`);
+        } else {
+            this.warmupOverrides.delete(instanceId);
+            this.logger.log(`✅ User confirmed warmup pause for instance ${instanceId}.`);
+        }
+    }
+
+    /**
+     * Seleção de Instância - Round-Robin com proteção de warmup
+     * Agora RESPEITA os limites de warmup e emite alertas ao usuário
+     */
+    private async selectInstance(tenantId: string, campaignInstanceId?: string, campaignInstanceIds?: string[], campaignId?: string): Promise<Instance | null> {
+        const WARNING_THRESHOLD = 0.80; // Alert at 80% of limit
+
+        // Se tiver múltiplos IDs, usar Round-Robin com fallback inteligente
+        if (campaignInstanceIds && campaignInstanceIds.length > 0) {
+            const currentIndex = this.instanceIndex.get(tenantId) || 0;
+            const totalInstances = campaignInstanceIds.length;
+            let skippedInstances: Array<{ name: string; reason: string; sent: number; limit: number }> = [];
+
+            // Tentar TODAS as instâncias da lista antes de desistir
+            for (let attempt = 0; attempt < totalInstances; attempt++) {
+                const idx = (currentIndex + attempt) % totalInstances;
+                const candidateId = campaignInstanceIds[idx];
+
+                const instance = await this.instanceRepo.findOne({
+                    where: { id: candidateId, tenantId },
+                    relations: ['proxy'],
+                });
+
+                if (!instance) {
+                    this.logger.warn(`🔄 Round-Robin: Instance ${candidateId} not found, skipping...`);
+                    continue;
+                }
+
+                if (instance.status !== 'connected') {
+                    this.logger.warn(`🔄 Round-Robin: Instance ${instance.instanceName} not connected (status: ${instance.status}), skipping...`);
+                    skippedInstances.push({ name: instance.instanceName, reason: 'disconnected', sent: instance.dailySent || 0, limit: 0 });
+                    continue;
+                }
+
+                // === WARMUP LIMIT ENFORCEMENT ===
+                const { limit: effectiveLimit, isWarmupLimit } = this.getEffectiveLimit(instance);
+                const currentSent = instance.dailySent || 0;
+                const usageRatio = currentSent / effectiveLimit;
+
+                // CHECK: Instance at or over limit -> SKIP and try next
+                if (currentSent >= effectiveLimit) {
+                    this.logger.warn(
+                        `🛑 Instance ${instance.instanceName} OVER ${isWarmupLimit ? 'warmup' : 'daily'} limit ` +
+                        `(${currentSent}/${effectiveLimit}). Skipping to next chip...`
+                    );
+
+                    if (campaignId) {
+                        this.emitWarmupAlert(tenantId, instance, campaignId, 'limit_reached', {
+                            effectiveLimit,
+                            isWarmupLimit,
+                            message: `Chip ${instance.instanceName} (${instance.phone}) atingiu o limite ` +
+                                `${isWarmupLimit ? 'de warmup' : 'diário'}: ${currentSent}/${effectiveLimit} mensagens. ` +
+                                `Redistribuindo para outros chips disponíveis.`,
+                            remainingChips: totalInstances - attempt - 1,
+                        });
+                    }
+
+                    skippedInstances.push({
+                        name: instance.instanceName,
+                        reason: isWarmupLimit ? 'warmup_limit' : 'daily_limit',
+                        sent: currentSent,
+                        limit: effectiveLimit,
+                    });
+                    continue;
+                }
+
+                // WARNING: Instance approaching limit -> Alert but still use
+                if (usageRatio >= WARNING_THRESHOLD && isWarmupLimit && campaignId) {
+                    const remaining = effectiveLimit - currentSent;
+                    this.emitWarmupAlert(tenantId, instance, campaignId, 'warning', {
+                        effectiveLimit,
+                        isWarmupLimit,
+                        usagePercent: Math.round(usageRatio * 100),
+                        remainingMessages: remaining,
+                        message: `⚠️ Chip ${instance.instanceName} (${instance.phone}) está em ${Math.round(usageRatio * 100)}% ` +
+                            `do limite de warmup (dia ${instance.warmupDay}): ${currentSent}/${effectiveLimit}. ` +
+                            `Restam apenas ${remaining} mensagens antes de atingir o limite.`,
+                    });
+                }
+
+                // Atualizar índice para a PRÓXIMA instância na rotação
+                this.instanceIndex.set(tenantId, idx + 1);
+
+                this.logger.log(
+                    `✅ Using campaign instance: ${instance.instanceName} (${instance.provider}) - ` +
+                    `${currentSent}/${effectiveLimit} messages today ` +
+                    `(${isWarmupLimit ? `warmup day ${instance.warmupDay}` : 'daily'}, ` +
+                    `Round-Robin index: ${idx})`
+                );
+
+                return instance;
+            }
+
+            // ALL instances exhausted — alert user and return null
+            this.logger.error(`❌ No available instance found among ${totalInstances} configured instances for tenant ${tenantId}`);
+
+            if (campaignId && skippedInstances.length > 0) {
+                // Use a dummy instance for the alert
+                const dummyInstance = { id: 'all', instanceName: 'Todos os chips', phone: '', warmupDay: 0, dailySent: 0 } as Instance;
+                this.emitWarmupAlert(tenantId, dummyInstance, campaignId, 'all_chips_exhausted', {
+                    message: `🛑 TODOS os chips atingiram seus limites de warmup! ` +
+                        `A campanha será pausada automaticamente para proteger a saúde dos chips. ` +
+                        `Você pode adicionar mais chips ou permitir que algum chip continue enviando acima do limite.`,
+                    skippedInstances,
+                    action: 'campaign_auto_paused',
+                });
+
+                // Auto-pause the campaign to protect chip health
+                try {
+                    await this.campaignRepo.update(campaignId, { status: 'paused' });
+                    this.eventsGateway?.emitToTenant(tenantId, 'campaign.updated', {
+                        id: campaignId,
+                        status: 'paused',
+                        reason: 'warmup_limit_all_chips',
+                    });
+                    this.logger.warn(`⏸️ Campaign ${campaignId} AUTO-PAUSED: all chips exhausted warmup limits`);
+                } catch (err) {
+                    this.logger.error(`Failed to auto-pause campaign: ${err.message}`);
+                }
+            }
+
+            return null;
+        }
+
+        // Fallback para instanceId único (deprecated)
+        const targetInstanceId = campaignInstanceId;
+        if (!targetInstanceId) {
             this.logger.error('Campaign has no instance configured!');
             return null;
         }
 
         const instance = await this.instanceRepo.findOne({
-            where: {
-                id: campaignInstanceId,
-                tenantId,
-            },
+            where: { id: targetInstanceId, tenantId },
             relations: ['proxy'],
         });
 
         if (!instance) {
-            this.logger.error(`Instance ${campaignInstanceId} not found for tenant ${tenantId}`);
+            this.logger.error(`Instance ${targetInstanceId} not found for tenant ${tenantId}`);
             return null;
         }
 
         if (instance.status !== 'connected') {
-            this.logger.error(`Instance ${instance.instanceName} is not connected (status: ${instance.status})`);
+            this.logger.warn(`Instance ${instance.instanceName} is not connected (status: ${instance.status})`);
             return null;
         }
 
-        // Verificar se é Evolution API (remover WWebJS)
+        // === WARMUP LIMIT ENFORCEMENT (single instance) ===
+        const { limit: effectiveLimit, isWarmupLimit } = this.getEffectiveLimit(instance);
+        const currentSent = instance.dailySent || 0;
 
-
-        // Verificar limite diário (mas permitir continuar com aviso, não bloquear)
-        if (instance.dailySent >= instance.dailyLimit) {
+        if (currentSent >= effectiveLimit) {
             this.logger.warn(
-                `Instance ${instance.instanceName} reached daily limit (${instance.dailySent}/${instance.dailyLimit}). ` +
-                `Consider increasing the limit or waiting until tomorrow.`
+                `🛑 Single instance ${instance.instanceName} OVER ${isWarmupLimit ? 'warmup' : 'daily'} limit ` +
+                `(${currentSent}/${effectiveLimit}).`
             );
-            // NÃO retornar null - apenas avisar mas continuar
+
+            if (campaignId) {
+                this.emitWarmupAlert(tenantId, instance, campaignId, 'limit_reached', {
+                    effectiveLimit,
+                    isWarmupLimit,
+                    message: `🛑 Chip ${instance.instanceName} (${instance.phone}) atingiu o limite ` +
+                        `${isWarmupLimit ? 'de warmup' : 'diário'}: ${currentSent}/${effectiveLimit}. ` +
+                        `Não há outros chips disponíveis. A campanha será pausada.`,
+                    remainingChips: 0,
+                });
+
+                // Auto-pause the campaign
+                try {
+                    await this.campaignRepo.update(campaignId, { status: 'paused' });
+                    this.eventsGateway?.emitToTenant(tenantId, 'campaign.updated', {
+                        id: campaignId,
+                        status: 'paused',
+                        reason: 'warmup_limit_single_chip',
+                    });
+                    this.logger.warn(`⏸️ Campaign ${campaignId} AUTO-PAUSED: single chip exhausted`);
+                } catch (err) {
+                    this.logger.error(`Failed to auto-pause campaign: ${err.message}`);
+                }
+            }
+
+            return null;
+        }
+
+        // Warning at 80%
+        const usageRatio = currentSent / effectiveLimit;
+        if (usageRatio >= WARNING_THRESHOLD && isWarmupLimit && campaignId) {
+            const remaining = effectiveLimit - currentSent;
+            this.emitWarmupAlert(tenantId, instance, campaignId, 'warning', {
+                effectiveLimit,
+                isWarmupLimit,
+                usagePercent: Math.round(usageRatio * 100),
+                remainingMessages: remaining,
+                message: `⚠️ Chip ${instance.instanceName} (${instance.phone}) está em ${Math.round(usageRatio * 100)}% ` +
+                    `do limite de warmup (dia ${instance.warmupDay}): ${currentSent}/${effectiveLimit}. ` +
+                    `Restam apenas ${remaining} mensagens. Não há outros chips configurados.`,
+            });
         }
 
         this.logger.log(
             `✅ Using campaign instance: ${instance.instanceName} (${instance.provider}) - ` +
-            `${instance.dailySent}/${instance.dailyLimit} messages today`
+            `${currentSent}/${effectiveLimit} messages today (${isWarmupLimit ? `warmup day ${instance.warmupDay}` : 'daily'})`
         );
 
         return instance;

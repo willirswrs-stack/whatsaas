@@ -1,13 +1,18 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { CampaignContact } from '../campaigns/entities/campaign.entity';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { Flow, FlowExecution, FlowTrigger } from './entities';
 import { CreateFlowDto, UpdateFlowDto, CreateTriggerDto, ExecuteFlowDto } from './dto';
 import { InstancesService } from '../instances/instances.service';
 import { ContactsService } from '../contacts/contacts.service';
 import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
 import { AiService } from '../ai/ai.service';
+import { FLOW_QUEUE } from '../../config/bull.config';
+import { MetaGraphApiService } from '../meta-templates/meta-graph-api.service';
 
 @Injectable()
 export class FlowsService implements OnModuleInit {
@@ -18,12 +23,16 @@ export class FlowsService implements OnModuleInit {
         private executionRepository: Repository<FlowExecution>,
         @InjectRepository(FlowTrigger)
         private triggerRepository: Repository<FlowTrigger>,
+        @InjectRepository(CampaignContact)
+        private campaignContactRepository: Repository<CampaignContact>,
+        @InjectQueue(FLOW_QUEUE) private flowQueue: Queue,
         private instancesService: InstancesService,
         private contactsService: ContactsService,
         private whatsappFactory: WhatsAppProviderFactory,
         @Inject(AiService)
         private aiService: AiService,
         private configService: ConfigService,
+        private metaGraphApiService: MetaGraphApiService,
     ) { }
 
     // ============ FLOWS ============
@@ -305,25 +314,111 @@ export class FlowsService implements OnModuleInit {
         return saved;
     }
 
+    /**
+     * Find the next edge from a node, handling sourceHandle correctly.
+     * For sequential flow (non-branching), picks the edge without sourceHandle
+     * or with sourceHandle null. For branching nodes, picks based on handle.
+     */
+    private findNextEdge(edges: any[], currentNodeId: string, preferredHandle?: string | null): any {
+        // Get all edges from this node
+        const outEdges = edges.filter(e => e.source === currentNodeId);
+
+        if (outEdges.length === 0) return null;
+        if (outEdges.length === 1) return outEdges[0];
+
+        // If a preferred handle is specified, look for it
+        if (preferredHandle) {
+            const handleEdge = outEdges.find(e => e.sourceHandle === preferredHandle);
+            if (handleEdge) return handleEdge;
+        }
+
+        // Prefer edges WITHOUT sourceHandle (the "default" / sequential path)
+        const defaultEdge = outEdges.find(e => !e.sourceHandle || e.sourceHandle === null || e.sourceHandle === undefined);
+        if (defaultEdge) return defaultEdge;
+
+        // Fallback: return the first edge (legacy behavior)
+        console.warn(`[Flow] Multiple edges from node ${currentNodeId} with no default — using first edge. Edges: ${JSON.stringify(outEdges.map(e => ({ id: e.id, sourceHandle: e.sourceHandle, target: e.target })))}`);
+        return outEdges[0];
+    }
+
+    async updateCampaignContactMessageId(execution: any, messageId: string) {
+        const campaignContactId = execution.variables?.campaignContactId;
+        if (campaignContactId && messageId) {
+            try {
+                await this.campaignContactRepository.update(campaignContactId, {
+                    messageId: messageId,
+                    status: 'sent',
+                    sentAt: new Date()
+                });
+            } catch (err) {
+                console.error(`[Flow] Error updating campaign contact ${campaignContactId}:`, err.message);
+            }
+        }
+    }
+
+    /**
+     * Helper to get instance and contact for a given execution
+     */
+    private async getExecutionContext(execution: any) {
+        const instance = await this.instancesService.findById(execution.instanceId);
+        const contact = await this.contactsService.findById(execution.contactId);
+        return { instance, contact };
+    }
+
+    /**
+     * Resolve media URLs so they are accessible from Docker containers.
+     * Rewrites local/private IP addresses to host.docker.internal,
+     * which Docker Desktop resolves to the host machine.
+     */
+    private resolveMediaUrl(url: string): string {
+        if (!url) return url;
+
+        try {
+            const parsed = new URL(url);
+            const hostname = parsed.hostname;
+
+            // Check if host is a private/local IP or localhost
+            const isPrivateIp = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(hostname);
+            const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+
+            if (isPrivateIp || isLocalhost) {
+                const port = this.configService.get('PORT', 3333);
+                // Only rewrite if it's pointing to our backend port
+                if (parsed.port === String(port) || (!parsed.port && port === 80)) {
+                    parsed.hostname = 'host.docker.internal';
+                    const resolved = parsed.toString();
+                    console.log(`[Flow] URL rewrite: ${url} → ${resolved}`);
+                    return resolved;
+                }
+            }
+        } catch (e) {
+            // If URL parsing fails, return as-is
+        }
+
+        return url;
+    }
+
     async processExecution(executionId: string) {
         // 1. Fetch current state
         const execution = await this.executionRepository.findOne({ where: { id: executionId } });
-        if (!execution || execution.status !== 'running') return;
+        if (!execution || execution.status !== 'running') {
+            if (execution) console.log(`[Flow] Execution ${executionId.slice(0, 8)} skipped (status: ${execution.status})`);
+            return;
+        }
 
-        // Check delay
+        // Check if we need to wait for a scheduled delay (crash recovery case)
         if (execution.nextActionAt) {
-            const now = new Date();
-            // Tolerance of 2 seconds to allow slight clock skews or early wakeups
-            const tolerance = 2000;
+            const now = Date.now();
+            const targetTime = execution.nextActionAt.getTime();
+            const remaining = targetTime - now;
 
-            if (now.getTime() < execution.nextActionAt.getTime() - tolerance) {
-                console.log(`[Flow] Too early for execution ${executionId}. Waiting until ${execution.nextActionAt}`);
-                // Reschedule if too early
-                const remaining = execution.nextActionAt.getTime() - now.getTime();
-                setTimeout(() => this.processExecution(executionId), remaining);
-                return;
+            if (remaining > 500) {
+                console.log(`[Flow] ⏳ Execution ${executionId.slice(0, 8)} has pending delay. Waiting ${Math.ceil(remaining / 1000)}s...`);
+                // Wait the remaining time using Promise-based sleep
+                await new Promise<void>(resolve => setTimeout(resolve, remaining));
             }
-            // Delay finished, clear it
+
+            // Clear the delay marker
             execution.nextActionAt = null;
             await this.executionRepository.save(execution);
         }
@@ -334,13 +429,12 @@ export class FlowsService implements OnModuleInit {
             return;
         }
 
-        // 2. Find Next Node via Edge
+        // 2. Find Next Node via Edge (using improved logic)
         const currentNodeId = execution.currentNodeId;
-        const edge = flow.edges.find(e => e.source === currentNodeId);
+        const edge = this.findNextEdge(flow.edges, currentNodeId);
 
         if (!edge) {
-            // No more edges = End of flow
-            console.log(`[Flow] End of flow reached for execution ${executionId}`);
+            console.log(`[Flow] End of flow reached for execution ${executionId} (no outgoing edges from ${currentNodeId})`);
             execution.status = 'completed';
             execution.completedAt = new Date();
             await this.executionRepository.save(execution);
@@ -349,7 +443,7 @@ export class FlowsService implements OnModuleInit {
 
         const nextNode = flow.nodes.find(n => n.id === edge.target);
         if (!nextNode) {
-            console.error(`[Flow] Next node not found: ${edge.target}`);
+            console.error(`[Flow] Next node not found: ${edge.target} (from edge ${edge.id})`);
             execution.status = 'completed';
             execution.completedAt = new Date();
             await this.executionRepository.save(execution);
@@ -362,19 +456,48 @@ export class FlowsService implements OnModuleInit {
         execution.completedAt = null as any;
         await this.executionRepository.save(execution);
 
-        const nodeType = nextNode.type || nextNode.data?.type;
-        console.log(`[Flow] Processing node: ${nextNode.id}, type: ${nodeType}`);
+        // Resolve the node type — prefer data.type over the React Flow node type key
+        const nodeType = nextNode.data?.type || nextNode.type;
+        console.log(`[Flow] [${executionId.slice(0, 8)}] ▶ Processing node: ${nextNode.id} | type: ${nodeType} | label: ${nextNode.data?.label || '-'} | from edge: ${edge.id} (handle: ${edge.sourceHandle || 'default'})`);
+
         const aiNodeTypes = ['gpt', 'openai', 'anthropic', 'gemini', 'groq', 'customLlm'];
 
         try {
-            // Process AI Nodes
+            // ==================== AI NODES ====================
             if (aiNodeTypes.includes(nodeType)) {
-                // ... (existing AI logic) ...
-                const instance = await this.instancesService.findById(execution.instanceId);
-                const contact = await this.contactsService.findById(execution.contactId);
+                const { instance, contact } = await this.getExecutionContext(execution);
                 const nodeData = nextNode.data as any;
                 const systemPrompt = nodeData?.config?.prompt;
-                const userMessage = execution.variables?.lastUserMessage || 'Olá';
+
+                // ===== VARIATION ENGINE =====
+                // Generate a unique "personality seed" for EACH execution so every contact
+                // receives a significantly different message style and approach.
+                const variationStyles = [
+                    'Escreva de forma direta e objetiva, como um profissional experiente. Use frases curtas e impactantes.',
+                    'Escreva de forma curiosa e consultiva, fazendo perguntas retóricas. Use um tom de quem quer genuinamente ajudar.',
+                    'Escreva de forma entusiasmada e energética, com exclamações e emojis. Mostre empolgação real pelo assunto.',
+                    'Escreva de forma analítica e técnica, citando dados e comparações. Use um tom de especialista.',
+                    'Escreva de forma casual e amigável, como se fosse um amigo dando uma dica. Use gírias leves.',
+                    'Escreva de forma storytelling, começando com uma mini-história ou caso real antes de ir ao ponto.',
+                    'Escreva de forma provocativa e desafiadora, questionando o status quo do destinatário.',
+                    'Escreva de forma educativa, como se estivesse ensinando algo novo. Use "Você sabia que...".',
+                    'Escreva de forma empática e acolhedora, mostrando que entende os desafios do destinatário.',
+                    'Escreva de forma urgente mas respeitosa, destacando oportunidade limitada ou timing perfeito.',
+                    'Escreva de forma minimalista, com poucas palavras mas muito impacto. Menos é mais.',
+                    'Escreva como se estivesse continuando uma conversa anterior, de forma natural e fluida.',
+                ];
+
+                const randomStyle = variationStyles[Math.floor(Math.random() * variationStyles.length)];
+                const randomSeed = Math.floor(Math.random() * 99999);
+
+                // Build enhanced system prompt with variation injection
+                const enhancedSystemPrompt = `${systemPrompt || 'Você é um assistente útil.'}\n\n---\n## INSTRUÇÕES DE ESTILO PARA ESTA EXECUÇÃO (seed: ${randomSeed}):\n${randomStyle}\n\nIMPORTANTE: Gere uma mensagem COMPLETAMENTE ÚNICA. Varie a estrutura das frases, o vocabulário, a abertura, o fechamento e o tom. NUNCA repita a mesma estrutura de outras mensagens. Cada mensagem deve parecer escrita por uma pessoa diferente.\nNão use introduções como "Aqui está" ou "Segue a mensagem". Retorne APENAS o texto final da mensagem.`;
+
+                // For direct outbound sequence, the user hasn't spoken yet.
+                let userMessage = execution.variables?.lastUserMessage;
+                if (!userMessage) {
+                    userMessage = `Gere a mensagem final agora. Use o estilo descrito acima. Seed de variação: #${randomSeed}. Retorne APENAS o texto a ser enviado, sem prefácios.`;
+                }
 
                 let apiKey = nodeData?.config?.apiKey || nodeData?.config?.token;
                 if (!apiKey || apiKey.trim() === '') {
@@ -383,74 +506,88 @@ export class FlowsService implements OnModuleInit {
 
                 if (instance?.status === 'connected' && contact) {
                     const responseContent = await this.aiService.generateResponseWithKey(
-                        systemPrompt || 'Você é um assistente útil.',
+                        enhancedSystemPrompt,
                         userMessage,
                         apiKey,
                         'openai'
                     );
                     const provider = this.whatsappFactory.getProvider(instance.provider);
-                    await provider.sendText(instance.instanceName, contact.phone, responseContent);
+                    const res = await provider.sendText(instance.instanceName, contact.phone, responseContent);
+                    const messageId = res?.messageId;
+                    if (messageId) {
+                        await this.updateCampaignContactMessageId(execution, messageId);
+                    }
 
                     execution.logs.push({
                         nodeId: nextNode.id,
                         action: 'gpt_response',
                         timestamp: new Date().toISOString(),
-                        data: { response: responseContent }
+                        data: { response: responseContent, variationStyle: randomStyle.substring(0, 50), seed: randomSeed }
                     });
+                    console.log(`[Flow] 🎯 AI variation applied: style="${randomStyle.substring(0, 40)}..." seed=${randomSeed}`);
                 } else {
                     console.warn(`[Flow] Instance not connected or contact missing for AI node ${nextNode.id}`);
                 }
             }
 
-            // Process Message Node
+            // ==================== MESSAGE NODE ====================
             else if (nodeType === 'message') {
-                const instance = await this.instancesService.findById(execution.instanceId);
-                const contact = await this.contactsService.findById(execution.contactId);
+                const { instance, contact } = await this.getExecutionContext(execution);
 
                 if (instance?.status === 'connected' && contact) {
                     const provider = this.whatsappFactory.getProvider(instance.provider);
                     const nodeData = nextNode.data as any;
                     const content = nodeData?.config?.message || nodeData?.content || 'Olá';
 
-                    await provider.sendText(instance.instanceName, contact.phone, content);
+                    const res = await provider.sendText(instance.instanceName, contact.phone, content);
+                    const messageId = res?.messageId;
+                    if (messageId) {
+                        await this.updateCampaignContactMessageId(execution, messageId);
+                    }
+
                     execution.logs.push({
                         nodeId: nextNode.id,
                         action: 'sent',
                         timestamp: new Date().toISOString(),
-                        data: { type: 'message', status: 'sent' }
+                        data: { type: 'message', status: 'sent', messageId }
                     });
                 } else {
                     console.warn(`[Flow] Instance not connected or contact missing for Message node ${nextNode.id}`);
                 }
             }
 
-            // Process Media Node
-            else if (['video', 'media', 'image', 'audio', 'document'].includes(nodeType)) {
-                const instance = await this.instancesService.findById(execution.instanceId);
-                const contact = await this.contactsService.findById(execution.contactId);
+            // ==================== MEDIA NODES (video, image, audio, document, sticker) ====================
+            else if (['video', 'media', 'image', 'audio', 'document', 'sticker'].includes(nodeType)) {
+                const { instance, contact } = await this.getExecutionContext(execution);
 
                 if (instance?.status === 'connected' && contact) {
                     const provider = this.whatsappFactory.getProvider(instance.provider);
                     const nodeData = nextNode.data as any;
-                    const mediaUrl = nodeData?.config?.mediaUrl || nodeData?.config?.url || nodeData?.config?.file;
+                    const rawMediaUrl = nodeData?.config?.mediaUrl || nodeData?.config?.url || nodeData?.config?.file;
+                    const mediaUrl = this.resolveMediaUrl(rawMediaUrl);
                     const caption = nodeData?.config?.caption || nodeData?.config?.message || '';
-                    const mediaType = nodeData?.config?.mediaType || nodeType;
+                    const mediaType = nodeData?.config?.mediaType || (nodeType === 'sticker' ? 'sticker' : nodeType);
 
                     if (mediaUrl) {
                         try {
-                            await provider.sendMedia(instance.instanceName, contact.phone, {
+                            const res = await provider.sendMedia(instance.instanceName, contact.phone, {
                                 type: mediaType as any,
                                 url: mediaUrl,
-                                caption: caption,
+                                caption: nodeType === 'sticker' ? '' : caption,
                             });
+                            const messageId = res?.messageId;
+                            if (messageId) {
+                                await this.updateCampaignContactMessageId(execution, messageId);
+                            }
+
                             execution.logs.push({
                                 nodeId: nextNode.id,
                                 action: 'media_sent',
                                 timestamp: new Date().toISOString(),
-                                data: { type: mediaType, status: 'sent' }
+                                data: { type: mediaType, status: 'sent', messageId }
                             });
                         } catch (mediaErr) {
-                            console.error(`Media Send Error at node ${nextNode.id}:`, mediaErr.message);
+                            console.error(`[Flow] Media Send Error at node ${nextNode.id}:`, mediaErr.message);
                             execution.logs.push({
                                 nodeId: nextNode.id,
                                 action: 'media_failed',
@@ -458,16 +595,23 @@ export class FlowsService implements OnModuleInit {
                                 data: { type: mediaType, error: mediaErr.message }
                             });
                         }
+                    } else {
+                        console.warn(`[Flow] No media URL configured for node ${nextNode.id}`);
+                        execution.logs.push({
+                            nodeId: nextNode.id,
+                            action: 'media_skipped',
+                            timestamp: new Date().toISOString(),
+                            data: { reason: 'no_media_url' }
+                        });
                     }
                 } else {
                     console.warn(`[Flow] Instance not connected for Media node ${nextNode.id}`);
                 }
             }
 
-            // Process Link Node
+            // ==================== LINK NODE ====================
             else if (['link', 'send_link'].includes(nodeType)) {
-                const instance = await this.instancesService.findById(execution.instanceId);
-                const contact = await this.contactsService.findById(execution.contactId);
+                const { instance, contact } = await this.getExecutionContext(execution);
 
                 if (instance?.status === 'connected' && contact) {
                     const provider = this.whatsappFactory.getProvider(instance.provider);
@@ -488,19 +632,45 @@ export class FlowsService implements OnModuleInit {
                 }
             }
 
-            // Process SMS Node
+            // ==================== BUTTONS NODES (buttonsDefault, buttonsCopy, buttonsActions) ====================
+            else if (['buttonsDefault', 'buttonsCopy', 'buttonsActions', 'buttons'].includes(nodeType)) {
+                const { instance, contact } = await this.getExecutionContext(execution);
+
+                if (instance?.status === 'connected' && contact) {
+                    const provider = this.whatsappFactory.getProvider(instance.provider);
+                    const nodeData = nextNode.data as any;
+                    const message = nodeData?.config?.message || nodeData?.config?.text || 'Escolha uma opção:';
+                    const buttons = nodeData?.config?.buttons || [];
+
+                    // Send as text with button labels listed (most providers need special API for interactive buttons)
+                    let fullMessage = message;
+                    if (buttons.length > 0) {
+                        const buttonList = buttons.map((b: any, i: number) => `${i + 1}. ${b.label || b.text || b}`).join('\n');
+                        fullMessage = `${message}\n\n${buttonList}`;
+                    }
+
+                    await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'buttons_sent',
+                        timestamp: new Date().toISOString(),
+                        data: { type: nodeType, buttonsCount: buttons.length, status: 'sent' }
+                    });
+                } else {
+                    console.warn(`[Flow] Instance not connected for Buttons node ${nextNode.id}`);
+                }
+            }
+
+            // ==================== SMS NODE ====================
             else if (['sms', 'send_sms'].includes(nodeType)) {
-                const instance = await this.instancesService.findById(execution.instanceId);
-                const contact = await this.contactsService.findById(execution.contactId);
-                // SMS doesn't strictly depend on WA instance, but using it for now
+                const { instance, contact } = await this.getExecutionContext(execution);
                 if (contact) {
-                    const provider = this.whatsappFactory.getProvider(instance?.provider || 'evolution');
                     const nodeData = nextNode.data as any;
                     const message = nodeData?.config?.message || '';
                     const phoneNumber = nodeData?.config?.phoneNumber || contact.phone;
 
                     if (message) {
-                        // Normally this would use an SMS provider, assuming WA for now or specialized logic
                         execution.logs.push({
                             nodeId: nextNode.id,
                             action: 'sms_mock',
@@ -511,15 +681,26 @@ export class FlowsService implements OnModuleInit {
                 }
             }
 
-            // Process Question Node
+            // ==================== EMAIL NODE ====================
+            else if (['email', 'send_email'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                console.log(`[Flow] Email node ${nextNode.id} - mock (not implemented yet)`);
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'email_mock',
+                    timestamp: new Date().toISOString(),
+                    data: { to: nodeData?.config?.to, status: 'mocked' }
+                });
+            }
+
+            // ==================== QUESTION NODE ====================
             else if (['question', 'pergunta', 'ask_question'].includes(nodeType)) {
-                const instance = await this.instancesService.findById(execution.instanceId);
-                const contact = await this.contactsService.findById(execution.contactId);
+                const { instance, contact } = await this.getExecutionContext(execution);
 
                 if (instance?.status === 'connected' && contact) {
                     const provider = this.whatsappFactory.getProvider(instance.provider);
                     const nodeData = nextNode.data as any;
-                    const questionText = nodeData?.config?.question || 'Qual sua resposta?';
+                    const questionText = nodeData?.config?.question || nodeData?.config?.message || 'Qual sua resposta?';
                     const saveTo = nodeData?.config?.saveTo || 'lastAnswer';
 
                     await provider.sendText(instance.instanceName, contact.phone, questionText);
@@ -539,16 +720,18 @@ export class FlowsService implements OnModuleInit {
                     });
 
                     await this.executionRepository.save(execution);
-                    return; // Stop auto-advance
+                    return; // Stop auto-advance — wait for user response
                 }
             }
 
-            // Process Delay Node
+            // ==================== DELAY NODE ====================
             else if (['delay', 'wait', 'esperar'].includes(nodeType)) {
                 const nodeData = nextNode.data as any;
-                const delaySeconds = parseInt(nodeData?.config?.seconds || '5', 10);
+                const rawSeconds = nodeData?.config?.seconds || nodeData?.config?.delay || nodeData?.config?.time || '5';
+                const delaySeconds = Math.max(1, Math.min(86400, parseInt(String(rawSeconds), 10) || 5)); // Increase max to 24h
+                const delayMs = delaySeconds * 1000;
 
-                console.log(`[Flow] Processing Delay Node ${nextNode.id}: ${delaySeconds} seconds. Timeout scheduled.`);
+                console.log(`[Flow] ⏳ Delay Node ${nextNode.id}: scheduling resume in ${delaySeconds}s (${delayMs}ms)...`);
 
                 execution.logs.push({
                     nodeId: nextNode.id,
@@ -557,38 +740,588 @@ export class FlowsService implements OnModuleInit {
                     data: { delaySeconds }
                 });
 
-                // Update execution state
-                execution.status = 'running';
+                // Set status to delayed and schedule job
+                execution.status = 'delayed';
+                execution.nextActionAt = new Date(Date.now() + delayMs);
+                await this.executionRepository.save(execution);
 
-                // Add buffer to DB time to avoid "too early" race check
-                const bufferMs = 500; // Aumentei buffer para 500ms
-                const targetTime = Date.now() + (delaySeconds * 1000);
-                execution.nextActionAt = new Date(targetTime + bufferMs);
+                await this.flowQueue.add(
+                    'resume',
+                    { executionId },
+                    {
+                        delay: delayMs,
+                        jobId: `resume-${executionId}-${nextNode.id}-${Date.now()}`,
+                        removeOnComplete: true
+                    }
+                );
+
+                return; // Stop execution here; the worker will resume it
+            }
+
+            // ==================== CONDITION NODE ====================
+            else if (['condition'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                const field = nodeData?.config?.field || '';
+                const operator = nodeData?.config?.operator || 'equals';
+                const value = nodeData?.config?.value || '';
+                const actualValue = execution.variables?.[field] || '';
+
+                let conditionMet = false;
+                switch (operator) {
+                    case 'equals': conditionMet = String(actualValue) === String(value); break;
+                    case 'contains': conditionMet = String(actualValue).includes(String(value)); break;
+                    case 'not_equals': conditionMet = String(actualValue) !== String(value); break;
+                    case 'gt': conditionMet = Number(actualValue) > Number(value); break;
+                    case 'lt': conditionMet = Number(actualValue) < Number(value); break;
+                    case 'exists': conditionMet = !!actualValue; break;
+                    default: conditionMet = false;
+                }
+
+                console.log(`[Flow] Condition node ${nextNode.id}: field=${field}, op=${operator}, expected=${value}, actual=${actualValue}, met=${conditionMet}`);
+
+                // Select the correct output handle
+                const handleId = conditionMet ? 'true' : 'false';
+                const condEdge = this.findNextEdge(flow.edges, nextNode.id, handleId);
+
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'condition_evaluated',
+                    timestamp: new Date().toISOString(),
+                    data: { field, operator, value, actualValue, conditionMet, nextEdge: condEdge?.id }
+                });
 
                 await this.executionRepository.save(execution);
 
-                setTimeout(() => {
-                    console.log(`[Flow] Delay finished for ${executionId}, resuming execution...`);
-                    this.processExecution(executionId);
-                }, (delaySeconds * 1000) + 100); // +100ms de margem
+                if (condEdge) {
+                    const condNextNode = flow.nodes.find(n => n.id === condEdge.target);
+                    if (condNextNode) {
+                        execution.currentNodeId = condNextNode.id;
+                        await this.executionRepository.save(execution);
+                        this.processExecution(executionId);
+                    }
+                } else {
+                    console.log(`[Flow] No edge for condition result '${handleId}' at node ${nextNode.id}. Ending.`);
+                    execution.status = 'completed';
+                    execution.completedAt = new Date();
+                    await this.executionRepository.save(execution);
+                }
                 return;
             }
 
-            // Finalize this step
+            // ==================== MULTI-CONDITION NODE ====================
+            else if (['multiCondition'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                const conditions = nodeData?.config?.conditions || [];
+
+                let matchedIndex = -1;
+                for (let i = 0; i < conditions.length; i++) {
+                    const cond = conditions[i];
+                    const actualValue = execution.variables?.[cond.field] || '';
+                    let met = false;
+                    switch (cond.operator) {
+                        case 'equals': met = String(actualValue) === String(cond.value); break;
+                        case 'contains': met = String(actualValue).includes(String(cond.value)); break;
+                        case 'gt': met = Number(actualValue) > Number(cond.value); break;
+                        case 'lt': met = Number(actualValue) < Number(cond.value); break;
+                        default: met = false;
+                    }
+                    if (met) { matchedIndex = i; break; }
+                }
+
+                const handleId = matchedIndex >= 0 ? `condition-${matchedIndex}` : 'else';
+                console.log(`[Flow] MultiCondition node ${nextNode.id}: matched index=${matchedIndex}, handle=${handleId}`);
+
+                const mcEdge = this.findNextEdge(flow.edges, nextNode.id, handleId);
+
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'multi_condition_evaluated',
+                    timestamp: new Date().toISOString(),
+                    data: { matchedIndex, handleId, nextEdge: mcEdge?.id }
+                });
+
+                await this.executionRepository.save(execution);
+
+                if (mcEdge) {
+                    const mcNextNode = flow.nodes.find(n => n.id === mcEdge.target);
+                    if (mcNextNode) {
+                        execution.currentNodeId = mcNextNode.id;
+                        await this.executionRepository.save(execution);
+                        this.processExecution(executionId);
+                    }
+                } else {
+                    execution.status = 'completed';
+                    execution.completedAt = new Date();
+                    await this.executionRepository.save(execution);
+                }
+                return;
+            }
+
+            // ==================== WEBHOOK NODE ====================
+            else if (['webhook'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                const webhookUrl = nodeData?.config?.url || '';
+                const method = nodeData?.config?.method || 'POST';
+
+                console.log(`[Flow] Webhook node ${nextNode.id}: ${method} ${webhookUrl}`);
+
+                if (webhookUrl) {
+                    try {
+                        const { instance, contact } = await this.getExecutionContext(execution);
+                        const axios = require('axios');
+                        const payload = {
+                            executionId,
+                            flowId: execution.flowId,
+                            contactId: execution.contactId,
+                            contactPhone: contact?.phone,
+                            contactName: contact?.name,
+                            variables: execution.variables,
+                        };
+
+                        const response = await axios({ method, url: webhookUrl, data: payload, timeout: 10000 });
+
+                        // Store webhook response in variables
+                        execution.variables = {
+                            ...execution.variables,
+                            webhookResponse: response.data,
+                        };
+
+                        execution.logs.push({
+                            nodeId: nextNode.id,
+                            action: 'webhook_called',
+                            timestamp: new Date().toISOString(),
+                            data: { url: webhookUrl, status: response.status }
+                        });
+                    } catch (webhookErr) {
+                        console.error(`[Flow] Webhook error at node ${nextNode.id}:`, webhookErr.message);
+                        execution.logs.push({
+                            nodeId: nextNode.id,
+                            action: 'webhook_failed',
+                            timestamp: new Date().toISOString(),
+                            data: { url: webhookUrl, error: webhookErr.message }
+                        });
+                    }
+                } else {
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'webhook_skipped',
+                        timestamp: new Date().toISOString(),
+                        data: { reason: 'no_url' }
+                    });
+                }
+            }
+
+            // ==================== TEMPLATE NODES (templateText, templateButton, template) ====================
+            else if (['templateText', 'templateButton', 'template'].includes(nodeType)) {
+                const { instance, contact } = await this.getExecutionContext(execution);
+                const nodeData = nextNode.data as any;
+                const templateName = nodeData?.config?.templateName || nodeData?.config?.name || '';
+                const templateLanguage = nodeData?.config?.language || 'pt_BR';
+                const variables = nodeData?.config?.variables || []; // Array of strings or objects
+                const headerUrl = nodeData?.config?.headerUrl || nodeData?.config?.mediaUrl;
+
+                console.log(`[Flow] Template node ${nextNode.id}: template=${templateName}`);
+
+                if (instance?.status === 'connected' && contact && templateName) {
+                    try {
+                        // Check if instance is official (WABA) and has credentials
+                        if (instance.channelType === 'official' && instance.metaConfig?.phoneNumberId && instance.metaConfig?.accessToken) {
+
+                            // Construct Template Components
+                            const components: any[] = [];
+
+                            // Header Component (if media url is provided)
+                            if (headerUrl) {
+                                const resolvedUrl = this.resolveMediaUrl(headerUrl);
+                                const mediaType = nodeData?.config?.headerType || 'image'; // image, video, document
+                                components.push({
+                                    type: 'header',
+                                    parameters: [{
+                                        type: mediaType,
+                                        [mediaType]: { link: resolvedUrl }
+                                    }]
+                                });
+                            }
+
+                            // Body Component (variables)
+                            if (variables && variables.length > 0) {
+                                const params = variables.map((v: string) => ({
+                                    type: 'text',
+                                    text: v
+                                }));
+                                components.push({
+                                    type: 'body',
+                                    parameters: params
+                                });
+                            }
+
+                            // Send via Official Meta API
+                            const res = await this.metaGraphApiService.sendMessage(
+                                instance.metaConfig.phoneNumberId,
+                                instance.metaConfig.accessToken,
+                                contact.phone,
+                                'template',
+                                {
+                                    name: templateName,
+                                    language: { code: templateLanguage },
+                                    components
+                                }
+                            );
+
+                            const messageId = res?.messages?.[0]?.id;
+                            if (messageId) {
+                                await this.updateCampaignContactMessageId(execution, messageId);
+                            }
+
+                            execution.logs.push({
+                                nodeId: nextNode.id,
+                                action: 'template_sent_waba',
+                                timestamp: new Date().toISOString(),
+                                data: { templateName, status: 'sent', provider: 'meta', messageId }
+                            });
+
+                        } else {
+                            // Fallback for non-official instances (Evolution / Waha)
+                            // Most providers don't robustly support templates, sending as text fallback
+                            const provider = this.whatsappFactory.getProvider(instance.provider);
+                            const body = nodeData?.config?.body || `[Template: ${templateName}]`;
+                            const res = await provider.sendText(instance.instanceName, contact.phone, body);
+                            const messageId = res?.messageId;
+                            if (messageId) {
+                                await this.updateCampaignContactMessageId(execution, messageId);
+                            }
+
+                            execution.logs.push({
+                                nodeId: nextNode.id,
+                                action: 'template_sent_fallback',
+                                timestamp: new Date().toISOString(),
+                                data: { templateName, status: 'sent', provider: instance.provider, messageId }
+                            });
+                        }
+
+                    } catch (tplErr) {
+                        console.error(`[Flow] Template send error at node ${nextNode.id}:`, tplErr.message);
+                        execution.logs.push({
+                            nodeId: nextNode.id,
+                            action: 'template_failed',
+                            timestamp: new Date().toISOString(),
+                            data: { templateName, error: tplErr.message }
+                        });
+                    }
+                } else {
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'template_skipped',
+                        timestamp: new Date().toISOString(),
+                        data: { reason: !templateName ? 'no_template' : 'instance_not_connected' }
+                    });
+                }
+            }
+
+            // ==================== SAVE INFO NODE ====================
+            else if (['saveInfo'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                const field = nodeData?.config?.field || '';
+                const value = nodeData?.config?.value || '';
+
+                if (field) {
+                    execution.variables = { ...execution.variables, [field]: value };
+                    console.log(`[Flow] SaveInfo node ${nextNode.id}: saved ${field}=${value}`);
+                }
+
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'info_saved',
+                    timestamp: new Date().toISOString(),
+                    data: { field, value }
+                });
+            }
+
+            // ==================== LIMIT EXECUTION NODE ====================
+            else if (['limitExecution'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                const maxExecutions = parseInt(nodeData?.config?.maxExecutions || '1', 10);
+                const period = nodeData?.config?.period || 'ever'; // 'ever', 'day', 'hour'
+
+                // Count actual executions from DB
+                let countQuery = this.executionRepository.createQueryBuilder('exec')
+                    .where('exec.flowId = :flowId', { flowId: execution.flowId })
+                    .andWhere('exec.contactId = :contactId', { contactId: execution.contactId })
+                    .andWhere('exec.id != :currentId', { currentId: executionId });
+
+                if (period === 'day') {
+                    const dayStart = new Date();
+                    dayStart.setHours(0, 0, 0, 0);
+                    countQuery = countQuery.andWhere('exec.startedAt >= :dayStart', { dayStart });
+                } else if (period === 'hour') {
+                    const hourStart = new Date(Date.now() - 3600000);
+                    countQuery = countQuery.andWhere('exec.startedAt >= :hourStart', { hourStart });
+                }
+
+                const executionCount = await countQuery.getCount();
+                const passed = executionCount < maxExecutions;
+
+                console.log(`[Flow] LimitExecution node ${nextNode.id}: max=${maxExecutions}, period=${period}, currentCount=${executionCount}, passed=${passed}`);
+
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'limit_checked',
+                    timestamp: new Date().toISOString(),
+                    data: { maxExecutions, period, currentCount: executionCount, passed }
+                });
+
+                if (!passed) {
+                    // Limit reached — stop execution
+                    execution.status = 'completed';
+                    execution.completedAt = new Date();
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'limit_reached',
+                        timestamp: new Date().toISOString(),
+                        data: { maxExecutions, period, executionCount }
+                    });
+                    await this.executionRepository.save(execution);
+                    console.log(`[Flow] ⛔ Execution stopped by limitExecution: ${executionCount}/${maxExecutions} (${period})`);
+                    return;
+                }
+            }
+
+            // ==================== MOVE FLOW NODE ====================
+            else if (['moveFlow'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                const targetFlowId = nodeData?.config?.flowId || nodeData?.config?.targetFlowId || '';
+
+                console.log(`[Flow] MoveFlow node ${nextNode.id}: target flow=${targetFlowId}`);
+
+                if (targetFlowId) {
+                    // Complete current execution
+                    execution.status = 'completed';
+                    execution.completedAt = new Date();
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'moved_to_flow',
+                        timestamp: new Date().toISOString(),
+                        data: { targetFlowId }
+                    });
+                    await this.executionRepository.save(execution);
+
+                    // Start new execution in target flow
+                    try {
+                        const tenantId = (await this.flowRepository.findOne({ where: { id: execution.flowId } }))?.tenantId;
+                        if (tenantId) {
+                            await this.startExecution(tenantId, {
+                                flowId: targetFlowId,
+                                contactId: execution.contactId,
+                                instanceId: execution.instanceId,
+                                initialVariables: execution.variables,
+                            });
+                        }
+                    } catch (moveErr) {
+                        console.error(`[Flow] MoveFlow error:`, moveErr.message);
+                    }
+                    return;
+                } else {
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'move_flow_skipped',
+                        timestamp: new Date().toISOString(),
+                        data: { reason: 'no_target_flow' }
+                    });
+                }
+            }
+
+            // ==================== RANDOMIZER NODE ====================
+            else if (['randomizer'].includes(nodeType)) {
+                const outEdges = flow.edges.filter(e => e.source === nextNode.id);
+                if (outEdges.length > 0) {
+                    const nodeData = nextNode.data as any;
+                    const configPaths: Array<{ name: string; weight: number }> = nodeData?.config?.paths || [];
+
+                    let selectedEdge: any;
+                    let selectedIndex: number;
+                    let selectionMethod: string;
+                    let weightsUsed: string;
+
+                    // Check if we have valid weights configured
+                    const hasWeights = configPaths.length > 0 && configPaths.some(p => p.weight > 0);
+
+                    if (hasWeights) {
+                        // === WEIGHTED RANDOM SELECTION ===
+                        // Build a weight map: sourceHandle "path-{idx}" → weight from configPaths[idx]
+                        const edgesWithWeights = outEdges.map(edge => {
+                            let pathIndex = -1;
+                            if (edge.sourceHandle && edge.sourceHandle.startsWith('path-')) {
+                                pathIndex = parseInt(edge.sourceHandle.replace('path-', ''), 10);
+                            }
+                            const weight = (pathIndex >= 0 && pathIndex < configPaths.length)
+                                ? Math.max(0, configPaths[pathIndex].weight || 0)
+                                : 0;
+                            return { edge, pathIndex, weight };
+                        });
+
+                        const totalWeight = edgesWithWeights.reduce((sum, ew) => sum + ew.weight, 0);
+
+                        if (totalWeight > 0) {
+                            // Weighted selection: pick a random number in [0, totalWeight) and find the matching path
+                            const rand = Math.random() * totalWeight;
+                            let cumulative = 0;
+                            let chosen = edgesWithWeights[0]; // fallback
+                            for (const ew of edgesWithWeights) {
+                                cumulative += ew.weight;
+                                if (rand < cumulative) {
+                                    chosen = ew;
+                                    break;
+                                }
+                            }
+                            selectedEdge = chosen.edge;
+                            selectedIndex = chosen.pathIndex;
+                            selectionMethod = 'weighted';
+                            weightsUsed = edgesWithWeights.map(ew => `path-${ew.pathIndex}:${ew.weight}%`).join(', ');
+                        } else {
+                            // All weights are 0 — fall back to uniform
+                            selectedIndex = Math.floor(Math.random() * outEdges.length);
+                            selectedEdge = outEdges[selectedIndex];
+                            selectionMethod = 'uniform (all weights zero)';
+                            weightsUsed = 'none';
+                        }
+                    } else {
+                        // === UNIFORM RANDOM (no weights configured) ===
+                        selectedIndex = Math.floor(Math.random() * outEdges.length);
+                        selectedEdge = outEdges[selectedIndex];
+                        selectionMethod = 'uniform (no config)';
+                        weightsUsed = 'none';
+                    }
+
+                    const pathName = (selectedIndex >= 0 && selectedIndex < configPaths.length)
+                        ? configPaths[selectedIndex].name
+                        : `path-${selectedIndex}`;
+
+                    console.log(`[Flow] 🎲 Randomizer node ${nextNode.id}: [${selectionMethod}] selected "${pathName}" (index ${selectedIndex}) -> ${selectedEdge.target} | weights: [${weightsUsed}]`);
+
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'randomizer_selected',
+                        timestamp: new Date().toISOString(),
+                        data: {
+                            totalPaths: outEdges.length,
+                            selectedIndex,
+                            selectedPath: pathName,
+                            selectionMethod,
+                            weights: configPaths.map(p => ({ name: p.name, weight: p.weight })),
+                        }
+                    });
+
+                    const rNextNode = flow.nodes.find(n => n.id === selectedEdge.target);
+                    if (rNextNode) {
+                        execution.currentNodeId = rNextNode.id;
+                        await this.executionRepository.save(execution);
+                        this.processExecution(executionId);
+                    }
+                } else {
+                    execution.status = 'completed';
+                    execution.completedAt = new Date();
+                    await this.executionRepository.save(execution);
+                }
+                return;
+            }
+
+            // ==================== FAKE CALL NODE ====================
+            else if (['fakeCall'].includes(nodeType)) {
+                const { instance, contact } = await this.getExecutionContext(execution);
+
+                console.log(`[Flow] FakeCall node ${nextNode.id}: simulating call to ${contact?.phone}`);
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'fake_call_simulated',
+                    timestamp: new Date().toISOString(),
+                    data: { phone: contact?.phone, status: 'simulated' }
+                });
+            }
+
+            // ==================== CONTACTS NODE ====================
+            else if (['contacts'].includes(nodeType)) {
+                const nodeData = nextNode.data as any;
+                const action = nodeData?.config?.action || 'addTag';
+                const tagName = nodeData?.config?.tag || nodeData?.config?.tagName || '';
+                const tagIds = nodeData?.config?.tagIds || [];
+
+                console.log(`[Flow] Contacts node ${nextNode.id}: action=${action}, tag=${tagName}, tagIds=${JSON.stringify(tagIds)}`);
+
+                try {
+                    if (execution.contactId) {
+                        const tenantId = (await this.flowRepository.findOne({ where: { id: execution.flowId } }))?.tenantId;
+                        if (tenantId) {
+                            if (action === 'addTag' && tagIds.length > 0) {
+                                await this.contactsService.addTagsToContact(execution.contactId, tagIds);
+                                console.log(`[Flow] ✅ Added ${tagIds.length} tags to contact ${execution.contactId}`);
+                            } else if (action === 'addTag' && tagName) {
+                                // Find or create tag by name, then add
+                                const existingTags = await this.contactsService.findAllTags(tenantId);
+                                let tag = existingTags.find((t: any) => t.name === tagName);
+                                if (!tag) {
+                                    tag = await this.contactsService.createTag(tenantId, { name: tagName });
+                                }
+                                await this.contactsService.addTagsToContact(execution.contactId, [tag.id]);
+                                console.log(`[Flow] ✅ Added tag "${tagName}" to contact ${execution.contactId}`);
+                            } else if (action === 'removeTag' && tagIds.length > 0) {
+                                await this.contactsService.bulkRemoveTags(tenantId, {
+                                    contactIds: [execution.contactId],
+                                    tagIds,
+                                });
+                                console.log(`[Flow] ✅ Removed ${tagIds.length} tags from contact ${execution.contactId}`);
+                            }
+                        }
+                    }
+                } catch (tagErr) {
+                    console.error(`[Flow] Tag operation error at node ${nextNode.id}:`, tagErr.message);
+                }
+
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: `contacts_${action}`,
+                    timestamp: new Date().toISOString(),
+                    data: { action, tagName, tagIds, status: 'executed' }
+                });
+            }
+
+            // ==================== START NODE (skip) ====================
+            else if (nodeType === 'start') {
+                console.log(`[Flow] Start node ${nextNode.id}: skipping (already started)`);
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'start_passed',
+                    timestamp: new Date().toISOString(),
+                });
+            }
+
+            // ==================== UNKNOWN NODE TYPE ====================
+            else {
+                console.warn(`[Flow] Unknown node type at ${nextNode.id}: "${nodeType}" — passing through`);
+                execution.logs.push({
+                    nodeId: nextNode.id,
+                    action: 'unknown_passthrough',
+                    timestamp: new Date().toISOString(),
+                    data: { type: nodeType }
+                });
+            }
+
+            // ==================== FINALIZE & ADVANCE ====================
             await this.executionRepository.save(execution);
 
             if (nodeType === 'end') {
                 execution.status = 'completed';
                 execution.completedAt = new Date();
                 await this.executionRepository.save(execution);
+                console.log(`[Flow] [${executionId.slice(0, 8)}] ✅ Flow completed at end node ${nextNode.id}`);
                 return;
             }
 
-            // Continue to next node
-            this.processExecution(executionId);
+            // Continue to next node (await to propagate errors properly)
+            console.log(`[Flow] [${executionId.slice(0, 8)}] → Advancing from ${nextNode.id} to next...`);
+            await this.processExecution(executionId);
 
         } catch (error) {
-            console.error(`Error processing flow node ${nodeType}:`, error);
+            console.error(`[Flow] Error processing node ${nextNode.id} (type: ${nodeType}):`, error);
             execution.status = 'failed';
             execution.logs.push({
                 nodeId: nextNode.id,
@@ -691,5 +1424,21 @@ export class FlowsService implements OnModuleInit {
             contactName: contact.name,
             instanceName: instance.instanceName
         };
+    }
+
+    async resumeExecution(executionId: string) {
+        const execution = await this.executionRepository.findOne({ where: { id: executionId } });
+        if (!execution) {
+            console.warn(`[Flow] Cannot resume execution ${executionId} - not found`);
+            return;
+        }
+
+        // Se estiver delayed ou waiting, reseta
+        execution.status = 'running';
+        execution.nextActionAt = null;
+        await this.executionRepository.save(execution);
+        console.log(`[Flow] Resuming execution ${executionId}`);
+
+        return this.processExecution(executionId);
     }
 }

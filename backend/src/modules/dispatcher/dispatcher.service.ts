@@ -4,7 +4,8 @@ import { Queue } from 'bullmq';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import { Campaign, CampaignContact, Contact } from '../campaigns/entities/campaign.entity';
+import { Campaign, CampaignContact } from '../campaigns/entities/campaign.entity';
+import { Contact } from '../contacts/entities/contact.entity';
 import { DISPATCH_QUEUE } from '../../config/bull.config';
 import { DispatchJobData } from './dispatcher.processor';
 

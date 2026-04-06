@@ -27,7 +27,7 @@ export class EvolutionAdapter implements IWhatsAppProvider {
         this.logger.log(`Evolution API configured: ${this.baseUrl}`);
     }
 
-    async createInstance(instanceName: string): Promise<InstanceResult> {
+    async createInstance(instanceName: string, config?: any): Promise<InstanceResult> {
         try {
             // Check if instance already exists
             const existingInstances = await this.request('GET', '/instance/fetchInstances');
@@ -42,12 +42,23 @@ export class EvolutionAdapter implements IWhatsAppProvider {
                 };
             }
 
-            // Create new instance WITHOUT qrcode initially (faster)
-            const response = await this.request('POST', '/instance/create', {
+            // Determine integration type (Official API vs Baileys/Web)
+            const isOfficial = !!config?.token || !!config?.accessToken;
+            const integration = isOfficial ? 'WHATSAPP-BUSINESS' : 'WHATSAPP-BAILEYS';
+
+            const payload: any = {
                 instanceName,
-                qrcode: false,
-                integration: 'WHATSAPP-BAILEYS',
-            });
+                qrcode: !isOfficial,
+                integration,
+            };
+
+            if (isOfficial) {
+                payload.token = config?.token || config?.accessToken;
+                payload.number = config?.phoneNumber; // Evolution expects 'number' for phone
+            }
+
+            // Create new instance
+            const response = await this.request('POST', '/instance/create', payload);
 
             this.logger.log(`Created Evolution instance: ${instanceName}`);
 
@@ -135,7 +146,7 @@ export class EvolutionAdapter implements IWhatsAppProvider {
 
             return {
                 status: this.mapStatus(state),
-                phoneNumber: response.instance?.wuid || response.instance?.ownerJid,
+                phoneNumber: response.instance?.owner || response.instance?.ownerJid || response.instance?.phoneNumber || response.instance?.wuid || response.owner,
                 name: response.instance?.profileName,
             };
         } catch (error: any) {
@@ -223,14 +234,24 @@ export class EvolutionAdapter implements IWhatsAppProvider {
 
     async isOnWhatsApp(instanceName: string, phone: string): Promise<boolean> {
         try {
-            const response = await this.request(
-                'POST',
-                `/chat/whatsappNumbers/${instanceName}`,
-                { numbers: [this.formatPhone(phone)] },
-            );
-            return response[0]?.exists || response[0]?.jid !== undefined;
+            const formatted = this.formatPhone(phone);
+            // Evolution API v2: POST /chat/whatsappNumbers/{instance} with body { numbers: ["55..."] }
+            const response = await this.request('POST', `/chat/whatsappNumbers/${instanceName}`, {
+                numbers: [formatted]
+            });
+
+            // Response is array of objects: [{ number: '...', exists: true, jid: '...' }]
+            if (Array.isArray(response) && response.length > 0) {
+                return response[0].exists === true;
+            }
+
+            return false;
         } catch (error) {
-            return true;
+            this.logger.error(`Error checking if ${phone} is on WhatsApp: ${error.message}`);
+            // If API fails, we assume true to allow trying to send (false negative is worse than false positive here?)
+            // OR we assume false to be safe? 
+            // Better to return false if we want strict filtering as requested by user.
+            return false;
         }
     }
 

@@ -42,6 +42,7 @@ export class MetaGraphApiService {
                 'Content-Type': 'application/json',
             },
             timeout: 30000,
+            httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
         });
     }
 
@@ -223,6 +224,42 @@ export class MetaGraphApiService {
             return response.data.id;
         } catch (error) {
             this.handleApiError(error, 'uploadMedia');
+        }
+    }
+
+    /**
+     * Send a message (text, template, media, etc.)
+     */
+    async sendMessage(
+        phoneNumberId: string,
+        accessToken: string,
+        recipientPhone: string,
+        type: 'text' | 'template' | 'image' | 'video' | 'document' | 'audio' | 'sticker' | 'location' | 'contacts' | 'interactive',
+        content: any,
+        context?: { message_id: string }
+    ): Promise<{ messages: [{ id: string }] }> {
+        try {
+            const client = this.createClient(accessToken);
+
+            const payload: any = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: recipientPhone,
+                type: type,
+            };
+
+            // Add content based on type
+            payload[type] = content;
+
+            // Reply to message context
+            if (context) {
+                payload.context = context;
+            }
+
+            const response = await client.post(`/${phoneNumberId}/messages`, payload);
+            return response.data;
+        } catch (error) {
+            this.handleApiError(error, 'sendMessage');
         }
     }
 

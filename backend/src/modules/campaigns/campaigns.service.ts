@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Inject, forwardRef, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { createHash } from 'crypto';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -10,9 +10,12 @@ import {
     Campaign,
     CampaignContact,
     MessageVariation,
-    Contact,
     Template,
 } from './entities/campaign.entity';
+import { Contact } from '../contacts/entities/contact.entity';
+import { Flow } from '../flows/entities';
+import { Instance } from '../instances/entities/instance.entity';
+import { InstanceStatus } from '../../common/enums/instance-status.enum';
 import { ContactsService } from '../contacts/contacts.service';
 import { AiService } from '../ai/ai.service';
 import { DispatcherService } from '../dispatcher/dispatcher.service';
@@ -34,6 +37,8 @@ export class CampaignsService {
         private contactRepo: Repository<Contact>,
         @InjectRepository(Template)
         private templateRepo: Repository<Template>,
+        @InjectRepository(Flow)
+        private flowRepo: Repository<Flow>,
         @InjectQueue(SCHEDULER_QUEUE) private schedulerQueue: Queue,
         private aiService: AiService,
         private dispatcherService: DispatcherService,
@@ -81,35 +86,91 @@ export class CampaignsService {
 
     async create(tenantId: string, data: Partial<Campaign> & {
         contactIds?: string[];
+        tagIds?: string[];
         minDelaySec?: number;
         maxDelaySec?: number;
     }) {
-        const { contactIds, minDelaySec, maxDelaySec, ...campaignData } = data;
+        const { contactIds: providedIds = [], tagIds = [], minDelaySec, maxDelaySec, ...campaignData } = data;
+        let finalContactIds = new Set(providedIds);
+
+        // Resolver contatos via Tags
+        if (tagIds.length > 0) {
+            this.logger.log(`Resolving contacts for tags: ${tagIds.join(', ')}`);
+            // Busca contatos que tenham *qualquer* uma das tags
+            const result = await this.contactsService.findAllContacts(tenantId, {
+                tagIds,
+                limit: 100000, // Limite alto para cobrir maioria dos casos
+            });
+
+            if (result.data) {
+                result.data.forEach(c => finalContactIds.add(c.id));
+                this.logger.log(`Found ${result.data.length} contacts via tags.`);
+            }
+        }
+
+        const contactIdsArray = Array.from(finalContactIds);
 
         const campaign = this.campaignRepo.create({
             ...campaignData,
             tenantId,
             status: 'draft',
-            totalContacts: contactIds?.length || 0,
+            totalContacts: contactIdsArray.length,
             minDelayMs: (minDelaySec || 5) * 1000,
             maxDelayMs: (maxDelaySec || 15) * 1000,
+            // If instanceIds provided, use them. If only deprecated instanceId provided, wrap in array
+            instanceIds: (campaignData.instanceIds?.length || 0) > 0
+                ? campaignData.instanceIds
+                : (campaignData.instanceId ? [campaignData.instanceId] : []),
+            instanceId: campaignData.instanceId, // Keep for backward compat
         });
 
         const savedCampaign = await this.campaignRepo.save(campaign);
 
         // Vincular contatos à campanha
-        if (contactIds && contactIds.length > 0) {
-            const campaignContacts = contactIds.map(contactId =>
-                this.campaignContactRepo.create({
-                    campaignId: savedCampaign.id,
-                    contactId,
-                    status: 'queued',
-                })
-            );
-            await this.campaignContactRepo.save(campaignContacts);
+        if (contactIdsArray.length > 0) {
+            // Bulk insert em chunks para evitar erro de memória/query size
+            const chunkSize = 500;
+            for (let i = 0; i < contactIdsArray.length; i += chunkSize) {
+                const chunk = contactIdsArray.slice(i, i + chunkSize);
+                const campaignContacts = chunk.map(contactId =>
+                    this.campaignContactRepo.create({
+                        campaignId: savedCampaign.id,
+                        contactId,
+                        status: 'queued',
+                    })
+                );
+                await this.campaignContactRepo.save(campaignContacts);
+            }
         }
 
         return savedCampaign;
+    }
+
+    async update(id: string, tenantId: string, data: Partial<Campaign> & {
+        minDelaySec?: number;
+        maxDelaySec?: number;
+    }) {
+        const campaign = await this.findOne(id, tenantId);
+
+        if (campaign.status === 'completed' || campaign.status === 'cancelled') {
+            throw new BadRequestException('Campanhas finalizadas ou canceladas não podem mais ser editadas.');
+        }
+
+        const { minDelaySec, maxDelaySec, ...updateData } = data;
+
+        // Atualizar campos básicos
+        Object.assign(campaign, updateData);
+
+        // Atualizar delays se fornecidos
+        if (minDelaySec !== undefined) campaign.minDelayMs = minDelaySec * 1000;
+        if (maxDelaySec !== undefined) campaign.maxDelayMs = maxDelaySec * 1000;
+
+        // Se instanceIds fornecidos, garantir que o deprecated instanceId também reflita o primeiro
+        if (updateData.instanceIds && updateData.instanceIds.length > 0) {
+            campaign.instanceId = updateData.instanceIds[0];
+        }
+
+        return this.campaignRepo.save(campaign);
     }
 
     async generateVariations(
@@ -162,6 +223,31 @@ export class CampaignsService {
 
         if (contactCount === 0) {
             throw new Error('Campanha não tem contatos. Adicione contatos antes de iniciar.');
+        }
+
+        // Se campanha usa fluxo, verificar e auto-ativar se necessário
+        if (campaign.flowId) {
+            const flow = await this.flowRepo.findOne({ where: { id: campaign.flowId } });
+            if (!flow) {
+                throw new BadRequestException(`Fluxo ${campaign.flowId} não encontrado.`);
+            }
+            if (flow.status !== 'active') {
+                this.logger.log(`🔄 Auto-ativando fluxo "${flow.name}" (status era: ${flow.status}) para campanha ${id}`);
+                await this.flowRepo.update(flow.id, { status: 'active' });
+            }
+        }
+
+        // Verificar se pelo menos uma instância está conectada
+        const instanceIds = campaign.instanceIds?.length > 0 ? campaign.instanceIds : (campaign.instanceId ? [campaign.instanceId] : []);
+        if (instanceIds.length > 0) {
+            const connectedCount = await this.campaignRepo.manager.getRepository(Instance).count({
+                where: { id: In(instanceIds), status: InstanceStatus.CONNECTED },
+            });
+            if (connectedCount === 0) {
+                this.logger.warn(`⚠️ Nenhuma das ${instanceIds.length} instâncias está conectada! A campanha pode encontrar falhas.`);
+            } else {
+                this.logger.log(`✅ ${connectedCount}/${instanceIds.length} instâncias conectadas para campanha ${id}`);
+            }
         }
 
         // Se não tem variações, criar variações (APENAS se não for campanha de fluxo)
@@ -401,6 +487,11 @@ export class CampaignsService {
         // Controller expects an array to check .length
         return new Array(result.imported).fill({});
     }
+
+    async getGlobalContactStats(tenantId: string) {
+        return this.contactsService.getContactStats(tenantId);
+    }
+
     async retryFailed(id: string, tenantId: string) {
         const campaign = await this.findOne(id, tenantId);
 
@@ -484,5 +575,229 @@ export class CampaignsService {
         );
 
         return this.findOne(id, tenantId);
+    }
+
+    /**
+     * Calcula previsão de término de uma campanha baseado na saúde dos chips e configuração de disparo
+     */
+    async getEstimate(id: string, tenantId: string) {
+        const campaign = await this.findOne(id, tenantId);
+
+        // Contatos restantes
+        const remainingContacts = await this.campaignContactRepo.count({
+            where: { campaignId: id, status: 'queued' },
+        });
+
+        const sentContacts = campaign.sentCount || 0;
+        const failedContacts = campaign.failedCount || 0;
+        const totalContacts = campaign.totalContacts || 0;
+
+        if (remainingContacts === 0) {
+            return {
+                campaignId: id,
+                campaignName: campaign.name,
+                status: campaign.status,
+                remainingContacts: 0,
+                totalContacts,
+                sentContacts,
+                failedContacts,
+                estimatedFinishAt: campaign.completedAt || new Date().toISOString(),
+                estimatedDurationMs: 0,
+                estimatedDurationFormatted: 'Concluída',
+                spansMultipleDays: false,
+                instanceDetails: [],
+                avgDelayPerMessageMs: 0,
+                avgDelayFormatted: '0s',
+            };
+        }
+
+        // Buscar instâncias da campanha
+        const instanceIds = campaign.instanceIds?.length > 0
+            ? campaign.instanceIds
+            : (campaign.instanceId ? [campaign.instanceId] : []);
+
+        const instanceDetails: Array<{
+            id: string;
+            name: string;
+            status: string;
+            warmupDay: number;
+            dailySent: number;
+            dailyLimit: number;
+            remainingToday: number;
+            healthScore: number;
+            healthLabel: string;
+            warmupMultiplier: number;
+            effectiveDelayRange: string;
+        }> = [];
+
+        let totalRemainingToday = 0;
+        let connectedCount = 0;
+        let avgWarmupMultiplier = 0;
+
+        for (const instId of instanceIds) {
+            const inst = await this.campaignRepo.manager.getRepository(Instance).findOne({
+                where: { id: instId },
+            });
+
+            if (!inst) continue;
+
+            const warmupDay = inst.warmupDay || 0;
+            const warmupMultiplier = this.calculateWarmupMultiplier(warmupDay);
+            const remainingToday = Math.max(0, inst.dailyLimit - inst.dailySent);
+            const healthScore = this.calculateHealthScore(inst);
+            const isConnected = String(inst.status) === 'connected';
+
+            if (isConnected) {
+                connectedCount++;
+                totalRemainingToday += remainingToday;
+                avgWarmupMultiplier += warmupMultiplier;
+            }
+
+            // Calcular delay efetivo para esta instância
+            const baseMinSec = (campaign.minDelayMs || 5000) / 1000;
+            const baseMaxSec = (campaign.maxDelayMs || 15000) / 1000;
+            const effectiveMinSec = Math.round(baseMinSec * warmupMultiplier);
+            const effectiveMaxSec = Math.round(baseMaxSec * warmupMultiplier);
+
+            instanceDetails.push({
+                id: inst.id,
+                name: inst.instanceName,
+                status: String(inst.status),
+                warmupDay,
+                dailySent: inst.dailySent,
+                dailyLimit: inst.dailyLimit,
+                remainingToday,
+                healthScore,
+                healthLabel: healthScore >= 80 ? 'Excelente' : healthScore >= 60 ? 'Bom' : healthScore >= 40 ? 'Regular' : 'Ruim',
+                warmupMultiplier: Math.round(warmupMultiplier * 100) / 100,
+                effectiveDelayRange: `${effectiveMinSec}s - ${effectiveMaxSec}s`,
+            });
+        }
+
+        if (connectedCount > 0) {
+            avgWarmupMultiplier /= connectedCount;
+        } else {
+            avgWarmupMultiplier = 1;
+        }
+
+        // Calcular delay médio por mensagem
+        const baseMinMs = campaign.minDelayMs || 5000;
+        const baseMaxMs = campaign.maxDelayMs || 15000;
+        const avgBaseDelayMs = (baseMinMs + baseMaxMs) / 2;
+        const avgDelayPerMessageMs = Math.round(avgBaseDelayMs * avgWarmupMultiplier);
+
+        // Typing simulation adds ~2-15s extra (avg ~8.5s)
+        const avgTypingMs = 8500;
+        // Pre-typing delay 0.5-2s (avg 1.25s)
+        const avgPreTypingMs = 1250;
+        const totalAvgDelayPerMsg = avgDelayPerMessageMs + avgTypingMs + avgPreTypingMs;
+
+        // Se flow campaign, delay é mais simples (sem typing simulation do dispatcher)
+        const effectiveDelayPerMsg = campaign.flowId ? avgDelayPerMessageMs : totalAvgDelayPerMsg;
+
+        // Calcular horas ativas por dia
+        const activeStart = campaign.settings?.activeHoursStart || '08:00';
+        const activeEnd = campaign.settings?.activeHoursEnd || '20:00';
+        const [startH, startM] = activeStart.split(':').map(Number);
+        const [endH, endM] = activeEnd.split(':').map(Number);
+        const activeMinutesPerDay = (endH * 60 + endM) - (startH * 60 + startM);
+        const activeMsPerDay = Math.max(activeMinutesPerDay * 60 * 1000, 8 * 3600 * 1000); // min 8h
+
+        // Throughput: se temos N instâncias conectadas, a concurrency é limitada pelo
+        // concurrency do BullMQ (5) mas cada job tem delays longos, então efetivamente
+        // é ~1 mensagem por (effectiveDelay / min(connectedInstances, 5))
+        const effectiveConcurrency = Math.min(connectedCount || 1, 5);
+        const effectiveDelayBetweenSends = effectiveDelayPerMsg / effectiveConcurrency;
+
+        // Calcular tempo total estimado
+        const totalEstimatedMs = remainingContacts * effectiveDelayBetweenSends;
+
+        // Verificar se excede horas ativas de hoje
+        const now = new Date();
+        const todayEndActive = new Date(now);
+        todayEndActive.setHours(endH, endM, 0, 0);
+        const msRemainingToday = Math.max(0, todayEndActive.getTime() - now.getTime());
+
+        // Verificar limite diário
+        const messagesCanSendToday = connectedCount > 0
+            ? Math.min(totalRemainingToday, Math.floor(msRemainingToday / effectiveDelayBetweenSends))
+            : 0;
+
+        const spansMultipleDays = remainingContacts > messagesCanSendToday;
+
+        // Calcular data estimada de término
+        let estimatedFinishAt: Date;
+        if (!spansMultipleDays) {
+            estimatedFinishAt = new Date(now.getTime() + totalEstimatedMs);
+        } else {
+            // Hoje envia messagesCanSendToday, o restante preenche os próximos dias
+            const remainingAfterToday = remainingContacts - messagesCanSendToday;
+            const messagesPerDay = connectedCount > 0
+                ? Math.min(totalRemainingToday || Infinity, Math.floor(activeMsPerDay / effectiveDelayBetweenSends))
+                : 1; // Avoid division by zero
+            const additionalDays = Math.ceil(remainingAfterToday / Math.max(messagesPerDay, 1));
+
+            estimatedFinishAt = new Date(now);
+            estimatedFinishAt.setDate(estimatedFinishAt.getDate() + additionalDays);
+            estimatedFinishAt.setHours(startH + Math.floor((remainingAfterToday % messagesPerDay) * effectiveDelayBetweenSends / 3600000), startM, 0, 0);
+        }
+
+        // Formatar duração
+        const formatDuration = (ms: number): string => {
+            if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+            if (ms < 3600000) return `${Math.round(ms / 60000)}min`;
+            const hours = Math.floor(ms / 3600000);
+            const minutes = Math.round((ms % 3600000) / 60000);
+            if (hours < 24) return `${hours}h ${minutes}min`;
+            const days = Math.floor(hours / 24);
+            const remainingHours = hours % 24;
+            return `${days}d ${remainingHours}h`;
+        };
+
+        return {
+            campaignId: id,
+            campaignName: campaign.name,
+            status: campaign.status,
+            remainingContacts,
+            totalContacts,
+            sentContacts,
+            failedContacts,
+            connectedInstances: connectedCount,
+            totalInstances: instanceIds.length,
+            estimatedFinishAt: estimatedFinishAt.toISOString(),
+            estimatedDurationMs: Math.round(totalEstimatedMs),
+            estimatedDurationFormatted: formatDuration(totalEstimatedMs),
+            spansMultipleDays,
+            messagesCanSendToday,
+            activeHours: `${activeStart} - ${activeEnd}`,
+            avgDelayPerMessageMs: Math.round(effectiveDelayPerMsg),
+            avgDelayFormatted: formatDuration(effectiveDelayPerMsg),
+            effectiveConcurrency,
+            instanceDetails,
+        };
+    }
+
+    private calculateWarmupMultiplier(warmupDay: number): number {
+        if (warmupDay <= 3) return 4 - (warmupDay - 1) * 0.5; // 4x, 3.5x, 3x
+        if (warmupDay <= 7) return 3 - (warmupDay - 3) * 0.25; // 2.75x, 2.5x, 2.25x, 2x
+        if (warmupDay <= 14) return 2 - (warmupDay - 7) * 0.14; // ~1.86x ... ~1x
+        return 1;
+    }
+
+    private calculateHealthScore(instance: Instance): number {
+        let score = 50;
+        const warmupDays = instance.warmupDay || 0;
+        if (warmupDays >= 14) score += 25;
+        else if (warmupDays >= 7) score += 15;
+        else if (warmupDays >= 3) score += 5;
+
+        const usageRatio = (instance.dailySent || 0) / (instance.dailyLimit || 100);
+        if (usageRatio < 0.3) score += 15;
+        else if (usageRatio < 0.6) score += 10;
+        else if (usageRatio < 0.8) score += 5;
+        else score -= 10;
+
+        if (String(instance.status) === 'connected') score += 10;
+        return Math.max(0, Math.min(100, score));
     }
 }

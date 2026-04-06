@@ -15,7 +15,8 @@ const navItems = [
     { href: '/contatos', label: 'Contatos', icon: '/icons/sidebar/contacts.png' },
     { href: '/proxies', label: 'Proxies', icon: '/icons/sidebar/proxies.png' },
     { href: '/ai-spinner', label: 'AI Spinner', icon: '/icons/sidebar/ai_spinner.png' },
-    { href: '/antiban', label: 'Anti-Ban', icon: '/icons/sidebar/warmup.png' },
+    { href: '/antiban', label: 'Anti-Ban', icon: '/icons/sidebar/dashboard.png' },
+    { href: '/warmup', label: 'Warm-up', icon: '/icons/sidebar/warmup.png' },
     { href: '/analytics', label: 'Analytics', icon: '/icons/sidebar/analytics.png' },
     { href: '/configuracoes', label: 'Configurações', icon: '/icons/sidebar/settings.png' },
 ];
@@ -31,12 +32,12 @@ export function Sidebar() {
 
     return (
         <aside className="sidebar flex flex-col h-full bg-[#1e2330] border-r border-[#2d3241]">
-            <div className="sidebar-logo p-6 flex justify-center border-b border-[#2d3241]">
-                <Link href="/" className="flex items-center gap-2">
+            <div className="sidebar-logo p-3 flex justify-center border-b border-[#2d3241] min-h-[100px] items-center">
+                <Link href="/" className="flex items-center w-full justify-center">
                     <img
                         src="/logo.png"
                         alt="WhatSaas"
-                        className="h-12 object-contain drop-shadow-lg"
+                        className="h-20 w-auto object-contain drop-shadow-[0_0_8px_rgba(37,211,102,0.3)] hover:scale-105 transition-transform duration-300"
                     />
                 </Link>
             </div>

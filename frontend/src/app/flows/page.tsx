@@ -270,7 +270,7 @@ export default function FlowsPage() {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <img src="/icons/sidebar/flows.png" alt="Fluxos" className="w-10 h-10 object-contain drop-shadow-md" />
-                        <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Fluxos</h1>
+                        <h1 className="text-2xl font-bold !text-gray-900 dark:!text-white">Fluxos</h1>
                         <button
                             onClick={() => setShowChannelModal(true)}
                             className="px-4 py-2 bg-[#22c55e] text-white rounded-full font-semibold text-sm hover:bg-[#16a34a] transition-colors"
@@ -595,125 +595,7 @@ export default function FlowsPage() {
                                 )}
                             </button>
 
-                            {/* Telegram */}
-                            <button
-                                onClick={() => setSelectedChannel('telegram')}
-                                className={`group relative flex items-center gap-4 p-4 rounded-2xl border-2 transition-all duration-300 hover:scale-[1.02] ${selectedChannel === 'telegram'
-                                    ? 'border-[#0088CC] bg-[#0088CC]/10 dark:bg-[#0088CC]/20 shadow-lg'
-                                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-[#0088CC]/60 hover:shadow-md'
-                                    }`}
-                            >
-                                <div className="w-14 h-14 rounded-xl overflow-hidden bg-white dark:bg-gray-900 shadow-sm flex-shrink-0">
-                                    <img src="/icons/telegram.jpg" alt="Telegram" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="text-left">
-                                    <span className="font-semibold text-gray-900 dark:text-white block">Telegram</span>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">Bot API</span>
-                                </div>
-                                {selectedChannel === 'telegram' && (
-                                    <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-[#0088CC] flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                )}
-                            </button>
-
-                            {/* Instagram */}
-                            <button
-                                onClick={() => setSelectedChannel('instagram')}
-                                className={`group relative flex items-center gap-4 p-4 rounded-2xl border-2 transition-all duration-300 hover:scale-[1.02] ${selectedChannel === 'instagram'
-                                    ? 'border-[#E4405F] bg-[#E4405F]/10 dark:bg-[#E4405F]/20 shadow-lg'
-                                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-[#E4405F]/60 hover:shadow-md'
-                                    }`}
-                            >
-                                <div className="w-14 h-14 rounded-xl overflow-hidden bg-white dark:bg-gray-900 shadow-sm flex-shrink-0">
-                                    <img src="/icons/instagram.jpg" alt="Instagram" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="text-left">
-                                    <span className="font-semibold text-gray-900 dark:text-white block">Instagram</span>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">DM & Stories</span>
-                                </div>
-                                {selectedChannel === 'instagram' && (
-                                    <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-gradient-to-br from-[#833AB4] to-[#E4405F] flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                )}
-                            </button>
-
-                            {/* Messenger */}
-                            <button
-                                onClick={() => setSelectedChannel('messenger')}
-                                className={`group relative flex items-center gap-4 p-4 rounded-2xl border-2 transition-all duration-300 hover:scale-[1.02] ${selectedChannel === 'messenger'
-                                    ? 'border-[#0084FF] bg-[#0084FF]/10 dark:bg-[#0084FF]/20 shadow-lg'
-                                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-[#0084FF]/60 hover:shadow-md'
-                                    }`}
-                            >
-                                <div className="w-14 h-14 rounded-xl overflow-hidden bg-white dark:bg-gray-900 shadow-sm flex-shrink-0">
-                                    <img src="/icons/messenger.jpg" alt="Messenger" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="text-left">
-                                    <span className="font-semibold text-gray-900 dark:text-white block">Messenger</span>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">Facebook Chat</span>
-                                </div>
-                                {selectedChannel === 'messenger' && (
-                                    <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-gradient-to-br from-[#0084FF] to-[#A033FF] flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                )}
-                            </button>
-
-                            {/* SMS */}
-                            <button
-                                onClick={() => setSelectedChannel('sms')}
-                                className={`group relative flex items-center gap-4 p-4 rounded-2xl border-2 transition-all duration-300 hover:scale-[1.02] ${selectedChannel === 'sms'
-                                    ? 'border-[#10B981] bg-[#10B981]/10 dark:bg-[#10B981]/20 shadow-lg'
-                                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-[#10B981]/60 hover:shadow-md'
-                                    }`}
-                            >
-                                <div className="w-14 h-14 rounded-xl overflow-hidden bg-white dark:bg-gray-900 shadow-sm flex-shrink-0">
-                                    <img src="/icons/sms.jpg" alt="SMS" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="text-left">
-                                    <span className="font-semibold text-gray-900 dark:text-white block">SMS</span>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">Mensagem de texto</span>
-                                </div>
-                                {selectedChannel === 'sms' && (
-                                    <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-[#10B981] flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                )}
-                            </button>
-
-                            {/* Email - Full Width */}
-                            <button
-                                onClick={() => setSelectedChannel('email')}
-                                className={`group relative flex items-center gap-4 p-4 rounded-2xl border-2 transition-all duration-300 hover:scale-[1.02] col-span-2 ${selectedChannel === 'email'
-                                    ? 'border-[#EA4335] bg-[#EA4335]/10 dark:bg-[#EA4335]/20 shadow-lg'
-                                    : 'border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:border-[#EA4335]/60 hover:shadow-md'
-                                    }`}
-                            >
-                                <div className="w-14 h-14 rounded-xl overflow-hidden bg-white dark:bg-gray-900 shadow-sm flex-shrink-0">
-                                    <img src="/icons/email.jpg" alt="Email" className="w-full h-full object-cover" />
-                                </div>
-                                <div className="text-left flex-1">
-                                    <span className="font-semibold text-gray-900 dark:text-white block">Email</span>
-                                    <span className="text-xs text-gray-500 dark:text-gray-400">Campanhas de email marketing</span>
-                                </div>
-                                {selectedChannel === 'email' && (
-                                    <div className="absolute top-3 right-3 w-6 h-6 rounded-full bg-gradient-to-br from-[#EA4335] to-[#FBBC04] flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                        </svg>
-                                    </div>
-                                )}
-                            </button>
+                            {/* Outros canais (Telegram, Instagram, SMS, Email) serão adicionados na Fase 2 */}
                         </div>
 
                         {/* Create Button */}

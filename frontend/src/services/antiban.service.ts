@@ -33,6 +33,15 @@ export interface DashboardData {
         trend: 'up' | 'down' | 'stable';
         prediction: number;
     }>;
+    topInstances?: Array<{
+        instanceId: string;
+        totalSent: number;
+        totalDelivered: number;
+        totalFailed: number;
+        deliveryRate: number;
+        healthScore: number;
+        trend: 'improving' | 'stable' | 'declining' | 'critical';
+    }>;
 }
 
 export const antibanService = {

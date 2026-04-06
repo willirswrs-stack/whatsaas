@@ -61,6 +61,7 @@ export class InstancesService {
         instanceName: string;
         proxyId?: string;
         provider?: ProviderType;
+        config?: any;
     }) {
         // Verificar se já existe uma instância com este nome
         const existing = await this.instanceRepo.findOne({
@@ -77,8 +78,10 @@ export class InstancesService {
         this.logger.log(`Creating instance via ${providerType}: ${data.instanceName}`);
 
         try {
-            // Create in WhatsApp provider
-            const providerResult = await provider.createInstance(data.instanceName);
+            // Create in WhatsApp provider, passing config (e.g. for official API token/number)
+            const providerResult = await provider.createInstance(data.instanceName, data.config);
+
+            const isOfficial = !!data.config?.token || !!data.config?.accessToken;
 
             // Save to database
             const instance = this.instanceRepo.create({
@@ -86,15 +89,26 @@ export class InstancesService {
                 instanceName: data.instanceName,
                 proxyId: data.proxyId,
                 provider: providerType,
-                status: InstanceStatus.CONNECTING,
+                status: isOfficial ? InstanceStatus.CONNECTING : InstanceStatus.CREATED,
+                channelType: isOfficial ? 'official' : 'unofficial',
+                metaConfig: isOfficial ? {
+                    wabaId: data.config.wabaId,
+                    phoneNumberId: data.config.phoneNumberId,
+                    appId: data.config.appId,
+                    // Note: Sensitive tokens might usually be encrypted or stored securely.
+                    // Storing plain text for POC/Dev, but consider security implications.
+                    accessToken: data.config.accessToken || data.config.token,
+                } : {},
                 evolutionConfig: {
                     instanceId: providerResult.instanceId,
+                    integration: isOfficial ? 'WHATSAPP-BUSINESS' : 'WHATSAPP-BAILEYS',
                 },
             });
 
             await this.instanceRepo.save(instance);
 
-            // Get QR code
+            // Get QR code (only if not official, but getQrCode handles logic)
+            // If official, getQrCode might return empty or null
             const qrCode = await provider.getQrCode(data.instanceName);
 
             return { instance, qrCode };
@@ -121,11 +135,22 @@ export class InstancesService {
         const provider = this.providerFactory.getProvider((instance.provider as ProviderType) || 'evolution');
         const status = await provider.getStatus(instance.instanceName);
 
+        let shouldSave = false;
+
         // Update instance status in DB
         if (status.status === InstanceStatus.CONNECTED && instance.status !== InstanceStatus.CONNECTED) {
             instance.status = InstanceStatus.CONNECTED;
-            instance.phone = status.phoneNumber || instance.phone;
             instance.connectedAt = new Date();
+            shouldSave = true;
+        }
+
+        // Se o provedor retornar telefone e não tivermos, ou se o status for conectado agora
+        if (status.status === InstanceStatus.CONNECTED && status.phoneNumber && !instance.phone) {
+            instance.phone = status.phoneNumber.replace('@s.whatsapp.net', '');
+            shouldSave = true;
+        }
+
+        if (shouldSave) {
             await this.instanceRepo.save(instance);
         }
 

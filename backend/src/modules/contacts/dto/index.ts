@@ -16,7 +16,13 @@ export class CreateContactDto {
 
     @IsString()
     @IsOptional()
+    @MaxLength(100)
+    category?: string;
+
+    @IsString()
+    @IsOptional()
     email?: string;
+
 
     @IsObject()
     @IsOptional()
@@ -38,6 +44,11 @@ export class UpdateContactDto {
     @IsOptional()
     @MaxLength(255)
     name?: string;
+
+    @IsString()
+    @IsOptional()
+    @MaxLength(100)
+    category?: string;
 
     @IsEmail()
     @IsOptional()
@@ -67,6 +78,11 @@ export class ContactQueryDto {
     search?: string;
 
     @IsOptional()
+    @IsString()
+    category?: string;
+
+    @IsOptional()
+    @Transform(({ value }) => (typeof value === 'string' ? value.split(',') : value))
     tagIds?: string[];
 
     @IsOptional()
@@ -98,6 +114,14 @@ export class ContactQueryDto {
     @Min(1)
     @Type(() => Number)
     limit?: number = 50;
+
+    @IsOptional()
+    @IsString()
+    startDate?: string;
+
+    @IsOptional()
+    @IsString()
+    endDate?: string;
 }
 
 export class ImportContactsDto {
@@ -123,6 +147,21 @@ export class BulkRemoveTagsDto {
     @IsArray()
     @IsUUID('4', { each: true })
     tagIds: string[];
+}
+
+export class VerifyContactsDto {
+    @IsString()
+    @IsNotEmpty()
+    instanceName: string;
+
+    @IsArray()
+    @IsUUID('4', { each: true })
+    contactIds: string[];
+
+    @IsString()
+    @IsNotEmpty()
+    @IsIn(['evolution', 'waha'])
+    providerType: 'evolution' | 'waha';
 }
 
 // ============ TAG DTOs ============

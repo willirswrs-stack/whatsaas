@@ -54,6 +54,7 @@ export class EvolutionWebhookController {
                     break;
 
                 case 'MESSAGES_UPDATE':
+                case 'messages.update':
                     await this.handleMessageUpdate(data);
                     break;
 

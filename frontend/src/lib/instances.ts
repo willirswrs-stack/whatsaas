@@ -11,10 +11,12 @@ export interface Instance {
     phoneNumber?: string;  // Alias for compatibility
     status: 'connecting' | 'connected' | 'disconnected' | 'banned';
     warmupDay: number;     // Backend field name
+    warmupEnabled?: boolean; // Whether warmup is active
     warmupProgress?: number; // Alias for compatibility
     dailyLimit: number;
     dailySent: number;     // Backend field name
     messagesSent?: number; // Alias for compatibility
+    healthScore?: number;  // Calculated health score 0-100
     provider?: ProviderType;
     proxy?: {
         id: string;
@@ -231,6 +233,27 @@ export const instancesService = {
             return { ...data, id: 'proxy-' + Date.now(), status: 'active', latency: Math.floor(Math.random() * 100) };
         }
         const response = await api.post<Proxy>('/instances/proxies', data);
+        return response.data;
+    },
+
+    async toggleWarmup(id: string, enabled: boolean): Promise<Instance> {
+        if (isDemoMode()) {
+            const index = demoInstancesState.findIndex((i) => i.id === id);
+            if (index !== -1) {
+                demoInstancesState[index] = { ...demoInstancesState[index], warmupEnabled: enabled };
+                return demoInstancesState[index];
+            }
+            throw new Error('Instância não encontrada');
+        }
+        const response = await api.patch<Instance>(`/instances/${id}/warmup`, { enabled });
+        return response.data;
+    },
+
+    async getHealth(id: string): Promise<{ score: number; status: { status: string; emoji: string; recommendation: string; color: string } }> {
+        if (isDemoMode()) {
+            return { score: 75, status: { status: 'good', emoji: '🟡', recommendation: 'Boa saúde', color: '#84cc16' } };
+        }
+        const response = await api.get(`/instances/${id}/health`);
         return response.data;
     },
 };

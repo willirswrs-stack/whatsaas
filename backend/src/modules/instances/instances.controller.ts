@@ -15,6 +15,7 @@ import { IsString, IsOptional, IsIn } from 'class-validator';
 import { InstancesService } from './instances.service';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { CurrentTenant } from '../auth/decorators/current-tenant.decorator';
+import { ChipHealthService } from '../anti-ban/chip-health.service';
 import type { ProviderType } from '../whatsapp';
 
 class CreateInstanceDto {
@@ -28,6 +29,9 @@ class CreateInstanceDto {
     @IsOptional()
     @IsIn(['waha', 'evolution'])
     provider?: ProviderType;
+
+    @IsOptional()
+    config?: Record<string, any>;
 }
 
 @ApiTags('instances')
@@ -35,7 +39,10 @@ class CreateInstanceDto {
 @Controller('instances')
 @UseGuards(AuthGuard('jwt'), TenantGuard)
 export class InstancesController {
-    constructor(private readonly instancesService: InstancesService) { }
+    constructor(
+        private readonly instancesService: InstancesService,
+        private readonly chipHealthService: ChipHealthService,
+    ) { }
 
     @Get()
     @ApiOperation({ summary: 'List all instances' })
@@ -72,10 +79,20 @@ export class InstancesController {
     @ApiOperation({ summary: 'Update instance configuration' })
     async update(
         @Param('id') id: string,
-        @Body() data: { proxyId?: string },
+        @Body() data: { proxyId?: string; warmupEnabled?: boolean },
         @CurrentTenant() tenantId: string,
     ) {
         return this.instancesService.update(id, tenantId, data as any);
+    }
+
+    @Patch(':id/warmup')
+    @ApiOperation({ summary: 'Toggle warmup mode for instance' })
+    async toggleWarmup(
+        @Param('id') id: string,
+        @Body() body: { enabled: boolean },
+        @CurrentTenant() tenantId: string,
+    ) {
+        return this.instancesService.update(id, tenantId, { warmupEnabled: body.enabled } as any);
     }
 
     // Rotas com parâmetros dinâmicos - devem ficar por último
@@ -86,6 +103,14 @@ export class InstancesController {
         @CurrentTenant() tenantId: string,
     ) {
         return this.instancesService.findOne(id, tenantId);
+    }
+
+    @Get(':id/health')
+    @ApiOperation({ summary: 'Get health score for instance' })
+    async getHealth(@Param('id') id: string) {
+        const score = await this.chipHealthService.calculateHealthScore(id);
+        const status = await this.chipHealthService.getHealthStatus(id);
+        return { instanceId: id, score, status };
     }
 
     @Get(':id/status')

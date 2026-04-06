@@ -41,7 +41,13 @@ export class MetaTemplatesController {
         @Request() req,
         @Body() dto: CreateWabaAccountDto,
     ): Promise<WabaAccount> {
-        return this.metaTemplatesService.createWabaAccount(req.user.tenantId, dto);
+        console.log('[DEBUG-CTRL] Received createAccount request:', JSON.stringify(dto, null, 2));
+        try {
+            return await this.metaTemplatesService.createWabaAccount(req.user.tenantId, dto);
+        } catch (e) {
+            console.error('[DEBUG-CTRL] Error in service:', e);
+            throw e;
+        }
     }
 
     /**

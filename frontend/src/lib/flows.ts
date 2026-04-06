@@ -232,7 +232,19 @@ export const flowsApi = {
 
 // ============ NODE DEFINITIONS ============
 
-export const NODE_CATEGORIES = [
+export interface NodeCategory {
+    id: string;
+    label: string;
+    nodes: Array<{
+        type: string;
+        label: string;
+        icon: string;
+        color: string;
+        channels?: string[];
+    }>;
+}
+
+export const NODE_CATEGORIES: NodeCategory[] = [
     {
         id: 'messages',
         label: 'Mensagens',
@@ -246,28 +258,28 @@ export const NODE_CATEGORIES = [
         id: 'templates',
         label: 'Templates Meta',
         nodes: [
-            { type: 'templateText', label: 'Template de texto', icon: '📝', color: '#8b5cf6' },
-            { type: 'templateButton', label: 'Template com botão', icon: '🔘', color: '#8b5cf6' },
+            { type: 'templateText', label: 'Template de texto', icon: '📝', color: '#8b5cf6', channels: ['whatsapp-meta'] },
+            { type: 'templateButton', label: 'Template com botão', icon: '🔘', color: '#8b5cf6', channels: ['whatsapp-meta'] },
         ],
     },
     {
         id: 'media',
         label: 'Mídias',
         nodes: [
-            { type: 'video', label: 'Vídeo', icon: '🎬', color: '#ef4444' },
-            { type: 'image', label: 'Imagem', icon: '🖼️', color: '#22c55e' },
-            { type: 'sticker', label: 'Sticker', icon: '😀', color: '#f59e0b' },
-            { type: 'audio', label: 'Áudio', icon: '🎵', color: '#ec4899' },
-            { type: 'document', label: 'Documento', icon: '📄', color: '#6366f1' },
+            { type: 'video', label: 'Vídeo', icon: '🎬', color: '#ef4444', channels: ['whatsapp-web', 'whatsapp-meta'] },
+            { type: 'image', label: 'Imagem', icon: '🖼️', color: '#22c55e', channels: ['whatsapp-web', 'whatsapp-meta'] },
+            { type: 'sticker', label: 'Sticker', icon: '😀', color: '#f59e0b', channels: ['whatsapp-web', 'whatsapp-meta'] },
+            { type: 'audio', label: 'Áudio', icon: '🎵', color: '#ec4899', channels: ['whatsapp-web', 'whatsapp-meta'] },
+            { type: 'document', label: 'Documento', icon: '📄', color: '#6366f1', channels: ['whatsapp-web', 'whatsapp-meta'] },
         ],
     },
     {
         id: 'buttons',
         label: 'Botões',
         nodes: [
-            { type: 'buttonsDefault', label: 'Padrão', icon: '🔲', color: '#14b8a6' },
-            { type: 'buttonsCopy', label: 'Copia e Cola', icon: '📋', color: '#f97316' },
-            { type: 'buttonsActions', label: 'Ações', icon: '⚡', color: '#a855f7' },
+            { type: 'buttonsDefault', label: 'Padrão', icon: '🔲', color: '#14b8a6', channels: ['whatsapp-web', 'whatsapp-meta'] },
+            { type: 'buttonsCopy', label: 'Copia e Cola', icon: '📋', color: '#f97316', channels: ['whatsapp-web', 'whatsapp-meta'] },
+            { type: 'buttonsActions', label: 'Ações', icon: '⚡', color: '#a855f7', channels: ['whatsapp-web', 'whatsapp-meta'] },
         ],
     },
     {
@@ -283,14 +295,6 @@ export const NODE_CATEGORIES = [
         ],
     },
     {
-        id: 'channels',
-        label: 'Canais',
-        nodes: [
-            { type: 'sms', label: 'SMS', icon: '📲', color: '#22C55E' },
-            { type: 'email', label: 'Email', icon: '📧', color: '#EA4335' },
-        ],
-    },
-    {
         id: 'actions',
         label: 'Ações',
         nodes: [
@@ -301,11 +305,22 @@ export const NODE_CATEGORIES = [
             { type: 'multiCondition', label: 'Multi condição', icon: '🔀', color: '#ec4899' },
             { type: 'moveFlow', label: 'Mover de fluxo', icon: '↗️', color: '#8b5cf6' },
             { type: 'randomizer', label: 'Randomizer', icon: '🎲', color: '#22c55e' },
-            { type: 'fakeCall', label: 'Fake Call', icon: '📞', color: '#14b8a6' },
+            { type: 'fakeCall', label: 'Fake Call', icon: '📞', color: '#14b8a6', channels: ['whatsapp-web'] },
             { type: 'contacts', label: 'Contatos', icon: '👥', color: '#6366f1' },
         ],
     },
 ];
+
+export const getNodesForChannel = (channel?: string) => {
+    if (!channel) return NODE_CATEGORIES;
+
+    return NODE_CATEGORIES.map(category => {
+        const filteredNodes = category.nodes.filter(
+            (node: any) => !node.channels || node.channels.includes(channel)
+        );
+        return { ...category, nodes: filteredNodes };
+    }).filter(category => category.nodes.length > 0);
+};
 
 export const getNodeColor = (type: FlowNodeType): string => {
     const colors: Record<FlowNodeType, string> = {

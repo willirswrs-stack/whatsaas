@@ -5,6 +5,7 @@ import { Instance, Proxy, WarmupSchedule } from './entities/instance.entity';
 import { InstancesController } from './instances.controller';
 import { InstancesService } from './instances.service';
 import { EvolutionModule } from '../evolution/evolution.module';
+import { ChipHealthService } from '../anti-ban/chip-health.service';
 
 @Module({
     imports: [
@@ -12,7 +13,7 @@ import { EvolutionModule } from '../evolution/evolution.module';
         forwardRef(() => EvolutionModule),
     ],
     controllers: [InstancesController],
-    providers: [InstancesService],
+    providers: [InstancesService, ChipHealthService],
     exports: [InstancesService],
 })
 export class InstancesModule { }

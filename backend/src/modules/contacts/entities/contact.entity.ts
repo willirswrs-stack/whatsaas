@@ -8,20 +8,23 @@ import {
     ManyToMany,
     JoinTable,
     JoinColumn,
+    OneToMany,
 } from 'typeorm';
+
+import { CampaignContact } from '../../campaigns/entities/campaign.entity';
 
 @Entity('contacts')
 export class Contact {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ name: 'tenant_id', type: 'uuid', nullable: false })
+    @Column({ name: 'tenant_id', type: 'varchar', nullable: true })
     tenantId: string;
 
-    @Column({ type: 'varchar', length: 30, nullable: true })
+    @Column({ type: 'varchar', nullable: true })
     phone: string;
 
-    @Column({ type: 'varchar', length: 255, nullable: true })
+    @Column({ type: 'varchar', nullable: true })
     name: string;
 
     @Column({ type: 'varchar', length: 255, nullable: true })
@@ -29,6 +32,10 @@ export class Contact {
 
     @Column({ name: 'custom_fields', type: 'jsonb', default: {} })
     customFields: Record<string, any>;
+
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    category: string;
+
 
     @Column({ name: 'is_valid', type: 'boolean', default: true })
     isValid: boolean;
@@ -53,6 +60,9 @@ export class Contact {
 
     // Relacionamento com Tags (será resolvido depois)
     tags?: Tag[];
+
+    @OneToMany(() => CampaignContact, (cc) => cc.contact)
+    campaignContacts: CampaignContact[];
 }
 
 @Entity('tags')

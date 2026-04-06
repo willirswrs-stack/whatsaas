@@ -30,6 +30,8 @@ export const DISPATCH_QUEUE = 'dispatch-queue';
 export const WARMUP_QUEUE = 'warmup-queue';
 export const PROXY_HEALTH_QUEUE = 'proxy-health-queue';
 export const RECONNECTION_QUEUE = 'instance-reconcile-queue';
+export const SCHEDULER_QUEUE = 'scheduler-queue';
+export const FLOW_QUEUE = 'flow-queue';
 
 export const QueueDefinitions = BullModule.registerQueue(
     {
@@ -61,4 +63,18 @@ export const QueueDefinitions = BullModule.registerQueue(
             removeOnFail: 500,
         },
     },
+    {
+        name: SCHEDULER_QUEUE,
+        defaultJobOptions: {
+            attempts: 3,
+            removeOnComplete: true,
+        }
+    },
+    {
+        name: FLOW_QUEUE,
+        defaultJobOptions: {
+            attempts: 3,
+            removeOnComplete: true,
+        }
+    }
 );

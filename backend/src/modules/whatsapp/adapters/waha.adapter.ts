@@ -39,7 +39,7 @@ export class WahaAdapter implements IWhatsAppProvider {
         this.apiKey = configService.get('WAHA_API_KEY', '');
     }
 
-    async createInstance(instanceName: string): Promise<InstanceResult> {
+    async createInstance(instanceName: string, config?: any): Promise<InstanceResult> {
         const sessionName = 'default';
         try {
             try {

@@ -369,7 +369,12 @@ export default function CampaignsPage() {
             <Header />
 
             <div className="page-header">
-                <h1 className="page-title">Campanhas</h1>
+                <div className="flex items-center gap-3">
+                    <img src="/icons/sidebar/campaigns.png" alt="Campanhas" className="w-10 h-10 object-contain drop-shadow-md" />
+                    <div>
+                        <h1 className="page-title">Campanhas</h1>
+                    </div>
+                </div>
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}>
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                         <line x1="12" y1="5" x2="12" y2="19" />

@@ -165,11 +165,14 @@ export default function WebhooksIntegrationsPage() {
             <Header />
 
             <div className="page-header">
-                <div>
-                    <h1 className="page-title">Integrações de Webhooks</h1>
-                    <p className="text-sm text-[var(--text-muted)]">
-                        Configure webhooks para receber eventos de plataformas de e-commerce
-                    </p>
+                <div className="flex items-center gap-3">
+                    <img src="/icons/sidebar/webhooks.png" alt="Webhooks" className="w-10 h-10 object-contain drop-shadow-md" />
+                    <div>
+                        <h1 className="page-title">Integrações de Webhooks</h1>
+                        <p className="text-sm text-[var(--text-muted)]">
+                            Configure webhooks para receber eventos de plataformas de e-commerce
+                        </p>
+                    </div>
                 </div>
                 <button className="btn btn-primary" onClick={() => setShowModal(true)}>
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -249,8 +252,8 @@ export default function WebhooksIntegrationsPage() {
                                     <div className="flex items-center gap-3 mb-2">
                                         <h3 className="font-semibold text-lg">{integration.name}</h3>
                                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${integration.isEnabled
-                                                ? 'bg-green-500/20 text-green-400'
-                                                : 'bg-gray-500/20 text-gray-400'
+                                            ? 'bg-green-500/20 text-green-400'
+                                            : 'bg-gray-500/20 text-gray-400'
                                             }`}>
                                             {integration.isEnabled ? 'Ativa' : 'Inativa'}
                                         </span>

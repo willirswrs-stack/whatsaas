@@ -4,7 +4,7 @@ import { AppModule } from './src/app.module';
 import { DataSource } from 'typeorm';
 import { FlowExecution } from './src/modules/flows/entities/flow.entity';
 import { Instance } from './src/modules/instances/entities/instance.entity';
-import { Contact } from './src/modules/campaigns/entities/campaign.entity';
+import { Contact } from './src/modules/contacts/entities/contact.entity';
 
 async function deepDebugExecution() {
     const app = await NestFactory.createApplicationContext(AppModule, { logger: false });

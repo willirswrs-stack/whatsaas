@@ -4,7 +4,8 @@ import { getQueueToken } from '@nestjs/bullmq';
 import { ForbiddenException } from '@nestjs/common';
 
 import { DispatcherService } from './dispatcher.service';
-import { Campaign, CampaignContact, Contact } from '../campaigns/entities/campaign.entity';
+import { Campaign, CampaignContact } from '../campaigns/entities/campaign.entity';
+import { Contact } from '../contacts/entities/contact.entity';
 import { DISPATCH_QUEUE } from '../../config/bull.config';
 import { createMockRepository, MockRepository } from '../../test-utils';
 

@@ -228,11 +228,14 @@ export default function EventMappingsPage() {
             <Header />
 
             <div className="page-header">
-                <div>
-                    <h1 className="page-title">Mapeamentos de Eventos</h1>
-                    <p className="text-sm text-[var(--text-muted)]">
-                        Configure quais mensagens enviar para cada tipo de evento
-                    </p>
+                <div className="flex items-center gap-3">
+                    <img src="/icons/sidebar/webhooks.png" alt="Mappings" className="w-10 h-10 object-contain drop-shadow-md" />
+                    <div>
+                        <h1 className="page-title">Mapeamentos de Eventos</h1>
+                        <p className="text-sm text-[var(--text-muted)]">
+                            Configure quais mensagens enviar para cada tipo de evento
+                        </p>
+                    </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <select

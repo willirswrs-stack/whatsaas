@@ -29,6 +29,7 @@ import {
     ImportContactsDto,
     BulkAddTagsDto,
     BulkRemoveTagsDto,
+    VerifyContactsDto,
 } from './dto';
 
 @Controller('contacts')
@@ -40,7 +41,16 @@ export class ContactsController {
 
     @Get()
     async findAll(@Request() req, @Query() query: ContactQueryDto) {
-        return this.contactsService.findAllContacts(req.user.tenantId, query);
+        console.log('--- [CONTROLLER] findAll called ---');
+        console.log('User:', req.user);
+        console.log('Query:', query);
+        const result = await this.contactsService.findAllContacts(req.user.tenantId, query);
+        console.log('Service returned:', {
+            total: result.total,
+            dataLength: result.data?.length,
+            firstItem: result.data?.[0] ? { id: result.data[0].id, name: result.data[0].name } : 'None'
+        });
+        return result;
     }
 
     @Get('stats')
@@ -103,6 +113,17 @@ export class ContactsController {
     @HttpCode(HttpStatus.OK)
     async bulkDelete(@Request() req, @Body('ids') ids: string[]) {
         return this.contactsService.bulkDeleteContacts(req.user.tenantId, ids);
+    }
+
+    @Post('verify')
+    @HttpCode(HttpStatus.OK)
+    async verifyContacts(@Request() req, @Body() dto: VerifyContactsDto) {
+        return this.contactsService.verifyContacts(
+            req.user.tenantId,
+            dto.instanceName,
+            dto.contactIds,
+            dto.providerType,
+        );
     }
 
     // ============ TAGS - All specific routes ============

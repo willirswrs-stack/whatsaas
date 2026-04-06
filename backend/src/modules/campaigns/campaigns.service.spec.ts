@@ -7,9 +7,9 @@ import {
     Campaign,
     CampaignContact,
     MessageVariation,
-    Contact,
     Template,
 } from './entities/campaign.entity';
+import { Contact } from '../contacts/entities/contact.entity';
 import { AiService } from '../ai/ai.service';
 import { DispatcherService } from '../dispatcher/dispatcher.service';
 import { SettingsService } from '../settings/settings.service';
@@ -373,7 +373,7 @@ describe('CampaignsService', () => {
                 const result = await service.findAllContacts('tenant-123');
 
                 expect(result.data).toHaveLength(1);
-                expect(result.meta.total).toBe(1);
+                expect(result.total).toBe(1);
             });
         });
 

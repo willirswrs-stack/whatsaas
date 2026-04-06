@@ -1,6 +1,6 @@
-import { Module, OnApplicationBootstrap } from '@nestjs/common';
+import { Module, OnApplicationBootstrap, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { BullModule } from '@nestjs/bullmq'; // Import BullModule
+import { BullModule } from '@nestjs/bullmq';
 import { HumanBehaviorService } from './human-behavior.service';
 import { PatternBreakerService } from './pattern-breaker.service';
 import { PhoneNormalizerService } from './phone-normalizer.service';
@@ -8,11 +8,14 @@ import { DelayGeneratorService } from './delay-generator.service';
 import { StackRouterService } from './stack-router.service';
 import { AntiBanAnalyticsService } from './analytics.service';
 import { AnalyticsController } from './analytics.controller';
+import { WarmupController } from './warmup.controller';
 import { ChipHealthService } from './chip-health.service';
 import { WarmupService } from './warmup.service';
-import { WarmupProcessor } from './warmup.processor'; // Import Processor
+import { WarmupProcessor } from './warmup.processor';
 import { Instance } from '../instances/entities/instance.entity';
-import { WARMUP_QUEUE } from '../../config/bull.config'; // Import Queue Name
+import { WARMUP_QUEUE } from '../../config/bull.config';
+import { InstancesModule } from '../instances/instances.module';
+import { AiModule } from '../ai/ai.module';
 
 @Module({
     imports: [
@@ -20,8 +23,10 @@ import { WARMUP_QUEUE } from '../../config/bull.config'; // Import Queue Name
         BullModule.registerQueue({
             name: WARMUP_QUEUE,
         }),
+        forwardRef(() => InstancesModule),
+        AiModule,
     ],
-    controllers: [AnalyticsController],
+    controllers: [AnalyticsController, WarmupController],
     providers: [
         HumanBehaviorService,
         PatternBreakerService,

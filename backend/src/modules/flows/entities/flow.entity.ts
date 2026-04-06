@@ -10,20 +10,41 @@ import {
 export type FlowNodeType =
     | 'start'           // Nó inicial
     | 'message'         // Enviar mensagem de texto
-    | 'media'           // Enviar mídia (imagem, vídeo, áudio, documento)
+    | 'media'           // Enviar mídia genérica
     | 'link'            // Enviar link
     | 'image'           // Enviar imagem
     | 'video'           // Enviar vídeo
     | 'audio'           // Enviar áudio
     | 'document'        // Enviar documento
+    | 'sticker'         // Enviar sticker
     | 'delay'           // Aguardar intervalo
-    | 'buttons'         // Mensagem com botões
+    | 'buttons'         // Mensagem com botões (genérico)
+    | 'buttonsDefault'  // Botões padrão
+    | 'buttonsCopy'     // Botões copiar/colar
+    | 'buttonsActions'  // Botões com ações
     | 'question'        // Fazer pergunta e salvar resposta
     | 'condition'       // Condicional (if/else)
+    | 'multiCondition'  // Múltiplas condições
     | 'addTag'          // Adicionar tag ao contato
     | 'removeTag'       // Remover tag do contato
     | 'updateField'     // Atualizar campo do contato
+    | 'saveInfo'        // Gravar informação
+    | 'limitExecution'  // Limitar execução
+    | 'moveFlow'        // Mover para outro fluxo
+    | 'randomizer'      // Randomizar caminhos
+    | 'fakeCall'        // Simulação de ligação
+    | 'contacts'        // Ações com contatos
     | 'gpt'             // Integração ChatGPT
+    | 'openai'          // OpenAI
+    | 'anthropic'       // Anthropic/Claude
+    | 'gemini'          // Google Gemini
+    | 'groq'            // Groq/Llama
+    | 'customLlm'       // LLM customizada
+    | 'webhook'         // Chamada externa
+    | 'templateText'    // Template de texto Meta
+    | 'templateButton'  // Template com botão Meta
+    | 'sms'             // Enviar SMS
+    | 'email'           // Enviar email
     | 'end';            // Nó final
 
 // Configuração de cada tipo de nó
@@ -110,7 +131,7 @@ export class FlowExecution {
     instanceId: string;
 
     @Column({ type: 'varchar', length: 30, default: 'running' })
-    status: 'running' | 'completed' | 'failed' | 'paused' | 'waiting_response';
+    status: 'running' | 'completed' | 'failed' | 'paused' | 'waiting_response' | 'delayed';
 
     @Column({ name: 'current_node_id', type: 'varchar', length: 100, nullable: true })
     currentNodeId: string;

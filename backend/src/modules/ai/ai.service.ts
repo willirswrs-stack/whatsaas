@@ -434,7 +434,7 @@ export class AiService {
                     { role: 'system', content: systemPrompt },
                     { role: 'user', content: userPrompt },
                 ],
-                temperature: 0.7,
+                temperature: 0.95,
             });
 
             return response.choices[0]?.message?.content || '';

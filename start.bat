@@ -26,9 +26,9 @@ echo ✅ Docker OK
 
 :: Subir containers
 echo.
-echo [2/4] Iniciando PostgreSQL e Redis...
+echo [2/4] Iniciando Bancos e APIs de WhatsApp (Evolution/Waha)...
 cd /d "%~dp0backend"
-docker-compose up -d postgres redis
+docker-compose up -d postgres redis evolution waha
 if %ERRORLEVEL% neq 0 (
     echo ❌ Erro ao iniciar containers
     pause

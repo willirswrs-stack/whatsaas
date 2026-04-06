@@ -10,40 +10,7 @@ import {
     Index,
 } from 'typeorm';
 
-@Entity('contacts')
-@Index(['tenantId'])
-@Index(['phone'])
-export class Contact {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
-
-    @Column({ name: 'tenant_id', nullable: true })
-    tenantId: string;
-
-    @Column({ nullable: true })
-    phone: string;
-
-    @Column({ nullable: true })
-    name: string;
-
-    @Column('jsonb', { name: 'custom_fields', default: {} })
-    customFields: Record<string, any>;
-
-    @Column({ name: 'is_valid', default: true })
-    isValid: boolean;
-
-    @Column({ name: 'on_whatsapp', nullable: true })
-    onWhatsapp: boolean;
-
-    @Column({ name: 'last_interaction', nullable: true })
-    lastInteraction: Date;
-
-    @CreateDateColumn({ name: 'created_at' })
-    createdAt: Date;
-
-    @OneToMany(() => CampaignContact, (cc) => cc.contact)
-    campaignContacts: CampaignContact[];
-}
+import { Contact } from '../../contacts/entities/contact.entity';
 
 @Entity('templates')
 export class Template {
@@ -99,7 +66,10 @@ export class Campaign {
     flowId: string;
 
     @Column({ name: 'instance_id', nullable: true })
-    instanceId: string;
+    instanceId: string; // Deprecated, kept for backward compatibility
+
+    @Column('jsonb', { name: 'instance_ids', default: [] })
+    instanceIds: string[];
 
     @Column({ default: 'draft' })
     status: string; // 'draft', 'scheduled', 'running', 'paused', 'completed', 'cancelled'

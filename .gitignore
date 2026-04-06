@@ -45,3 +45,44 @@ backend/uploads/*
 nginx/ssl/*.pem
 nginx/ssl/*.key
 
+# Temporary debug/fix scripts (root level)
+tmp_*.tsx
+tmp_*.ts
+reset-password.js
+test_db.js
+
+# Backend debug/fix scripts (ad-hoc, not part of src/)
+backend/debug_*.js
+backend/debug_*.json
+backend/fix_*.js
+backend/check_*.js
+backend/check-*.js
+backend/test-*.js
+backend/test_*.js
+backend/setup_*.js
+backend/analyze_*.js
+backend/update_*.js
+backend/nuclear_*.js
+backend/populate_*.js
+backend/reset_*.js
+backend/reset-*.js
+backend/find_*.js
+backend/list_*.js
+backend/generate_*.js
+backend/try_*.js
+backend/evolution_*.js
+backend/manual_dispatch.js
+backend/debug-*.ts
+backend/users_list.json
+backend/flow_*.txt
+backend/inst.txt
+backend/startup_log*.txt
+backend/tail_log*.txt
+backend/temp.txt
+
+# Work logs and daily notes (root level)
+WORK_LOG_*.md
+DEBUG_STATUS.md
+RESUMO_TRABALHO_HOJE_*.md
+ANALISE_COMPLETA_*.md
+

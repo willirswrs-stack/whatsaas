@@ -26,7 +26,7 @@ import {
     useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { flowsApi, Flow, NODE_CATEGORIES, getNodeColor, FlowNodeType } from '@/lib/flows';
+import { flowsApi, Flow, getNodesForChannel, getNodeColor, FlowNodeType } from '@/lib/flows';
 import api from '@/lib/api';
 import { instancesService, Instance } from '@/lib/instances';
 import {
@@ -4375,7 +4375,7 @@ function FlowEditorContent() {
                                 className="w-full bg-gray-50 dark:bg-[var(--bg-glass)] border border-gray-200 dark:border-[var(--border-color)] rounded-lg px-3 py-2 text-sm mb-4"
                             />
 
-                            {NODE_CATEGORIES.map((category) => (
+                            {getNodesForChannel(flow?.channel).map((category) => (
                                 <div key={category.id} className="mb-2">
                                     <h4 className="text-xs font-semibold text-gray-400 uppercase mb-1">
                                         {category.label}

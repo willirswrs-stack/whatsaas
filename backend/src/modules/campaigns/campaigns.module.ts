@@ -6,9 +6,9 @@ import {
     Campaign,
     CampaignContact,
     MessageVariation,
-    Contact,
     Template,
 } from './entities/campaign.entity';
+import { Contact } from '../contacts/entities/contact.entity';
 import { ContactsModule } from '../contacts/contacts.module';
 import { CampaignsController } from './campaigns.controller';
 import { CampaignsService } from './campaigns.service';
@@ -17,6 +17,7 @@ import { DispatcherModule } from '../dispatcher/dispatcher.module';
 import { SettingsModule } from '../settings/settings.module';
 import { SCHEDULER_QUEUE } from '../../config/bull.config';
 import { CampaignSchedulerProcessor } from './campaign-scheduler.processor';
+import { Flow } from '../flows/entities';
 
 @Module({
     imports: [
@@ -26,6 +27,7 @@ import { CampaignSchedulerProcessor } from './campaign-scheduler.processor';
             MessageVariation,
             Contact,
             Template,
+            Flow,
         ]),
         BullModule.registerQueue({
             name: SCHEDULER_QUEUE,

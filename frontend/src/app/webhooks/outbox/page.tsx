@@ -77,11 +77,14 @@ export default function WebhookOutboxPage() {
             <Header />
 
             <div className="page-header">
-                <div>
-                    <h1 className="page-title">Outbox de Mensagens</h1>
-                    <p className="text-sm text-[var(--text-muted)]">
-                        Monitore as mensagens enviadas e gerencie reenvios
-                    </p>
+                <div className="flex items-center gap-3">
+                    <img src="/icons/sidebar/webhooks.png" alt="Outbox" className="w-10 h-10 object-contain drop-shadow-md" />
+                    <div>
+                        <h1 className="page-title">Outbox de Mensagens</h1>
+                        <p className="text-sm text-[var(--text-muted)]">
+                            Monitore as mensagens enviadas e gerencie reenvios
+                        </p>
+                    </div>
                 </div>
                 <button className="btn btn-secondary" onClick={loadMessages}>
                     <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

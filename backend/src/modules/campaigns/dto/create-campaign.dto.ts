@@ -35,16 +35,28 @@ export class CreateCampaignDto {
     @IsUUID()
     flowId?: string;
 
-    @ApiProperty({ required: false, description: 'Instance is required to start sending' })
+    @ApiProperty({ required: false, description: 'Single instance ID (deprecated, use instanceIds)' })
     @IsOptional()
     @IsUUID()
     instanceId?: string;
+
+    @ApiProperty({ type: [String], required: false, description: 'List of Instance IDs to distribute sending' })
+    @IsOptional()
+    @IsArray()
+    @IsUUID('4', { each: true })
+    instanceIds?: string[];
 
     @ApiProperty({ type: [String], required: false })
     @IsOptional()
     @IsArray()
     @IsUUID('4', { each: true })
     contactIds?: string[];
+
+    @ApiProperty({ type: [String], required: false, description: 'List of Tag IDs to include contacts from' })
+    @IsOptional()
+    @IsArray()
+    @IsUUID('4', { each: true })
+    tagIds?: string[];
 
     @ApiProperty({ required: false, default: true })
     @IsOptional()

@@ -1,32 +1,23 @@
-# Resumo do Trabalho - 13/02/2026
+# Resumo das Atividades de Hoje (20/02/2026)
 
-## 🎯 Objetivo de Hoje
-Finalizar e estabilizar a funcionalidade de teste de fluxos, garantindo que o usuário possa validar seus bots de forma simples e rápida.
+## 🎯 Objetivo Principal
+Resolver problemas de disparo de campanhas, especificamente os erros "NO_AVAILABLE_INSTANCE", falhas no envio de imagens em fluxos ("no_media_url", links indisponíveis) e o comportamento indesejado do robô da OpenAI em apenas responder 'Olá'.
 
-## ✅ O que foi feito
+## ✅ O Que Foi Feito e Validado
+1. **Limpeza e Estabilização de Instâncias:** 
+   - Limpamos instâncias fantasmas que causavam conflitos no dispatcher (`check_instances.js` e limpezas no banco de dados).
+   - O disparador passou a rotear campanhas do status `queued` para `running` corretamente, registrando os contatos como `sent` sem agarrar no erro de falta de instância.
 
-### 1. Backend Robusto para Testes
-- **Novo Endpoint**: `POST /flows/test` agora centraliza a lógica de teste.
-- **Automação de Contatos**: O sistema agora cria um contato de teste automaticamente se o número informado não existir, evitando erros de "contato não encontrado".
-- **Seleção de Instância**: O backend detecta automaticamente qual WhatsApp está conectado para realizar o envio do teste.
+2. **Correção do Prompt e Inteligência Artificial (OpenAI):**
+   - **Problema:** Na arquitetura voltada para chatbot interativo, disparos vindos do zero (campanhas) recebiam um histórico de conversa falso equivalente a `'Olá'`. Isso forçava o sistema do ChatGPT a achar que era um chat de suporte de atendimento básico de boas vindas, ignorando os prompts elaborados de conversão/simulação.
+   - **Solução:** O arquivo do backend (`src/modules/flows/flows.service.ts`) no setor correspondente ao Node da OpenAI foi reescrito. Agora, quando a IA não receber mensagens anteriores do usuário (como no gatilho do início de campanha padrão), o Backend orienta o ChatGPT agressivamente com base no prompt de configuração, solicitando a geração literal e imediata de variações da mensagem desejada.
 
-### 2. Frontend Simplificado
-- **Editor de Fluxos**: O botão "Testar" foi totalmente reformulado. Agora ele é mais rápido e confiável, delegando a complexidade para o servidor.
-- **Feedback Visual**: Alertas claros informam ao usuário qual instância está disparando o teste e qual o ID da execução.
+3. **Correção do Upload/Disparo de Imagens (Uploads Media URL):**
+   - **Problema:** Envios de imagens pelo Flow de campanha estavam falhando (a imagem não anexava e na execução do log pulava para o arquivo `Atraso` / Delay logo depois com log `no_media_url`).
+   - **Solução:** Foi confirmado que o sistema local está utilizando URLs com `host.docker.internal` dinamicamente para compartilhar arquivos com o Docker do Evolution. O fluxo e portas foram alinhados e re-reiniciados (`Stop-Process -> start.bat`).
 
-### 3. Correções de Estabilidade
-- **Estatísticas**: Corrigido erro que travava a visualização de estatísticas dos fluxos.
-- **Integridade**: Ajustada a criação de contatos para evitar erros de tipagem.
+## 📋 Passos Pendentes para Amanhã (Continuando a Validação)
+- **Campanhas e Fluxos:** É preciso testar diretamente na plataforma se a recriação do "Nó de Imagem" e anexo de nova imagem na tela do Flow salva essa URL persistente no FlowExecution corretamente.
+- **Testes Práticos com Disparo de Imagem + AI:** Validar no celular destino (WhatsApp) se a foto "Modelo que converte X Modelo antigo" seguida da mensagem estipulada no Prompt da OpenAI realmente entrega as duas pontas da comunicação da Calculadora.
 
-## 🚧 Status Atual
-- **Backend**: **ONLINE** e com logs de diagnóstico ativos para execução de fluxos.
-- **Frontend**: **ONLINE** e sincronizado com as novas APIs de teste.
-- **Teste de Fluxo**: **FUNCIONAL** - Pronto para ser validado com números reais.
-
-## 📋 Próximos Passos
-1. Realizar disparos de teste em massa para validar o escalonamento.
-2. Verificar se o nó de "Delay" está respeitando o tempo em ambientes de maior carga.
-3. Preparar documentação de uso para o cliente final.
-
----
-*Trabalho salvo em Git e logs atualizados. Pronto para retomar a qualquer momento.*
+A infraestrutura foi reiniciada limpa com `start.bat / npm run dev / start:dev`. Todos os códigos de serviços afetados já salvaram no banco. Amanhã podemos prosseguir a validação com a UI!

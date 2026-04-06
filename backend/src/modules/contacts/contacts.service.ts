@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Like, ILike } from 'typeorm';
+import { Repository, In, Like, ILike, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { Contact, Tag, ContactTag, CustomField } from './entities/contact.entity';
 import * as XLSX from 'xlsx';
 import {
@@ -14,9 +14,13 @@ import {
     BulkAddTagsDto,
     BulkRemoveTagsDto,
 } from './dto';
+import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
+import { ProviderType } from '../whatsapp/whatsapp-provider.interface';
 
 @Injectable()
 export class ContactsService {
+    private readonly logger = new Logger(ContactsService.name);
+
     constructor(
         @InjectRepository(Contact)
         private contactRepository: Repository<Contact>,
@@ -26,54 +30,123 @@ export class ContactsService {
         private contactTagRepository: Repository<ContactTag>,
         @InjectRepository(CustomField)
         private customFieldRepository: Repository<CustomField>,
+        private providerFactory: WhatsAppProviderFactory,
     ) { }
 
     // ============ CONTACTS ============
 
     async findAllContacts(tenantId: string, query: ContactQueryDto) {
-        const { search, tagIds, isValid, optedOut, page = 1, limit = 50 } = query;
+        this.logger.log(`findAllContacts: tenantId=${tenantId} query=${JSON.stringify(query)}`);
+        const { search, tagIds, isValid, optedOut, startDate, endDate } = query;
+        const page = Number(query.page) || 1;
+        const limit = Number(query.limit) || 50;
         const skip = (page - 1) * limit;
 
-        const qb = this.contactRepository.createQueryBuilder('contact')
-            .where('contact.tenant_id = :tenantId', { tenantId });
+        // Base where conditions
+        const where: any = { tenantId };
+        if (isValid !== undefined) where.isValid = isValid;
+        if (optedOut !== undefined) where.optedOut = optedOut;
 
-        // Search by name or phone
-        if (search) {
-            qb.andWhere(
-                '(contact.name ILIKE :search OR contact.phone ILIKE :search OR contact.email ILIKE :search)',
-                { search: `%${search}%` }
-            );
+        // Category Filter - Case Insensitive Partial Match
+        if (query.category) {
+            where.category = ILike(`%${query.category.trim()}%`);
         }
 
-        // Filter by tags
-        if (tagIds && tagIds.length > 0) {
-            qb.andWhere(qb2 => {
-                const subQuery = qb2.subQuery()
-                    .select('ct.contact_id')
-                    .from(ContactTag, 'ct')
-                    .where('ct.tag_id IN (:...tagIds)', { tagIds })
-                    .getQuery();
-                return 'contact.id IN ' + subQuery;
+        // Date Filter
+        if (startDate && endDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            where.createdAt = Between(start, end);
+        } else if (startDate) {
+            const start = new Date(startDate);
+            start.setHours(0, 0, 0, 0);
+            where.createdAt = MoreThanOrEqual(start);
+        } else if (endDate) {
+            const end = new Date(endDate);
+            end.setHours(23, 59, 59, 999);
+            where.createdAt = LessThanOrEqual(end);
+        }
+
+        this.logger.log(`findAllContacts: page=${page} limit=${limit} skip=${skip} where=${JSON.stringify(where)}`);
+
+        let contacts: Contact[];
+        let total: number;
+
+        // If simple query (no search or tags), use findAndCount for maximum reliability
+        if (!search && (!tagIds || tagIds.length === 0)) {
+            [contacts, total] = await this.contactRepository.findAndCount({
+                where,
+                order: { createdAt: 'DESC', id: 'DESC' },
+                skip,
+                take: limit,
             });
+            this.logger.log(`Repository findAndCount returned: contacts=${contacts.length}, total=${total}`);
+        } else {
+            // Use QueryBuilder for complex filters
+            const qb = this.contactRepository.createQueryBuilder('contact')
+                .where('contact.tenantId = :tenantId', { tenantId });
+
+            if (isValid !== undefined) qb.andWhere('contact.isValid = :isValid', { isValid });
+            if (optedOut !== undefined) qb.andWhere('contact.optedOut = :optedOut', { optedOut });
+
+            if (query.category) {
+                qb.andWhere('contact.category ILIKE :category', { category: `%${query.category.trim()}%` });
+            }
+
+            // Date Filters in QueryBuilder
+            if (startDate) {
+                const start = new Date(startDate);
+                start.setHours(0, 0, 0, 0);
+                qb.andWhere('contact.createdAt >= :startDate', { startDate: start });
+            }
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setHours(23, 59, 59, 999);
+                qb.andWhere('contact.createdAt <= :endDate', { endDate: end });
+            }
+
+            if (search) {
+                qb.andWhere(
+                    '(contact.name ILIKE :search OR contact.phone ILIKE :search OR contact.email ILIKE :search)',
+                    { search: `%${search}%` }
+                );
+            }
+
+            if (tagIds && tagIds.length > 0) {
+                qb.andWhere(qb2 => {
+                    const subQuery = qb2.subQuery()
+                        .select('ct.contactId')
+                        .from(ContactTag, 'ct')
+                        .where('ct.tagId IN (:...tagIds)', { tagIds });
+                    return 'contact.id IN ' + subQuery.getQuery();
+                });
+                // MUST set the parameter on the main QB because getQuery() doesn't include params
+                qb.setParameter('tagIds', tagIds);
+            }
+
+            qb.orderBy('contact.createdAt', 'DESC')
+                .skip(skip)
+                .take(limit);
+
+            // Set all parameters explicitly just to be safe
+            qb.setParameters({
+                tenantId,
+                isValid,
+                optedOut,
+                category: query.category ? `%${query.category.trim()}%` : undefined,
+                search: search ? `%${search}%` : undefined,
+                tagIds,
+                startDate: startDate ? new Date(startDate) : undefined,
+                endDate: endDate ? new Date(endDate) : undefined
+            });
+
+            [contacts, total] = await qb.getManyAndCount();
+            this.logger.log(`QueryBuilder returned: contacts=${contacts.length}, total=${total}`);
         }
 
-        // Filter by validity
-        if (isValid !== undefined) {
-            qb.andWhere('contact.is_valid = :isValid', { isValid });
-        }
-
-        // Filter by opt-out
-        if (optedOut !== undefined) {
-            qb.andWhere('contact.opted_out = :optedOut', { optedOut });
-        }
-
-        qb.orderBy('contact.created_at', 'DESC')
-            .skip(skip)
-            .take(limit);
-
-        const [contacts, total] = await qb.getManyAndCount();
-
-        // Get tags for each contact
+        // Get tags for the result set
         const contactIds = contacts.map(c => c.id);
         const contactTags = contactIds.length > 0
             ? await this.contactTagRepository.find({
@@ -90,8 +163,7 @@ export class ContactsService {
 
         const tagMap = new Map(tags.map(t => [t.id, t]));
 
-        // Attach tags to contacts
-        const contactsWithTags = contacts.map(contact => ({
+        const data = contacts.map(contact => ({
             ...contact,
             tags: contactTags
                 .filter(ct => ct.contactId === contact.id)
@@ -100,7 +172,7 @@ export class ContactsService {
         }));
 
         return {
-            data: contactsWithTags,
+            data,
             total,
             page,
             limit,
@@ -162,6 +234,7 @@ export class ContactsService {
             phone: normalizedPhone,
             name: dto.name,
             email: dto.email,
+            category: dto.category,
             customFields: dto.customFields || {},
         });
 
@@ -270,14 +343,40 @@ export class ContactsService {
             existingContacts.forEach(c => protectionSet.add(c.phone));
         }
 
-        // 3. Filter valid new contacts
+        // 3. Filter valid new contacts and prepare updates
         const newContacts: Contact[] = [];
-        const contactTagsToInsert: { contactIndex: number, tagIds: string[] }[] = [];
+        const contactsToUpdate: { id: string, data: Partial<Contact> }[] = [];
+        const contactTagsToInsert: { contactIndex: number, tagIds: string[], contactId?: string }[] = [];
+
+        // We need existing IDs for updating
+        const existingContactsMap = new Map<string, string>(); // Phone -> ID
+        if (protectionSet.size > 0) {
+            const existing = await this.contactRepository.find({
+                where: { tenantId, phone: In(Array.from(protectionSet)) },
+                select: ['id', 'phone']
+            });
+            existing.forEach(c => existingContactsMap.set(c.phone, c.id));
+        }
 
         let index = 0;
         for (const [phone, dto] of contactMap.entries()) {
             if (protectionSet.has(phone)) {
-                results.skipped++;
+                // Update existing
+                const existingId = existingContactsMap.get(phone);
+                if (existingId) {
+                    contactsToUpdate.push({
+                        id: existingId,
+                        data: {
+                            name: dto.name || undefined,
+                            email: dto.email || undefined,
+                            category: dto.category || undefined,
+                            customFields: dto.customFields || {},
+                        }
+                    });
+                    if (dto.tagIds && dto.tagIds.length > 0) {
+                        contactTagsToInsert.push({ contactIndex: -1, tagIds: dto.tagIds, contactId: existingId });
+                    }
+                }
                 continue;
             }
 
@@ -286,8 +385,9 @@ export class ContactsService {
                 phone: dto.phone,
                 name: dto.name,
                 email: dto.email,
+                category: dto.category,
                 customFields: dto.customFields || {},
-                onWhatsapp: true, // Optimistic assumption for imported contacts
+                onWhatsapp: true,
             });
 
             newContacts.push(contact);
@@ -298,46 +398,62 @@ export class ContactsService {
             index++;
         }
 
-        // 4. Batch Insert Contacts
+        // 4. Process Updates
+        if (contactsToUpdate.length > 0) {
+            for (const item of contactsToUpdate) {
+                await this.contactRepository.update(item.id, item.data);
+            }
+            results.imported += contactsToUpdate.length;
+        }
+
+        // 5. Insert New Contacts
         if (newContacts.length > 0) {
-            // Save in chunks to avoid query limits
             for (let i = 0; i < newContacts.length; i += chunkSize) {
                 const chunk = newContacts.slice(i, i + chunkSize);
                 try {
                     const savedChunk = await this.contactRepository.save(chunk);
                     results.imported += savedChunk.length;
 
-                    // Handle Tags for this chunk
-                    // We need to map saved entities back to their tag requests
-                    // This is tricky because order might be preserved but IDs are generated.
-                    // Assuming save returns in same order.
-
-                    const chunkTags: ContactTag[] = [];
+                    // Map saved IDs back to our tag request structure
                     savedChunk.forEach((savedContact, idx) => {
                         const originalIndex = i + idx;
-                        // Find if this specific contact index had tags
                         const tagReq = contactTagsToInsert.find(t => t.contactIndex === originalIndex);
                         if (tagReq) {
-                            tagReq.tagIds.forEach(tagId => {
-                                chunkTags.push(this.contactTagRepository.create({
-                                    contactId: savedContact.id,
-                                    tagId
-                                }));
-                            });
+                            tagReq.contactId = savedContact.id;
                         }
                     });
-
-                    if (chunkTags.length > 0) {
-                        await this.contactTagRepository.save(chunkTags);
-                    }
-
                 } catch (err) {
-                    // Try fallback to individual insert if batch fail?
-                    // For now, log error and count as failed
-                    // This is rare unless there's a constraint violation not caught
                     results.errors.push(`Erro ao salvar lote ${i / chunkSize}: ${err.message}`);
                     results.imported -= chunk.length;
                 }
+            }
+        }
+
+        // 6. Finalize Tags (Common logic for New and Updated)
+        const finalTagsToInsert: ContactTag[] = [];
+        const contactIdsToClearTags: string[] = [];
+
+        for (const req of contactTagsToInsert) {
+            if (!req.contactId) continue;
+
+            contactIdsToClearTags.push(req.contactId);
+            for (const tagId of req.tagIds) {
+                finalTagsToInsert.push(this.contactTagRepository.create({
+                    contactId: req.contactId,
+                    tagId
+                }));
+            }
+        }
+
+        if (contactIdsToClearTags.length > 0) {
+            // Delete existing tags for these contacts to avoid duplicates/stale data
+            await this.contactTagRepository.delete({ contactId: In(contactIdsToClearTags) });
+        }
+
+        if (finalTagsToInsert.length > 0) {
+            // Save tags in chunks
+            for (let i = 0; i < finalTagsToInsert.length; i += chunkSize) {
+                await this.contactTagRepository.save(finalTagsToInsert.slice(i, i + chunkSize));
             }
         }
 
@@ -362,24 +478,40 @@ export class ContactsService {
 
         // 1. Process rows
         for (const row of rawData) {
-            // Map columns dynamically
-            // Supported: phone/telefone/celular, name/nome, email, tags (comma separated)
+            // Helper function for fuzzy header matching
+            const findValue = (obj: any, searchTerms: string[]) => {
+                const key = Object.keys(obj).find(k =>
+                    searchTerms.some(term => k.toLowerCase().trim().includes(term))
+                );
+                return key ? obj[key] : undefined;
+            };
 
-            let phone = row['phone'] || row['Phone'] || row['telefone'] || row['Telefone'] || row['celular'] || row['Celular'] || row['whatsapp'] || row['mobile'];
-            const name = row['name'] || row['Name'] || row['nome'] || row['Nome'] || row['cliente'];
-            const email = row['email'] || row['Email'] || row['e-mail'];
-            const tagsStr = row['tags'] || row['Tags'] || row['etiquetas'];
+            const phone = findValue(row, ['phone', 'telefone', 'celular', 'whatsapp', 'mobile']);
+            const name = findValue(row, ['name', 'nome', 'cliente']);
+            const email = findValue(row, ['email', 'e-mail']);
+            const category = findValue(row, ['category', 'categoria']);
+            const tagsStr = findValue(row, ['tags', 'etiquetas']);
 
-            if (!phone) continue; // Skip empty phones
+            if (!phone) continue; // Skip if no phone found
 
-            // Convert phone to string just in case
-            phone = String(phone).replace(/\D/g, '');
+            // Map all other columns to custom fields
+            const customFields: Record<string, any> = {};
+            const knownKeys = ['phone', 'telefone', 'celular', 'whatsapp', 'mobile', 'name', 'nome', 'cliente', 'email', 'e-mail', 'category', 'categoria', 'tags', 'etiquetas'];
+
+            Object.keys(row).forEach(key => {
+                const lowerKey = key.toLowerCase().trim();
+                // If it's not a known main field, put it in customFields
+                if (!knownKeys.some(k => lowerKey.includes(k))) {
+                    customFields[key] = row[key];
+                }
+            });
 
             const dto: CreateContactDto = {
-                phone,
+                phone: String(phone).replace(/\D/g, ''),
                 name: name ? String(name) : undefined,
                 email: email ? String(email) : undefined,
-                customFields: {}, // TODO: Map other columns
+                category: category ? String(category).substring(0, 100) : undefined,
+                customFields,
                 tagIds: []
             };
 
@@ -507,6 +639,35 @@ export class ContactsService {
 
         await this.updateTagCounts(tagIds);
         return { message: `Tags adicionadas a ${contactIds.length} contatos` };
+    }
+
+    async verifyContacts(tenantId: string, instanceName: string, contactIds: string[], providerTypeStr: 'evolution' | 'waha') {
+        const provider = this.providerFactory.getProvider(providerTypeStr);
+
+        const results: any[] = [];
+
+        for (const contactId of contactIds) {
+            const contact = await this.contactRepository.findOne({ where: { id: contactId, tenantId } });
+            if (!contact) continue;
+
+            if (!contact.phone) {
+                results.push({ contactId, status: 'no_phone' });
+                continue;
+            }
+
+            try {
+                const isOnWhatsapp = await provider.isOnWhatsApp(instanceName, contact.phone);
+                contact.onWhatsapp = isOnWhatsapp;
+
+                await this.contactRepository.save(contact);
+                results.push({ contactId, phone: contact.phone, onWhatsapp: isOnWhatsapp });
+            } catch (error) {
+                this.logger.error(`Error verifying contact ${contactId}: ${error.message}`);
+                results.push({ contactId, error: error.message });
+            }
+        }
+
+        return { results };
     }
 
     async bulkRemoveTags(tenantId: string, dto: BulkRemoveTagsDto) {
