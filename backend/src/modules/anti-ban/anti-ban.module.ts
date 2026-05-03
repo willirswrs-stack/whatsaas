@@ -16,6 +16,8 @@ import { Instance } from '../instances/entities/instance.entity';
 import { WARMUP_QUEUE } from '../../config/bull.config';
 import { InstancesModule } from '../instances/instances.module';
 import { AiModule } from '../ai/ai.module';
+import { ChipLifecycleService } from './chip-lifecycle.service';
+import { ActivePreventionService } from './active-prevention.service';
 
 @Module({
     imports: [
@@ -37,6 +39,8 @@ import { AiModule } from '../ai/ai.module';
         ChipHealthService,
         WarmupService,
         WarmupProcessor,
+        ChipLifecycleService,
+        ActivePreventionService,
     ],
     exports: [
         HumanBehaviorService,
@@ -47,13 +51,14 @@ import { AiModule } from '../ai/ai.module';
         AntiBanAnalyticsService,
         ChipHealthService,
         WarmupService,
+        ChipLifecycleService,
+        ActivePreventionService,
     ],
 })
 export class AntiBanModule implements OnApplicationBootstrap {
     constructor(private readonly warmupService: WarmupService) { }
 
     async onApplicationBootstrap() {
-        // Here we could init the scheduler if we had @nestjs/schedule
-        // For now, we rely on external triggers or manual init
+        // Inicialização
     }
 }

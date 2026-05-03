@@ -87,7 +87,14 @@ export class Instance {
     channelType: string; // 'unofficial' (QR), 'official' (Meta)
 
     @Column({ default: 'evolution' })
-    provider: 'waha' | 'evolution'; // WhatsApp API provider
+    provider: 'waha' | 'evolution' | 'mobile_farm' | 'antidetect'; // WhatsApp API provider
+
+    @Column({ 
+        type: 'varchar', 
+        default: 'registration',
+        name: 'lifecycle_stage' 
+    })
+    stage: string; // 'registration', 'mobile_warmup', 'web_migration', 'mature', 'sold'
 
     @Column({ name: 'proxy_id', nullable: true })
     proxyId: string;

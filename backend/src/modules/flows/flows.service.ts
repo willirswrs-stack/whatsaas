@@ -13,6 +13,8 @@ import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
 import { AiService } from '../ai/ai.service';
 import { FLOW_QUEUE } from '../../config/bull.config';
 import { MetaGraphApiService } from '../meta-templates/meta-graph-api.service';
+import { ActivePreventionService } from '../anti-ban/active-prevention.service';
+import { HumanBehaviorService } from '../anti-ban/human-behavior.service';
 
 @Injectable()
 export class FlowsService implements OnModuleInit {
@@ -33,6 +35,8 @@ export class FlowsService implements OnModuleInit {
         private aiService: AiService,
         private configService: ConfigService,
         private metaGraphApiService: MetaGraphApiService,
+        private activePrevention: ActivePreventionService,
+        private humanBehavior: HumanBehaviorService,
     ) { }
 
     // ============ FLOWS ============
@@ -512,6 +516,12 @@ export class FlowsService implements OnModuleInit {
                         'openai'
                     );
                     const provider = this.whatsappFactory.getProvider(instance.provider);
+
+                    // PREVENÇÃO ATIVA
+                    const timing = this.humanBehavior.generateTimingMetadata(responseContent);
+                    await provider.sendPresence?.(instance.instanceName, contact.phone, 'composing', timing.typingDurationMs);
+                    await this.activePrevention.applyPrevention(instance.id);
+
                     const res = await provider.sendText(instance.instanceName, contact.phone, responseContent);
                     const messageId = res?.messageId;
                     if (messageId) {
@@ -538,6 +548,11 @@ export class FlowsService implements OnModuleInit {
                     const provider = this.whatsappFactory.getProvider(instance.provider);
                     const nodeData = nextNode.data as any;
                     const content = nodeData?.config?.message || nodeData?.content || 'Olá';
+
+                    // PREVENÇÃO ATIVA
+                    const timing = this.humanBehavior.generateTimingMetadata(content);
+                    await provider.sendPresence?.(instance.instanceName, contact.phone, 'composing', timing.typingDurationMs);
+                    await this.activePrevention.applyPrevention(instance.id);
 
                     const res = await provider.sendText(instance.instanceName, contact.phone, content);
                     const messageId = res?.messageId;
@@ -570,6 +585,10 @@ export class FlowsService implements OnModuleInit {
 
                     if (mediaUrl) {
                         try {
+                            // PREVENÇÃO ATIVA
+                            await provider.sendPresence?.(instance.instanceName, contact.phone, 'recording', 2000);
+                            await this.activePrevention.applyPrevention(instance.id);
+
                             const res = await provider.sendMedia(instance.instanceName, contact.phone, {
                                 type: mediaType as any,
                                 url: mediaUrl,
@@ -648,6 +667,10 @@ export class FlowsService implements OnModuleInit {
                         const buttonList = buttons.map((b: any, i: number) => `${i + 1}. ${b.label || b.text || b}`).join('\n');
                         fullMessage = `${message}\n\n${buttonList}`;
                     }
+
+                    // PREVENÇÃO ATIVA
+                    await provider.sendPresence?.(instance.instanceName, contact.phone, 'composing', 2000);
+                    await this.activePrevention.applyPrevention(instance.id);
 
                     await provider.sendText(instance.instanceName, contact.phone, fullMessage);
 

@@ -16,9 +16,13 @@ import { PatternBreakerService } from '../anti-ban/pattern-breaker.service';
 import { DelayGeneratorService } from '../anti-ban/delay-generator.service';
 import { StackRouterService, StackRoutingInput, StackType } from '../anti-ban/stack-router.service';
 import { AntiBanAnalyticsService } from '../anti-ban/analytics.service';
+import { ActivePreventionService } from '../anti-ban/active-prevention.service';
 
 import { FlowsService } from '../flows/flows.service';
 import { EventsGateway } from '../events/events.gateway';
+
+import { MetaTemplatesService } from '../meta-templates/meta-templates.service';
+import { MetaGraphApiService } from '../meta-templates/meta-graph-api.service';
 
 export interface DispatchJobData {
     tenantId: string;
@@ -53,6 +57,9 @@ export class DispatcherProcessor extends WorkerHost {
     // Key: instanceId, Value: timestamp when override was granted
     private warmupOverrides = new Map<string, number>();
 
+    // Cache para os templates do Meta
+    private metaTemplateCache = new Map<string, any>();
+
     constructor(
         @InjectRepository(Instance)
         private instanceRepo: Repository<Instance>,
@@ -71,6 +78,9 @@ export class DispatcherProcessor extends WorkerHost {
         private analytics: AntiBanAnalyticsService,
         private flowsService: FlowsService,
         private eventsGateway: EventsGateway,
+        private metaTemplatesService: MetaTemplatesService,
+        private metaGraphApiService: MetaGraphApiService,
+        private activePrevention: ActivePreventionService,
     ) {
         super();
         this.logger.log('✅ DispatcherProcessor INSTANTIATED');
@@ -120,10 +130,186 @@ export class DispatcherProcessor extends WorkerHost {
             }
             */
 
-            // 3. Selecionar Instância
-            const instance = await this.selectInstance(tenantId, campaign?.instanceId, campaign?.instanceIds, campaignId);
+            // 3. WABA ou Instância?
+            let instance: Instance | null = null;
+            let wabaAccount: any = null;
+
+            if (campaign.settings?.metaTemplateId && campaign.settings?.wabaAccountId) {
+                // É campanha de WABA
+                wabaAccount = await this.metaTemplatesService.getWabaAccount(tenantId, campaign.settings.wabaAccountId);
+                if (!wabaAccount) {
+                    throw new Error('Conta WABA não encontrada');
+                }
+            } else {
+                instance = await this.selectInstance(tenantId, campaign?.instanceId, campaign?.instanceIds, campaignId);
+                if (!instance) {
+                    this.logger.warn(`No available instance for tenant ${tenantId}`);
+                    throw new Error('NO_AVAILABLE_INSTANCE');
+                }
+            }
+
+            // 4. Se for WABA Meta Template (ignora AI spin, flows, etc.)
+            if (wabaAccount && campaign.settings?.metaTemplateId) {
+                const [templateName, templateLanguage] = campaign.settings.metaTemplateId.split('|');
+                const accessToken = await this.metaTemplatesService.getDecryptedAccessToken(wabaAccount.id);
+                const recipientPhone = contact.phone.replace(/\D/g, '');
+                
+                this.logger.log(`📤 Enviando template Meta ${templateName} para ${recipientPhone}`);
+                
+                try {
+                    // Resolver variáveis do template (ex: {{1}})
+                    let metaTemplate = this.metaTemplateCache.get(templateName);
+                    if (!metaTemplate) {
+                        this.logger.log(`🔍 Buscando definição do template "${templateName}" na Meta...`);
+                        metaTemplate = await this.metaGraphApiService.getTemplate(wabaAccount.wabaId, accessToken, templateName);
+                        if (metaTemplate) {
+                            this.metaTemplateCache.set(templateName, metaTemplate);
+                        } else {
+                            throw new Error(`Definição do template "${templateName}" não encontrada na Meta. Verifique se o nome está correto.`);
+                        }
+                    }
+
+                    this.logger.debug(`[TEMPLATE COMPONENTS]: ${JSON.stringify(metaTemplate?.components)}`);
+
+                    // PRE-UPLOAD MEDIA IF NEEDED
+                    let mediaId = campaign.settings?.metaMediaId;
+                    if (!mediaId && campaign.settings?.metaMediaUrl) {
+                        try {
+                            const mediaComp = metaTemplate?.components?.find((c: any) => c.type === 'HEADER' && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(c.format));
+                            if (mediaComp) {
+                                this.logger.log(`Subindo mídia (URL: ${campaign.settings.metaMediaUrl}) para os servidores da Meta...`);
+                                mediaId = await this.metaGraphApiService.uploadMedia(
+                                    wabaAccount.phoneNumberId,
+                                    accessToken,
+                                    campaign.settings.metaMediaUrl,
+                                    mediaComp.format.toLowerCase() as any
+                                );
+                                // Save it back to campaign settings to avoid uploading for every contact
+                                campaign.settings.metaMediaId = mediaId;
+                                await this.campaignRepo.update(campaignId, { settings: campaign.settings } as any);
+                                this.logger.log(`✅ Mídia enviada para a Meta: ID ${mediaId}`);
+                            }
+                        } catch (uploadError) {
+                            this.logger.error(`❌ Erro ao subir mídia: ${uploadError.message}`);
+                        }
+                    }
+
+                    const componentsPayload: any[] = [];
+                    if (metaTemplate?.components) {
+                        for (const comp of metaTemplate.components) {
+                            if (comp.type === 'BODY') {
+                                const text = comp.text || '';
+                                const varCount = (text.match(/\{\{\d+\}\}/g) || []).length;
+                                if (varCount > 0) {
+                                    componentsPayload.push({
+                                        type: 'body',
+                                        parameters: Array.from({ length: varCount }).map((_, i) => {
+                                            const varKey = `body_${i+1}`;
+                                            const customVal = campaign.settings?.metaVariables?.[varKey];
+                                            let finalVal = customVal;
+                                            if (!finalVal) finalVal = i === 0 ? (contact.name?.trim() || 'Cliente') : 'Detalhes';
+                                            return { type: 'text', text: finalVal };
+                                        })
+                                    });
+                                }
+                            } else if (comp.type === 'HEADER') {
+                                if (comp.format === 'TEXT' && comp.text?.includes('{{1}}')) {
+                                    const customVal = campaign.settings?.metaVariables?.['header_1'];
+                                    componentsPayload.push({
+                                        type: 'header',
+                                        parameters: [{ type: 'text', text: customVal || contact.name?.trim() || 'Cliente' }]
+                                    });
+                                } else if (['IMAGE', 'DOCUMENT', 'VIDEO'].includes(comp.format)) {
+                                    const mediaUrl = campaign.settings?.metaMediaUrl;
+                                    const mId = campaign.settings?.metaMediaId || mediaId;
+                                    if (mId) {
+                                        componentsPayload.push({
+                                            type: 'header',
+                                            parameters: [{ 
+                                                type: comp.format.toLowerCase(), 
+                                                [comp.format.toLowerCase()]: { id: mId } 
+                                            }]
+                                        });
+                                    } else if (mediaUrl) {
+                                        // CRITICAL: Meta Cloud API cannot access local URLs like localhost or host.docker.internal
+                                        if (mediaUrl.includes('localhost') || mediaUrl.includes('host.docker.internal') || mediaUrl.startsWith('http://192.168')) {
+                                            this.logger.error(`❌ [META-WARNING] Tentando enviar URL local para Meta: ${mediaUrl}. Esta mensagem NÃO será entregue, pois a Meta não consegue acessar seu computador local.`);
+                                        }
+
+                                        componentsPayload.push({
+                                            type: 'header',
+                                            parameters: [{ 
+                                                type: comp.format.toLowerCase(), 
+                                                [comp.format.toLowerCase()]: { link: mediaUrl } 
+                                            }]
+                                        });
+                                    }
+                                }
+                            } else if (comp.type === 'BUTTONS') {
+                                comp.buttons?.forEach((btn: any, index: number) => {
+                                    if (btn.url?.includes('{{1}}') || btn.text?.includes('{{1}}')) {
+                                        const varKey = `button_${index}_1`;
+                                        const customVal = campaign.settings?.metaVariables?.[varKey];
+                                        componentsPayload.push({
+                                            type: 'button',
+                                            sub_type: btn.type.toLowerCase() === 'url' ? 'url' : 'quick_reply',
+                                            index: index.toString(),
+                                            parameters: [{ type: 'text', text: customVal || contact.name?.trim() || 'cliente' }]
+                                        });
+                                    }
+                                });
+                            }
+                        }
+                    }
+
+                    const templatePayload: any = {
+                        name: templateName,
+                        language: { code: templateLanguage || 'pt_BR' }
+                    };
+
+                    // Só anexa os components se tiver parâmetros para injetar
+                    if (componentsPayload.length > 0) {
+                        templatePayload.components = componentsPayload;
+                    }
+
+                    const sendStartTime = Date.now();
+                    const result = await this.metaGraphApiService.sendMessage(
+                        wabaAccount.phoneNumberId,
+                        accessToken,
+                        recipientPhone,
+                        'template',
+                        templatePayload
+                    );
+                    
+                    const messageId = result?.messages?.[0]?.id;
+                    this.logger.log(`✅ Template enviado via WABA para ${recipientPhone} (ID: ${messageId})`);
+
+                    const updateResult = await this.campaignContactRepo.update(
+                        { id: campaignContactId, status: 'queued' }, // Only update if still queued
+                        {
+                            status: 'sent',
+                            messageId,
+                            sentAt: new Date(),
+                            timingMetadata: { stackUsed: 'waba_api' },
+                        } as any
+                    );
+
+                    // Só incrementa no painel se este for realmente o primeiro envio deste contato
+                    if (updateResult.affected && updateResult.affected > 0) {
+                        await this.campaignRepo.increment({ id: campaignId }, 'sentCount', 1);
+                    }
+                    
+                    await this.checkCampaignCompletion(campaignId);
+
+                    return { success: true, messageId, stackUsed: 'waba_api' as any };
+                } catch (sendError) {
+                    this.logger.error(`❌ Erro ao enviar WABA template: ${sendError.message}`);
+                    throw sendError;
+                }
+            }
+
+            // Se chegou aqui e não tem instância, é um erro de lógica
             if (!instance) {
-                this.logger.warn(`No available instance for tenant ${tenantId}`);
                 throw new Error('NO_AVAILABLE_INSTANCE');
             }
 
@@ -288,6 +474,9 @@ export class DispatcherProcessor extends WorkerHost {
 
             // 8. Enviar Mensagem
             this.logger.log(`📤 Enviando mensagem para ${contact.phone} via ${instance.instanceName}`);
+
+            // APLICAR PREVENÇÃO ATIVA (Telemetria de Bateria/Movimento)
+            await this.activePrevention.applyPrevention(instance.id);
 
             let messageId: string | undefined;
             const sendStartTime = Date.now();

@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { Header } from '@/components/Header';
 import { warmupService, WarmupStats } from '@/lib/warmup';
+import { MobileFarmView } from '@/components/mobile-farm/MobileFarmView';
 
 const rampStages = [
     { days: '1-3', limit: 10, label: 'Iniciante' },
@@ -71,16 +72,25 @@ const WhatsAppMockup = ({
 
                 <div className="space-y-[2px] pb-2">
                     {visibleMessages.map((msg: any, idx: number) => {
-                        // isSender relative to the current phone's owner role
-                        const isSender = msg.role === viewRole;
-                        const isFirstInChain = idx === 0 || visibleMessages[idx - 1].role !== msg.role;
+                        const msgRole = msg.role || msg.sender;
+                        const isSender = msgRole === viewRole;
+                        const isFirstInChain = idx === 0 || (visibleMessages[idx - 1].role || visibleMessages[idx - 1].sender) !== msgRole;
 
                         return (
                             <div key={idx} className={`flex ${isSender ? 'justify-end' : 'justify-start'} ${isFirstInChain ? 'mt-2' : ''}`}>
-                                <div className={`relative max-w-[80%] sm:max-w-[65%] px-2 pt-[6px] pb-2 rounded-lg shadow-sm animate-fadeIn ${isSender
+                                <div className={`relative max-w-[80%] sm:max-w-[65%] px-3 pt-[6px] pb-2 rounded-lg shadow-md animate-fadeIn ${isSender
                                     ? `bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] ${isFirstInChain ? 'rounded-tr-none' : ''}`
-                                    : `bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] ${isFirstInChain ? 'rounded-tl-none' : ''}`
+                                    : `bg-[#ffffff] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] ${isFirstInChain ? 'rounded-tl-none' : ''}`
                                     }`}>
+                                    {isFirstInChain && (
+                                        <div className={`absolute top-0 w-3 h-3 ${isSender 
+                                            ? 'right-[-8px] text-[#d9fdd3] dark:text-[#005c4b]' 
+                                            : 'left-[-8px] text-[#ffffff] dark:text-[#202c33]'}`}>
+                                            <svg viewBox="0 0 10 10" className="fill-current">
+                                                {isSender ? <path d="M0 0 L10 0 L0 10 Z" /> : <path d="M10 0 L0 0 L10 10 Z" />}
+                                            </svg>
+                                        </div>
+                                    )}
                                     <div className="text-[14px] leading-[19px] whitespace-pre-wrap word-break flex flex-wrap items-end gap-2 text-[#111b21] dark:text-[#e9edef] mx-[2px]">
                                         <span>{msg.content}</span>
                                         <div className="text-[11px] text-[#667781] dark:text-[#8696a0] flex items-center gap-1 ml-auto shrink-0 relative top-[2px]">
@@ -144,7 +154,7 @@ export default function WarmupPage() {
     const handleCreateSession = async (instAId?: string, instBId?: string) => {
         try {
             setActionLoading(true);
-            setSimulatorVisible(false); // Reset se já estiver visível
+            setSimulatorVisible(false);
 
             const result = await warmupService.createSession(instAId, instBId);
             loadData();
@@ -157,19 +167,17 @@ export default function WarmupPage() {
                 setSimulatorVisible(true);
                 setVisibleMessages([]);
 
-                // Play out messages with artificial delays
                 setTimeout(() => {
                     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                     simulateConversationFlow(result.conversation);
                 }, 500);
             } else if (result.reason === 'min_instances') {
-                alert('Chips insuficientes no Warmup. Adicione pelo menos 2 chips conectados e ative o Warmup nelas.');
+                alert('Chips insuficientes no Warmup.');
             } else {
-                alert('Sessão de Warmup manual iniciada/agendada com sucesso!');
+                alert('Sessão de Warmup manual iniciada com sucesso!');
             }
         } catch (error) {
             console.error('Failed to start session:', error);
-            alert('Erro ao iniciar sessão de Warmup.');
         } finally {
             setActionLoading(false);
         }
@@ -177,35 +185,26 @@ export default function WarmupPage() {
 
     const simulateConversationFlow = (conversation: any[]) => {
         let currentIndex = 0;
-
         const nextMessage = () => {
             if (currentIndex >= conversation.length) {
                 setIsSimulatingTyping(false);
                 return;
             }
-
-            // Set typing indicator if it's not the user (Chip A)
             const msg = conversation[currentIndex];
+            if (msg.sender && !msg.role) msg.role = msg.sender;
             setIsSimulatingTyping(true);
-
-            // Wait a bit representing reading/typing
             setTimeout(() => {
                 setVisibleMessages(prev => [...prev, msg]);
                 setIsSimulatingTyping(false);
                 currentIndex++;
-
-                // Scroll down
                 setTimeout(() => {
                     bottomPlaceholderRef.current?.scrollIntoView({ behavior: 'smooth' });
                 }, 100);
-
-                // Wait before next message starts typing
                 if (currentIndex < conversation.length) {
-                    setTimeout(nextMessage, 1500 + Math.random() * 1000); // 1.5 to 2.5 seconds pause
+                    setTimeout(nextMessage, 1500 + Math.random() * 1000);
                 }
-            }, Math.max(1500, msg.content.length * 50)); // Typing duration based on length
+            }, Math.max(1500, msg.content.length * 50));
         };
-
         nextMessage();
     };
 
@@ -232,33 +231,15 @@ export default function WarmupPage() {
                 <div className="flex items-center gap-3">
                     <img src="/icons/sidebar/warmup.png" alt="Warm-up" className="w-10 h-10 object-contain drop-shadow-md" />
                     <div>
-                        <h1 className="page-title">Sistema de Warm-up (Anti-Ban)</h1>
-                        <p className="text-sm text-[var(--text-muted)]">Maturação automatizada de chips reais para evitar banimentos</p>
+                        <h1 className="page-title">Warm-up & Mobile Farm</h1>
+                        <p className="text-sm text-[var(--text-muted)]">Maturação automatizada de chips reais e gestão de dispositivos USB</p>
                     </div>
                 </div>
-                <button
-                    onClick={() => handleCreateSession()}
-                    disabled={actionLoading}
-                    className={`flex items-center gap-2 px-4 py-2 ${actionLoading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'} text-white rounded-lg transition-colors font-medium`}
-                >
-                    {actionLoading ? (
-                        <>
-                            <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                            </svg>
-                            Gerando Cena...
-                        </>
-                    ) : (
-                        <>
-                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Simular Par Aleatório
-                        </>
-                    )}
-                </button>
+            </div>
+
+            {/* Mobile Farm View - Integrated here */}
+            <div className="container mx-auto px-4 max-w-7xl mb-8">
+                <MobileFarmView />
             </div>
 
             {/* Stats */}
@@ -282,20 +263,13 @@ export default function WarmupPage() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 container mx-auto px-4 max-w-7xl">
                 {/* Ramp Strategy */}
                 <div className="glass-card p-6">
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-6">
-                        📈 Estratégia de Rampa
-                    </h3>
-
+                    <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-6">📈 Estratégia de Rampa</h3>
                     <div className="space-y-4">
                         {rampStages.map((stage, index) => (
                             <div key={index} className="relative">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold ${index === 0 ? 'bg-red-500' :
-                                            index === 1 ? 'bg-orange-500' :
-                                                index === 2 ? 'bg-yellow-500' :
-                                                    'bg-green-500'
-                                            }`}>
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold ${index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : index === 2 ? 'bg-yellow-500' : 'bg-green-500'}`}>
                                             {index + 1}
                                         </div>
                                         <div>
@@ -303,20 +277,10 @@ export default function WarmupPage() {
                                             <p className="text-xs text-[var(--text-muted)]">Dias {stage.days}</p>
                                         </div>
                                     </div>
-                                    <span className="text-lg font-bold text-[var(--text-primary)]">
-                                        {stage.limit} <span className="text-sm font-normal text-[var(--text-muted)]">msgs/dia</span>
-                                    </span>
+                                    <span className="text-lg font-bold text-[var(--text-primary)]">{stage.limit} <span className="text-sm font-normal text-[var(--text-muted)]">msgs/dia</span></span>
                                 </div>
-
                                 <div className="h-3 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
-                                    <div
-                                        className={`h-full rounded-full ${index === 0 ? 'bg-red-500' :
-                                            index === 1 ? 'bg-orange-500' :
-                                                index === 2 ? 'bg-yellow-500' :
-                                                    'bg-green-500'
-                                            }`}
-                                        style={{ width: `${(stage.limit / 100) * 100}%` }}
-                                    ></div>
+                                    <div className={`h-full rounded-full ${index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : index === 2 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${(stage.limit / 100) * 100}%` }}></div>
                                 </div>
                             </div>
                         ))}
@@ -329,172 +293,27 @@ export default function WarmupPage() {
                         <span>📱 Chips em Warm-up</span>
                         <button onClick={loadData} className="text-xs text-indigo-400 hover:text-indigo-300">Atualizar</button>
                     </h3>
-
                     <div className="table-container">
                         {safeStats.instances.length > 0 ? (
                             <table className="table">
                                 <thead>
-                                    <tr>
-                                        <th>Número</th>
-                                        <th>Dia</th>
-                                        <th>Limite Diário</th>
-                                        <th>Status do Limite</th>
-                                        <th>Saúde do Chip</th>
-                                    </tr>
+                                    <tr><th>Número</th><th>Dia</th><th>Limite</th><th>Status</th><th>Saúde</th></tr>
                                 </thead>
                                 <tbody>
                                     {safeStats.instances.map((chip, index) => (
                                         <tr key={index}>
                                             <td className="font-medium">{chip.phone || chip.id}</td>
-                                            <td>
-                                                <span className="inline-flex items-center gap-1">
-                                                    <span className="text-[var(--accent-warning)]">{chip.day}</span>
-                                                    <span className="text-[var(--text-muted)]">/ 14+</span>
-                                                </span>
-                                            </td>
-                                            <td>{chip.dailyLimit || 0} msgs</td>
-                                            <td>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs">{chip.sent || 0} env</span>
-                                                    <div className="w-16 h-2 rounded-full bg-[var(--bg-tertiary)]">
-                                                        <div
-                                                            className="h-full rounded-full bg-[var(--accent-primary)]"
-                                                            style={{ width: `${Math.min(100, ((chip.sent || 0) / (chip.dailyLimit || 1)) * 100)}%` }}
-                                                        ></div>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td>
-                                                <span className={`font-medium ${chip.health >= 90 ? 'text-[var(--accent-success)]' :
-                                                    chip.health >= 75 ? 'text-[var(--accent-warning)]' :
-                                                        'text-[var(--accent-danger)]'
-                                                    }`}>
-                                                    {chip.health}% Saúde
-                                                </span>
-                                            </td>
+                                            <td><span className="text-[var(--accent-warning)]">{chip.day}</span>/14+</td>
+                                            <td>{chip.dailyLimit}</td>
+                                            <td>{chip.sent} env</td>
+                                            <td><span className={chip.health >= 80 ? 'text-green-500' : 'text-yellow-500'}>{chip.health}%</span></td>
                                         </tr>
                                     ))}
                                 </tbody>
                             </table>
-                        ) : (
-                            <div className="text-center py-8 text-[var(--text-muted)]">
-                                Nenhum chip ativo na maturação do Warmup. Adicione instâncias na tela de Chips e ligue a proteção Inteligente.
-                            </div>
-                        )}
+                        ) : <div className="text-center py-8">Nenhum chip ativo.</div>}
                     </div>
                 </div>
-
-                {/* Chips Pairs */}
-                <div className="lg:col-span-3 glass-card p-6 mt-2">
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4 flex items-center justify-between">
-                        <span className="flex items-center gap-2">
-                            <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                            Pares de Conversação Ativos
-                        </span>
-                        <span className="text-sm bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 px-3 py-1 rounded-full font-medium">
-                            {safeStats.instances.length > 1 ? (safeStats.instances.length * (safeStats.instances.length - 1)) / 2 : 0} Permutações Diárias
-                        </span>
-                    </h3>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {safeStats.instances.length > 1 ? (
-                            safeStats.instances.flatMap((chipA, i) =>
-                                safeStats.instances.slice(i + 1).map((chipB, j) => (
-                                    <div key={`${i}-${j}`} className="flex flex-col bg-[var(--bg-secondary)] border border-[var(--border-primary)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                                        <div className="flex justify-between items-center mb-3">
-                                            <div className="w-10 h-10 bg-indigo-100 dark:bg-indigo-900/30 rounded-full flex items-center justify-center shrink-0">
-                                                <svg className="w-5 h-5 text-indigo-600 dark:text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                                                </svg>
-                                            </div>
-                                            <button
-                                                onClick={() => handleCreateSession(chipA.id, chipB.id)}
-                                                disabled={actionLoading}
-                                                className="text-xs bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded-lg font-medium transition-colors focus:ring-2 focus:ring-indigo-500 focus:outline-none flex items-center gap-1 shrink-0"
-                                            >
-                                                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                                </svg>
-                                                Assistir
-                                            </button>
-                                        </div>
-                                        <div className="flex flex-col gap-2 flex-grow">
-                                            <div className="text-sm font-medium text-[var(--text-primary)] break-all truncate" title={chipA.phone || chipA.id}>
-                                                <span className="text-[10px] uppercase text-[var(--text-muted)] font-bold tracking-wider mr-1">Chip A:</span>
-                                                {chipA.phone || chipA.id}
-                                            </div>
-                                            <div className="flex justify-center -my-1 text-gray-400">
-                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-                                                </svg>
-                                            </div>
-                                            <div className="text-sm font-medium text-[var(--text-primary)] break-all truncate" title={chipB.phone || chipB.id}>
-                                                <span className="text-[10px] uppercase text-[var(--text-muted)] font-bold tracking-wider mr-1">Chip B:</span>
-                                                {chipB.phone || chipB.id}
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))
-                            )
-                        ) : (
-                            <div className="col-span-full text-center py-6 text-[var(--text-muted)] border-2 border-dashed border-[var(--border-primary)] rounded-xl">
-                                Mínimo de 2 instâncias ativas necessárias para gerar pares.
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* WhatsApp Clone Viewer - Double Mockup */}
-                {simulatorVisible && generatedConversation && (
-                    <div className="lg:col-span-3 mt-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg font-semibold text-[var(--text-primary)] flex items-center gap-2">
-                                <svg className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                                </svg>
-                                Visualização Simultânea dos Dispositivos
-                            </h3>
-                            <button onClick={() => setSimulatorVisible(false)} className="text-sm px-3 py-1 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 rounded-lg transition-colors">
-                                Fechar
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-8 justify-items-center w-full max-w-5xl mx-auto">
-
-                            <div className="w-full flex flex-col gap-2">
-                                <div className="text-center font-medium text-sm text-[var(--text-secondary)]">
-                                    Visão do Dispositivo: {simulatedChips?.A?.name}
-                                </div>
-                                <WhatsAppMockup
-                                    simulatedChips={simulatedChips}
-                                    visibleMessages={visibleMessages}
-                                    isSimulatingTyping={isSimulatingTyping}
-                                    setSimulatorVisible={setSimulatorVisible}
-                                    chatEndRef={chatEndRef}
-                                    bottomPlaceholderRef={bottomPlaceholderRef}
-                                    viewRole="A"
-                                />
-                            </div>
-
-                            <div className="w-full flex flex-col gap-2">
-                                <div className="text-center font-medium text-sm text-[var(--text-secondary)]">
-                                    Visão do Dispositivo: {simulatedChips?.B?.name}
-                                </div>
-                                <WhatsAppMockup
-                                    simulatedChips={simulatedChips}
-                                    visibleMessages={visibleMessages}
-                                    isSimulatingTyping={isSimulatingTyping}
-                                    setSimulatorVisible={setSimulatorVisible}
-                                    viewRole="B"
-                                />
-                            </div>
-
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );

@@ -9,6 +9,9 @@
 import { Processor, WorkerHost, OnWorkerEvent } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Instance } from '../instances/entities/instance.entity';
 import { WarmupService } from './warmup.service';
 import { WARMUP_QUEUE } from '../../config/bull.config';
 import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
@@ -21,6 +24,10 @@ export class WarmupProcessor extends WorkerHost {
     constructor(
         private readonly warmupService: WarmupService,
         private readonly whatsappFactory: WhatsAppProviderFactory,
+        private readonly humanBehavior: HumanBehaviorService,
+        private readonly activePrevention: ActivePreventionService,
+        @InjectRepository(Instance)
+        private instanceRepo: Repository<Instance>,
     ) {
         super();
     }
@@ -53,20 +60,36 @@ export class WarmupProcessor extends WorkerHost {
     }
 
     private async handleWarmupMessage(job: Job): Promise<any> {
-        const { instanceName, toPhone, content, provider } = job.data;
-        // Fallback: instâncias antigas podem não ter 'provider' salvo no banco
+        const { instanceId, instanceName, toPhone, content, provider } = job.data;
         const resolvedProvider = provider || 'evolution';
         this.logger.log(`💌 Sending Warmup Message: ${instanceName} -> ${toPhone} (provider: ${resolvedProvider})`);
 
         try {
             const client = this.whatsappFactory.getProvider(resolvedProvider);
+
+            // --- [PREVENÇÃO ATIVA] ---
+            // 1. Simular comportamento humano (Presença/Digitação)
+            const timing = this.humanBehavior.generateTimingMetadata(content);
+            this.logger.log(`🎭 [Prevenção] ${instanceName} digitando por ${timing.typingDurationMs}ms...`);
+            
+            await client.sendPresence(instanceName, toPhone, 'composing', timing.typingDurationMs);
+
+            // 2. Aplicar Telemetria de Hardware (Bateria/Movimento)
+            await this.activePrevention.applyPrevention(instanceId);
+
+            // 3. Enviar a mensagem após a simulação
             const result = await client.sendText(instanceName, toPhone, content);
-            this.logger.log(`✅ Warmup Message Sent | instanceName=${instanceName} | to=${toPhone} | messageId=${result?.messageId}`);
+            
+            if (instanceId) {
+                await this.instanceRepo.increment({ id: instanceId }, 'dailySent', 1).catch(err => {
+                    this.logger.warn(`Failed to increment dailySent for instance ${instanceId}: ${err.message}`);
+                });
+            }
+
+            this.logger.log(`✅ Warmup Message Sent with Active Protection | instanceName=${instanceName} | to=${toPhone}`);
             return result;
         } catch (error) {
             this.logger.error(`❌ Failed to send warmup message | instance=${instanceName} | to=${toPhone} | error=${error.message}`);
-            // ⚠️ IMPORTANTE: Re-lançar o erro para que o BullMQ marque o job como FAILED
-            // e aplique a política de retry. Sem isso, jobs com falha são marcados como 'completed'.
             throw error;
         }
     }
