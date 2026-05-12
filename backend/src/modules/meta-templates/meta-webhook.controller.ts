@@ -1,5 +1,7 @@
 
 import { Controller, Post, Get, Query, Body, Logger, HttpCode, HttpStatus } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
+
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
@@ -11,6 +13,7 @@ import { FlowsService } from '../flows/flows.service';
 import { Contact } from '../contacts/entities/contact.entity';
 import { EventsGateway } from '../events/events.gateway';
 
+@SkipThrottle()
 @Controller('webhooks/meta')
 export class MetaWebhookController {
     private readonly logger = new Logger(MetaWebhookController.name);

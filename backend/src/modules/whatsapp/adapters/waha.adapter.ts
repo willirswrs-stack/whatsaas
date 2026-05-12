@@ -191,8 +191,13 @@ export class WahaAdapter implements IWhatsAppProvider {
             });
             return response[0]?.isRegistered || false;
         } catch (error) {
-            return true;
+            return false;
         }
+    }
+
+    async getMaturityMetrics(instanceName: string): Promise<{ chatCount: number; groupCount: number }> {
+        // Placeholder for WAHA implementation
+        return { chatCount: 0, groupCount: 0 };
     }
 
     private async request<T = any>(method: string, path: string, body?: any): Promise<T> {

@@ -42,6 +42,13 @@ import {
 // ============ TYPES ============
 type CustomNodeProps = NodeProps<Node<any, string>>;
 
+import { createContext, useContext } from 'react';
+const FlowDataContext = createContext<{
+    allFlows: Flow[];
+    category: string;
+    setCategory: (c: string) => void;
+}>({ allFlows: [], category: '', setCategory: () => { } });
+
 // ============ ESTILOS ============
 const nodeStyles = {
     wrapper: `
@@ -588,7 +595,14 @@ function QuestionNode({ data, selected, id }: CustomNodeProps) {
 }
 
 // ============ NÓ DE INÍCIO ============
-function StartNode({ data, selected }: CustomNodeProps) {
+function StartNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig } = useNodeConfig(id, data.config || {});
+    const [showHoursModal, setShowHoursModal] = useState(false);
+    const [showTriggerModal, setShowTriggerModal] = useState(false);
+
+    const businessHours = data.config?.businessHours || { enabled: false, days: [], timezone: 'America/Sao_Paulo' };
+    const triggers = data.config?.triggers || [];
+
     return (
         <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className="px-6 py-4 rounded-xl bg-gradient-to-r from-[#14b8a6] to-[#0d9488] text-white">
@@ -613,23 +627,34 @@ function StartNode({ data, selected }: CustomNodeProps) {
             {/* Seção Condições */}
             <div className="mt-2 rounded-xl border border-gray-200 dark:border-[var(--border-color)] overflow-hidden">
                 <div className="px-4 py-2 bg-[#fbbf24] text-gray-800 font-semibold text-sm flex items-center gap-2">
-                    ⚙️ Condições
+                    ⚙️ Configurações de Início
                 </div>
                 <div className="p-4 bg-white dark:bg-[var(--bg-glass)] space-y-3">
-                    <div className="flex items-center gap-3">
+                    <div 
+                        className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 p-2 rounded-lg transition-colors"
+                        onClick={() => setShowHoursModal(true)}
+                    >
                         <span className="text-2xl">🕐</span>
-                        <div>
+                        <div className="flex-1">
                             <div className="font-medium text-sm">Horário de funcionamento</div>
-                            <div className="text-xs text-gray-400">Sem configuração</div>
+                            <div className="text-xs text-gray-400">
+                                {businessHours.enabled ? 'Ativado' : 'Sem configuração'}
+                            </div>
                         </div>
+                        <div className="text-[#14b8a6] text-xs">Editar</div>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div 
+                        className="flex items-center gap-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-white/5 p-2 rounded-lg transition-colors"
+                        onClick={() => setShowTriggerModal(true)}
+                    >
                         <span className="text-2xl">⚡</span>
-                        <div>
-                            <div className="font-medium text-sm">Gatilho</div>
-                            <div className="text-xs text-gray-400">Nenhum gatilho configurado</div>
-                            <button className="text-xs text-[#14b8a6] mt-1">Novo gatilho</button>
+                        <div className="flex-1">
+                            <div className="font-medium text-sm">Gatilhos (Palavras-chave)</div>
+                            <div className="text-xs text-gray-400">
+                                {triggers.length > 0 ? `${triggers.length} gatilho(s)` : 'Nenhum gatilho'}
+                            </div>
                         </div>
+                        <div className="text-[#14b8a6] text-xs">Configurar</div>
                     </div>
                 </div>
             </div>
@@ -639,6 +664,220 @@ function StartNode({ data, selected }: CustomNodeProps) {
                 position={Position.Right}
                 className={`${nodeStyles.handle} !bg-[#14b8a6]`}
             />
+
+            {/* Modais de Configuração */}
+            {showHoursModal && (
+                <BusinessHoursModal 
+                    isOpen={showHoursModal} 
+                    onClose={() => setShowHoursModal(false)} 
+                    config={businessHours}
+                    onSave={(newHours) => {
+                        updateConfig({ businessHours: newHours });
+                        setShowHoursModal(false);
+                    }}
+                />
+            )}
+
+            {showTriggerModal && (
+                <TriggersModal 
+                    isOpen={showTriggerModal} 
+                    onClose={() => setShowTriggerModal(false)} 
+                    triggers={triggers}
+                    onSave={(newTriggers) => {
+                        updateConfig({ triggers: newTriggers });
+                        setShowTriggerModal(false);
+                    }}
+                />
+            )}
+        </div>
+    );
+}
+
+// ============ MODAL HORÁRIO DE FUNCIONAMENTO ============
+function BusinessHoursModal({ isOpen, onClose, config, onSave }: any) {
+    const [enabled, setEnabled] = useState(config.enabled || false);
+    const [days, setDays] = useState(config.days || []);
+    
+    const weekDays = [
+        { id: 'mon', label: 'Seg' },
+        { id: 'tue', label: 'Ter' },
+        { id: 'wed', label: 'Qua' },
+        { id: 'thu', label: 'Qui' },
+        { id: 'fri', label: 'Sex' },
+        { id: 'sat', label: 'Sáb' },
+        { id: 'sun', label: 'Dom' },
+    ];
+
+    const toggleDay = (dayId: string) => {
+        if (days.find((d: any) => d.id === dayId)) {
+            setDays(days.filter((d: any) => d.id !== dayId));
+        } else {
+            setDays([...days, { id: dayId, start: '08:00', end: '18:00' }]);
+        }
+    };
+
+    const updateTime = (dayId: string, field: 'start' | 'end', value: string) => {
+        setDays(days.map((d: any) => d.id === dayId ? { ...d, [field]: value } : d));
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110]" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-[var(--bg-secondary)] rounded-xl w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-[var(--border-color)] flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                        <span>🕐</span> Horário de Funcionamento
+                    </h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                    <label className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-white/5 rounded-lg cursor-pointer">
+                        <input 
+                            type="checkbox" 
+                            checked={enabled} 
+                            onChange={(e) => setEnabled(e.target.checked)}
+                            className="w-5 h-5 rounded border-gray-300 text-[#14b8a6] focus:ring-[#14b8a6]"
+                        />
+                        <div className="flex-1">
+                            <div className="font-medium text-sm">Ativar restrição de horário</div>
+                            <div className="text-xs text-gray-500">O fluxo só responderá nos horários definidos abaixo.</div>
+                        </div>
+                    </label>
+
+                    {enabled && (
+                        <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                            {weekDays.map(day => {
+                                const dayConfig = days.find((d: any) => d.id === day.id);
+                                return (
+                                    <div key={day.id} className="flex items-center gap-3 p-2 border-b border-gray-100 dark:border-white/5 last:border-0">
+                                        <button 
+                                            onClick={() => toggleDay(day.id)}
+                                            className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-xs transition-colors ${
+                                                dayConfig ? 'bg-[#14b8a6] text-white' : 'bg-gray-100 dark:bg-white/5 text-gray-400'
+                                            }`}
+                                        >
+                                            {day.label}
+                                        </button>
+                                        
+                                        {dayConfig ? (
+                                            <div className="flex items-center gap-2 flex-1">
+                                                <input 
+                                                    type="time" 
+                                                    value={dayConfig.start}
+                                                    onChange={(e) => updateTime(day.id, 'start', e.target.value)}
+                                                    className="flex-1 bg-transparent border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm"
+                                                />
+                                                <span className="text-gray-400 text-xs">até</span>
+                                                <input 
+                                                    type="time" 
+                                                    value={dayConfig.end}
+                                                    onChange={(e) => updateTime(day.id, 'end', e.target.value)}
+                                                    className="flex-1 bg-transparent border border-gray-200 dark:border-white/10 rounded px-2 py-1 text-sm"
+                                                />
+                                            </div>
+                                        ) : (
+                                            <div className="flex-1 text-sm text-gray-400 italic">Fechado</div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-[var(--border-color)] flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 text-gray-500 text-sm">Cancelar</button>
+                    <button 
+                        onClick={() => onSave({ enabled, days, timezone: 'America/Sao_Paulo' })}
+                        className="px-6 py-2 bg-[#14b8a6] text-white rounded-lg text-sm font-medium hover:bg-[#0d9488]"
+                    >
+                        Salvar
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ============ MODAL GATILHOS ============
+function TriggersModal({ isOpen, onClose, triggers, onSave }: any) {
+    const [localTriggers, setLocalTriggers] = useState(triggers || []);
+    const [newKeyword, setNewKeyword] = useState('');
+
+    const addTrigger = () => {
+        if (!newKeyword.trim()) return;
+        setLocalTriggers([...localTriggers, { type: 'keyword', value: newKeyword.trim(), match: 'exact' }]);
+        setNewKeyword('');
+    };
+
+    const removeTrigger = (index: number) => {
+        setLocalTriggers(localTriggers.filter((_: any, i: number) => i !== index));
+    };
+
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[110]" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white dark:bg-[var(--bg-secondary)] rounded-xl w-full max-w-md mx-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-[var(--border-color)] flex items-center justify-between">
+                    <h3 className="text-lg font-semibold text-gray-800 dark:text-white flex items-center gap-2">
+                        <span>⚡</span> Gatilhos de Fluxo
+                    </h3>
+                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">✕</button>
+                </div>
+                
+                <div className="p-6 space-y-4">
+                    <p className="text-sm text-gray-500">
+                        O fluxo será iniciado automaticamente quando o contato enviar uma das palavras-chave abaixo.
+                    </p>
+
+                    <div className="flex gap-2">
+                        <input 
+                            type="text" 
+                            value={newKeyword}
+                            onChange={(e) => setNewKeyword(e.target.value)}
+                            onKeyPress={(e) => e.key === 'Enter' && addTrigger()}
+                            placeholder="Ex: Ola, Quero saber mais"
+                            className="flex-1 bg-transparent border border-gray-200 dark:border-white/10 rounded-lg px-3 py-2 text-sm"
+                        />
+                        <button 
+                            onClick={addTrigger}
+                            className="px-4 py-2 bg-[#14b8a6] text-white rounded-lg text-sm font-medium"
+                        >
+                            +
+                        </button>
+                    </div>
+
+                    <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                        {localTriggers.map((t: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-white/5 rounded-lg border border-gray-100 dark:border-white/5">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-600 rounded uppercase font-bold">{t.match}</span>
+                                    <span className="text-sm font-medium">{t.value}</span>
+                                </div>
+                                <button onClick={() => removeTrigger(idx)} className="text-red-400 hover:text-red-600">🗑️</button>
+                            </div>
+                        ))}
+                        {localTriggers.length === 0 && (
+                            <div className="text-center py-8 text-gray-400 text-sm italic">
+                                Nenhum gatilho configurado.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="px-6 py-4 border-t border-gray-200 dark:border-[var(--border-color)] flex justify-end gap-3">
+                    <button onClick={onClose} className="px-4 py-2 text-gray-500 text-sm">Cancelar</button>
+                    <button 
+                        onClick={() => onSave(localTriggers)}
+                        className="px-6 py-2 bg-[#14b8a6] text-white rounded-lg text-sm font-medium hover:bg-[#0d9488]"
+                    >
+                        Salvar Gatilhos
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
@@ -2608,11 +2847,16 @@ function DelayNode({ data, selected, id }: CustomNodeProps) {
 }
 
 // ============ NÓ DE CONDIÇÃO ============
-function ConditionNode({ data, selected }: CustomNodeProps) {
+function ConditionNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode } = useNodeConfig(id, data.config);
+    const [field, setField] = useState(data.config?.field || '');
+    const [operator, setOperator] = useState(data.config?.operator || 'contains');
+    const [value, setValue] = useState(data.config?.value || '');
+
     return (
-        <div className={`group ${nodeStyles.wrapper} min-w-[200px] ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
+        <div className={`group ${nodeStyles.wrapper} min-w-[220px] ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
             <div className={nodeStyles.floatingButtons}>
-                <button className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs">
+                <button onClick={deleteNode} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
                     <Icons.Delete /> Remover
                 </button>
             </div>
@@ -2620,32 +2864,77 @@ function ConditionNode({ data, selected }: CustomNodeProps) {
             <div className="px-4 py-3 rounded-t-xl bg-[#f97316] text-white">
                 <div className="flex items-center gap-2">
                     <span className="text-2xl">🔀</span>
-                    <div className="font-semibold">Condição</div>
+                    <div>
+                        <div className="font-semibold text-sm">Condição</div>
+                        <div className="text-[10px] opacity-80">Desvio de fluxo</div>
+                    </div>
                 </div>
             </div>
 
             <div className={nodeStyles.body}>
-                <select className="w-full bg-transparent border border-gray-200 dark:border-[var(--border-color)] rounded px-2 py-2 text-sm">
-                    <option>Se resposta contém...</option>
-                    <option>Se tag existe...</option>
-                    <option>Se campo igual a...</option>
-                </select>
-
-                <div className="flex items-center justify-between mt-4 text-sm">
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-[#22c55e]"></div>
-                        <span>Sim</span>
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Campo / Variável</label>
+                        <input 
+                            type="text"
+                            placeholder="Ex: last_message, nome"
+                            className="w-full bg-transparent border border-gray-200 dark:border-[var(--border-color)] rounded px-2 py-1.5 text-sm"
+                            value={field}
+                            onChange={(e) => { setField(e.target.value); updateConfig({ field: e.target.value }); }}
+                            onClick={(e) => e.stopPropagation()}
+                        />
                     </div>
-                    <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full bg-[#ef4444]"></div>
-                        <span>Não</span>
+
+                    <div>
+                        <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Operador</label>
+                        <select 
+                            className="w-full bg-transparent border border-gray-200 dark:border-[var(--border-color)] rounded px-2 py-1.5 text-sm"
+                            value={operator}
+                            onChange={(e) => { setOperator(e.target.value); updateConfig({ operator: e.target.value }); }}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <option value="contains">Contém</option>
+                            <option value="equals">Igual a</option>
+                            <option value="not_equals">Diferente de</option>
+                            <option value="starts_with">Começa com</option>
+                            <option value="exists">Existe / Definido</option>
+                        </select>
+                    </div>
+
+                    {operator !== 'exists' && (
+                        <div>
+                            <label className="text-[10px] text-gray-400 uppercase font-bold block mb-1">Valor</label>
+                            <input 
+                                type="text"
+                                placeholder="Valor para comparar"
+                                className="w-full bg-transparent border border-gray-200 dark:border-[var(--border-color)] rounded px-2 py-1.5 text-sm"
+                                value={value}
+                                onChange={(e) => { setValue(e.target.value); updateConfig({ value: e.target.value }); }}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex flex-col gap-2 mt-4">
+                    <div className="flex items-center justify-between text-xs p-2 bg-green-50 dark:bg-green-900/10 rounded-lg">
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-[#22c55e]"></div>
+                            <span className="font-medium text-green-700 dark:text-green-400">Verdadeiro</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center justify-between text-xs p-2 bg-red-50 dark:bg-red-900/10 rounded-lg">
+                        <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full bg-[#ef4444]"></div>
+                            <span className="font-medium text-red-700 dark:text-red-400">Falso</span>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <Handle type="target" position={Position.Left} className={`${nodeStyles.handle} !bg-gray-400`} />
-            <Handle type="source" position={Position.Right} id="yes" className={`${nodeStyles.handle} !bg-[#22c55e]`} style={{ top: '60%' }} />
-            <Handle type="source" position={Position.Right} id="no" className={`${nodeStyles.handle} !bg-[#ef4444]`} style={{ top: '80%' }} />
+            <Handle type="source" position={Position.Right} id="yes" className={`${nodeStyles.handle} !bg-[#22c55e]`} style={{ top: '65%' }} />
+            <Handle type="source" position={Position.Right} id="no" className={`${nodeStyles.handle} !bg-[#ef4444]`} style={{ top: '85%' }} />
         </div>
     );
 }
@@ -3242,6 +3531,7 @@ function SaveInfoNode({ data, selected, id }: CustomNodeProps) {
 // ============ NÓ DE MOVER DE FLUXO ============
 function MoveFlowNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config);
+    const { allFlows } = useContext(FlowDataContext);
     const [targetFlow, setTargetFlow] = useState(data.config?.targetFlow || '');
 
     return (
@@ -3273,10 +3563,16 @@ function MoveFlowNode({ data, selected, id }: CustomNodeProps) {
                     <select
                         className="w-full px-3 py-2 border border-gray-200 dark:border-[var(--border-color)] rounded-lg text-sm"
                         value={targetFlow}
-                        onChange={(e) => { setTargetFlow(e.target.value); updateConfig({ targetFlow: e.target.value }); }}
+                        onChange={(e) => { 
+                            setTargetFlow(e.target.value); 
+                            updateConfig({ targetFlow: e.target.value }); 
+                        }}
                         onClick={(e) => e.stopPropagation()}
                     >
                         <option value="">Selecione um fluxo...</option>
+                        {allFlows.map(f => (
+                            <option key={f.id} value={f.id}>{f.name}</option>
+                        ))}
                     </select>
                 </div>
 
@@ -3482,6 +3778,7 @@ function ContactsNode({ data, selected, id }: CustomNodeProps) {
                         <option value="block">Bloquear contato</option>
                         <option value="unblock">Desbloquear contato</option>
                         <option value="optOut">Marcar como opt-out</option>
+                        <option value="changeCategory">Alterar categoria</option>
                     </select>
                 </div>
 
@@ -3496,6 +3793,23 @@ function ContactsNode({ data, selected, id }: CustomNodeProps) {
                             onChange={(e) => { setTagName(e.target.value); updateConfig({ tagName: e.target.value }); }}
                             onClick={(e) => e.stopPropagation()}
                         />
+                    </div>
+                )}
+
+                {action === 'changeCategory' && (
+                    <div className="mb-3">
+                        <label className="text-xs text-gray-500 mb-1 block">Nova categoria</label>
+                        <select
+                            className="w-full px-3 py-2 border border-gray-200 dark:border-[var(--border-color)] rounded-lg text-sm"
+                            value={data.config?.category || ''}
+                            onChange={(e) => updateConfig({ category: e.target.value })}
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <option value="">Selecione uma categoria</option>
+                            {['Marketing', 'Pré-vendas', 'Venda', 'Pós-venda', 'Atendimento', 'Suporte'].map(cat => (
+                                <option key={cat} value={cat}>{cat}</option>
+                            ))}
+                        </select>
                     </div>
                 )}
 
@@ -3914,10 +4228,27 @@ function FlowEditorContent() {
     const [testPhone, setTestPhone] = useState('');
     const [testing, setTesting] = useState(false);
     const [instances, setInstances] = useState<Instance[]>([]);
+    const [isAddingCategory, setIsAddingCategory] = useState(false);
 
     const [nodes, setNodes, onNodesChange] = useNodesState<any>([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState<any>([]);
     const { getNodes, getEdges } = useReactFlow();
+
+    const addNodeByType = useCallback((type: string, label: string) => {
+        const position = {
+            x: 500 + Math.random() * 50,
+            y: 300 + Math.random() * 50,
+        };
+
+        const newNode: Node = {
+            id: `${type}-${Date.now()}`,
+            type,
+            position,
+            data: { label, type, config: {} },
+        };
+
+        setNodes((nds: any) => [...nds, newNode]);
+    }, [setNodes]);
 
     const nodeTypes: NodeTypes = useMemo(() => ({
         start: StartNode,
@@ -4010,6 +4341,7 @@ function FlowEditorContent() {
             try {
                 const data = await flowsApi.getFlow(flowId);
                 setFlow(data);
+                setCategory(data.category || '');
                 setNodes(data.nodes.map(n => ({ ...n, type: n.data.type })) as any);
                 setEdges(data.edges.map((e: any) => ({ ...e, type: 'default' })) as any);
             } catch (error) {
@@ -4021,6 +4353,24 @@ function FlowEditorContent() {
         };
         loadFlow();
     }, [flowId, router, setNodes, setEdges]);
+
+    // Load extra data (instances and other flows)
+    const [allFlows, setAllFlows] = useState<Flow[]>([]);
+    useEffect(() => {
+        const loadExtraData = async () => {
+            try {
+                const [instancesData, flowsData] = await Promise.all([
+                    instancesService.getInstances(),
+                    flowsApi.listFlows()
+                ]);
+                setInstances(instancesData);
+                setAllFlows(flowsData.filter((f: any) => f.id !== flowId));
+            } catch (error) {
+                console.error('Erro ao carregar dados extras:', error);
+            }
+        };
+        loadExtraData();
+    }, [flowId]);
 
     const onConnect = useCallback(
         (connection: Connection) => {
@@ -4072,6 +4422,9 @@ function FlowEditorContent() {
             const currentEdges = getEdges();
 
             await flowsApi.updateFlow(flow.id, {
+                name: flow.name,
+                description: flow.description,
+                category: category,
                 nodes: currentNodes.map((n: any) => ({
                     id: n.id,
                     type: n.type,
@@ -4142,7 +4495,7 @@ function FlowEditorContent() {
     const categories = ['Marketing', 'Pré-vendas', 'Venda', 'Pós-venda', 'Atendimento', 'Suporte'];
 
     return (
-        <>
+        <FlowDataContext.Provider value={{ allFlows, category, setCategory }}>
             <div className="h-screen flex flex-col bg-gray-100 dark:bg-[var(--bg-primary)]">
                 {/* Toolbar */}
                 <div className="h-14 border-b border-gray-200 dark:border-[var(--border-color)] flex items-center justify-between px-4 bg-white dark:bg-[var(--bg-secondary)]">
@@ -4196,17 +4549,48 @@ function FlowEditorContent() {
                             <p className="text-xs text-gray-400 mb-3">
                                 Selecione a categoria que representa o objetivo principal deste fluxo.
                             </p>
-                            <select
-                                className="w-full bg-white dark:bg-[var(--bg-secondary)] border border-gray-200 dark:border-[var(--border-color)] rounded-lg px-3 py-2 text-sm"
-                                value={category}
-                                onChange={(e) => setCategory(e.target.value)}
+                            {isAddingCategory ? (
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        className="flex-1 bg-white dark:bg-[var(--bg-secondary)] border border-gray-200 dark:border-[var(--border-color)] rounded-lg px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-[#14b8a6]"
+                                        placeholder="Nova categoria..."
+                                        autoFocus
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                                const val = e.currentTarget.value.trim();
+                                                if (val) {
+                                                    setCategory(val);
+                                                    setIsAddingCategory(false);
+                                                }
+                                            } else if (e.key === 'Escape') {
+                                                setIsAddingCategory(false);
+                                            }
+                                        }}
+                                        onBlur={() => setIsAddingCategory(false)}
+                                    />
+                                </div>
+                            ) : (
+                                <select
+                                    className="w-full bg-white dark:bg-[var(--bg-secondary)] border border-gray-200 dark:border-[var(--border-color)] rounded-lg px-3 py-2 text-sm"
+                                    value={category}
+                                    onChange={(e) => setCategory(e.target.value)}
+                                >
+                                    <option value="">Selecione uma categoria</option>
+                                    {categories.map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                    {category && !categories.includes(category) && (
+                                        <option value={category}>{category}</option>
+                                    )}
+                                </select>
+                            )}
+                            <button 
+                                onClick={() => setIsAddingCategory(true)}
+                                className="text-[#14b8a6] text-xs mt-2 hover:underline"
                             >
-                                <option value="">Selecione uma categoria</option>
-                                {categories.map(cat => (
-                                    <option key={cat} value={cat}>{cat}</option>
-                                ))}
-                            </select>
-                            <button className="text-[#14b8a6] text-xs mt-2 hover:underline">+ Configurar uma categoria</button>
+                                + Configurar uma categoria
+                            </button>
                         </div>
 
                         {/* Início do fluxo */}
@@ -4235,15 +4619,14 @@ function FlowEditorContent() {
                                         <span>🕐</span>
                                         <div>
                                             <div className="text-xs font-medium">Horário de funcionamento</div>
-                                            <div className="text-xs text-gray-400">Sem configuração</div>
+                                            <div className="text-xs text-gray-400">Clique no nó "Início" para configurar</div>
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <span>⚡</span>
                                         <div>
                                             <div className="text-xs font-medium">Gatilho</div>
-                                            <div className="text-xs text-gray-400">Nenhum gatilho configurado</div>
-                                            <button className="text-xs text-[#14b8a6] hover:underline">Novo gatilho</button>
+                                            <div className="text-xs text-gray-400">Clique no nó "Início" para configurar</div>
                                         </div>
                                     </div>
                                 </div>
@@ -4259,20 +4642,20 @@ function FlowEditorContent() {
                                 <span className="font-semibold text-gray-800 dark:text-white">Transportar contato</span>
                             </div>
                             <p className="text-xs text-gray-400 mb-3">
-                                Quando a condição predefinida for mencionada pelo contato, ele será automaticamente direcionado para o bloco ou fluxo desejado.
+                                Redirecione o contato para outro fluxo de automação.
                             </p>
 
-                            {/* Condições */}
                             <div className="rounded-lg border border-gray-200 dark:border-[var(--border-color)] overflow-hidden">
-                                <div className="px-3 py-2 bg-[#22c55e] text-white font-semibold text-xs flex items-center gap-2">
-                                    ⚙️ Condições
+                                <div className="px-3 py-2 bg-[#8b5cf6] text-white font-semibold text-xs flex items-center gap-2">
+                                    ↗️ Ações
                                 </div>
                                 <div className="p-3 bg-gray-50 dark:bg-[var(--bg-glass)]">
-                                    <div className="flex items-center gap-2">
-                                        <span className="px-3 py-1 bg-[#14b8a6] text-white text-xs rounded-full">COMEÇAR ✓</span>
-                                        <span className="text-xs text-gray-400">Mais palavras chave</span>
-                                    </div>
-                                    <button className="text-xs text-[#14b8a6] mt-2 hover:underline">Nova transporte</button>
+                                    <button 
+                                        onClick={() => addNodeByType('moveFlow', 'Mover de fluxo')}
+                                        className="w-full py-2 bg-[#8b5cf6] text-white text-xs rounded-lg hover:bg-[#7c3aed] transition-colors"
+                                    >
+                                        + Novo transporte (Mover de Fluxo)
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -4286,23 +4669,20 @@ function FlowEditorContent() {
                                 <span className="font-semibold text-gray-800 dark:text-white">Interromper contato</span>
                             </div>
                             <p className="text-xs text-gray-400 mb-3">
-                                Quando a condição predefinida for mencionada pelo contato o fluxo será interrompido.
+                                Encerra o fluxo atual para o contato.
                             </p>
 
-                            {/* Condições */}
                             <div className="rounded-lg border border-gray-200 dark:border-[var(--border-color)] overflow-hidden">
                                 <div className="px-3 py-2 bg-[#ef4444] text-white font-semibold text-xs flex items-center gap-2">
-                                    ⚙️ Condições
+                                    🛑 Ações
                                 </div>
                                 <div className="p-3 bg-gray-50 dark:bg-[var(--bg-glass)]">
-                                    <label className="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400">
-                                        <input type="checkbox" className="w-4 h-4 rounded" />
-                                        Finalizar ao atender
-                                    </label>
-                                    <div className="flex items-center gap-2 mt-2">
-                                        <span className="px-3 py-1 bg-[#14b8a6] text-white text-xs rounded-full">COMEÇAR ✓</span>
-                                        <span className="text-xs text-gray-400">Mais palavras chave</span>
-                                    </div>
+                                    <button 
+                                        onClick={() => addNodeByType('end', 'Fim do fluxo')}
+                                        className="w-full py-2 bg-[#ef4444] text-white text-xs rounded-lg hover:bg-[#dc2626] transition-colors"
+                                    >
+                                        + Interromper fluxo (Fim)
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -4461,7 +4841,7 @@ function FlowEditorContent() {
                     </div>
                 </div>
             )}
-        </>
+        </FlowDataContext.Provider>
     );
 }
 

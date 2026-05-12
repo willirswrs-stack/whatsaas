@@ -641,6 +641,27 @@ export class ContactsService {
         return { message: `Tags adicionadas a ${contactIds.length} contatos` };
     }
 
+    async blockContact(tenantId: string, id: string) {
+        await this.contactRepository.update({ id, tenantId }, { isValid: false });
+        return { message: 'Contato bloqueado' };
+    }
+
+    async unblockContact(tenantId: string, id: string) {
+        await this.contactRepository.update({ id, tenantId }, { isValid: true });
+        return { message: 'Contato desbloqueado' };
+    }
+
+    async setOptOut(tenantId: string, id: string, optedOut: boolean) {
+        await this.contactRepository.update(
+            { id, tenantId },
+            { 
+                optedOut, 
+                optedOutAt: optedOut ? new Date() : undefined 
+            }
+        );
+        return { message: optedOut ? 'Opt-out ativado' : 'Opt-out desativado' };
+    }
+
     async verifyContacts(tenantId: string, instanceName: string, contactIds: string[], providerTypeStr: 'evolution' | 'waha') {
         const provider = this.providerFactory.getProvider(providerTypeStr);
 

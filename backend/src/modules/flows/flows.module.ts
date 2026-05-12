@@ -14,6 +14,7 @@ import { AiModule } from '../ai/ai.module';
 import { FLOW_QUEUE } from '../../config/bull.config';
 import { FlowExecutionProcessor } from './flow-execution.processor';
 import { MetaTemplatesModule } from '../meta-templates/meta-templates.module';
+import { AntiBanModule } from '../anti-ban/anti-ban.module';
 
 @Module({
     imports: [
@@ -23,9 +24,9 @@ import { MetaTemplatesModule } from '../meta-templates/meta-templates.module';
         }),
         InstancesModule,
         ContactsModule,
-        ContactsModule,
         AiModule,
         MetaTemplatesModule,
+        forwardRef(() => AntiBanModule),
     ],
     controllers: [FlowsController, FoldersController],
     providers: [FlowsService, FoldersService, FlowExecutionProcessor],

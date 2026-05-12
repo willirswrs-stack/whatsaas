@@ -7,13 +7,16 @@ import { Sidebar } from './Sidebar';
 import { ProtectedRoute } from './ProtectedRoute';
 
 import { OnboardingAssistant } from './onboarding/OnboardingAssistant';
+import { SupportWidget } from './SupportWidget';
 
 // Rotas públicas que não precisam de autenticação
-const publicRoutes = ['/login'];
+const publicRoutes = ['/login', '/landing'];
 
 export function ClientLayout({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
-    const isPublicRoute = publicRoutes.includes(pathname);
+    // Remover trailing slash para comparação segura e verificar se começa com a rota
+    const normalizedPath = pathname?.endsWith('/') ? pathname.slice(0, -1) : pathname;
+    const isPublicRoute = publicRoutes.some(route => normalizedPath === route || normalizedPath?.startsWith(route + '/'));
 
     return (
         <ThemeProvider>
@@ -27,6 +30,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                         <Sidebar />
                         <main className="main-content">{children}</main>
                         <OnboardingAssistant />
+                        <SupportWidget />
                     </ProtectedRoute>
                 )}
             </AuthProvider>

@@ -18,6 +18,7 @@ import { InstancesModule } from '../instances/instances.module';
 import { AiModule } from '../ai/ai.module';
 import { ChipLifecycleService } from './chip-lifecycle.service';
 import { ActivePreventionService } from './active-prevention.service';
+import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 
 @Module({
     imports: [
@@ -27,6 +28,7 @@ import { ActivePreventionService } from './active-prevention.service';
         }),
         forwardRef(() => InstancesModule),
         AiModule,
+        WhatsAppModule,
     ],
     controllers: [AnalyticsController, WarmupController],
     providers: [

@@ -1,76 +1,113 @@
 @echo off
 title WhatSaas - Iniciando...
 color 0A
+setlocal
+
+set BACKEND_DIR=%~dp0backend
+set FRONTEND_DIR=%~dp0frontend
 
 echo.
-echo  ╔══════════════════════════════════════════════════════════╗
-echo  ║                                                          ║
-echo  ║   📱 WhatSaas - WhatsApp Marketing Platform              ║
-echo  ║                                                          ║
-echo  ╚══════════════════════════════════════════════════════════╝
+echo  ==========================================================
+echo     WhatSaas - WhatsApp Marketing Platform
+echo  ==========================================================
 echo.
 
-:: Verificar se Docker esta rodando
-echo [1/4] Verificando Docker...
+:: ── 1. Verificar Docker ───────────────────────────────────────
+echo [1/5] Verificando Docker Desktop...
 docker info >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo.
-    echo ❌ Docker Desktop nao esta rodando!
-    echo.
-    echo    Por favor, inicie o Docker Desktop e tente novamente.
+    echo  ERRO: Docker Desktop nao esta rodando!
+    echo  Por favor, inicie o Docker Desktop e tente novamente.
     echo.
     pause
     exit /b 1
 )
-echo ✅ Docker OK
+echo  OK - Docker esta rodando
 
-:: Subir containers
+:: ── 2. Matar processos Node antigos (evita conflito de porta) ─
 echo.
-echo [2/4] Iniciando Bancos e APIs de WhatsApp (Evolution/Waha)...
-cd /d "%~dp0backend"
-docker-compose up -d postgres redis evolution waha
+echo [2/5] Limpando processos Node anteriores...
+taskkill /F /IM node.exe /T >nul 2>&1
+echo  OK - Processos anteriores finalizados
+
+:: ── 3. Subir containers (so os que nao estao rodando) ────────
+echo.
+echo [3/5] Verificando/Iniciando containers Docker...
+cd /d "%BACKEND_DIR%"
+
+:: Checar se postgres ja esta rodando
+docker inspect -f "{{.State.Running}}" wathsaas-postgres >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    echo  OK - Containers ja estao rodando, pulando...
+) else (
+    echo  Iniciando containers...
+    start /b docker-compose up -d postgres redis evolution waha
+    echo  OK - Containers iniciando em background
+)
+
+:: ── 4. Aguardar PostgreSQL estar pronto (max 30s) ────────────
+echo.
+echo [4/5] Aguardando banco de dados ficar pronto...
+set /a TRIES=0
+:waitdb
+set /a TRIES+=1
+if %TRIES% gtr 15 (
+    echo  AVISO: Timeout aguardando DB, iniciando assim mesmo...
+    goto startapp
+)
+docker exec wathsaas-postgres pg_isready -U wathsaas >nul 2>&1
 if %ERRORLEVEL% neq 0 (
-    echo ❌ Erro ao iniciar containers
-    pause
-    exit /b 1
+    timeout /t 2 /nobreak >nul
+    goto waitdb
 )
-echo ✅ Containers OK
+echo  OK - Banco de dados pronto
 
-:: Aguardar banco ficar pronto
+:: ── 5. Iniciar Backend e Frontend ────────────────────────────
+:startapp
 echo.
-echo [3/4] Aguardando banco de dados...
-timeout /t 5 /nobreak >nul
-echo ✅ Banco de dados pronto
+echo [5/5] Iniciando Backend e Frontend...
 
-:: Iniciar Backend e Frontend em janelas separadas
+start "WhatSaas - Backend" cmd /k "title WhatSaas Backend (porta 3333) && cd /d %BACKEND_DIR% && npm run start:dev"
+start "WhatSaas - Frontend" cmd /k "title WhatSaas Frontend (porta 3000) && cd /d %FRONTEND_DIR% && npm run dev"
+
+:: ── Aguardar backend responder (max 60s) ─────────────────────
 echo.
-echo [4/4] Iniciando Backend e Frontend...
-
-:: Backend
-start "WhatSaas Backend" cmd /k "cd /d %~dp0backend && npm run start:dev"
-
-:: Aguardar backend iniciar
-timeout /t 8 /nobreak >nul
-
-:: Frontend
-start "WhatSaas Frontend" cmd /k "cd /d %~dp0frontend && npm run dev"
-
+echo  Aguardando backend inicializar (pode levar 20-30s)...
+set /a BTRIES=0
+:waitbackend
+set /a BTRIES+=1
+if %BTRIES% gtr 30 (
+    echo  AVISO: Backend demorou mais que o esperado, abrindo browser...
+    goto openbrowser
+)
+timeout /t 2 /nobreak >nul
+curl -s -o nul -w "%%{http_code}" http://localhost:3333/api/v1/health 2>nul | findstr "200" >nul
+if %ERRORLEVEL% neq 0 (
+    <nul set /p=.
+    goto waitbackend
+)
 echo.
-echo  ╔══════════════════════════════════════════════════════════╗
-echo  ║                                                          ║
-echo  ║   ✅ WhatSaas iniciado com sucesso!                      ║
-echo  ║                                                          ║
-echo  ║   🌐 Frontend: http://localhost:3000                     ║
-echo  ║   🔧 Backend:  http://localhost:3333                     ║
-echo  ║   📚 API Docs: http://localhost:3333/docs                ║
-echo  ║                                                          ║
-echo  ╚══════════════════════════════════════════════════════════╝
+echo  OK - Backend respondendo!
+
+:: ── Abrir browser ─────────────────────────────────────────────
+:openbrowser
 echo.
-echo Abrindo navegador em 5 segundos...
-timeout /t 5 /nobreak >nul
+echo  ==========================================================
+echo.
+echo    WHATSAAS INICIADO COM SUCESSO!
+echo.
+echo    Frontend:  http://localhost:3000
+echo    Backend:   http://localhost:3333
+echo    API Docs:  http://localhost:3333/docs
+echo    Bull Board: http://localhost:3333/bull-board
+echo.
+echo  ==========================================================
+echo.
+timeout /t 2 /nobreak >nul
 start http://localhost:3000
 
-echo.
-echo Pressione qualquer tecla para fechar esta janela...
-echo (Backend e Frontend continuarao rodando)
+echo  Pressione qualquer tecla para fechar esta janela.
+echo  (Backend e Frontend continuarao rodando nas janelas abertas)
 pause >nul
+endlocal

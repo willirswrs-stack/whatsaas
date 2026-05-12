@@ -8,13 +8,14 @@ import { EvolutionModule } from '../evolution/evolution.module';
 import { ChipHealthService } from '../anti-ban/chip-health.service';
 
 import { AndroidService } from './services/android.service';
+import { MobileFarmController } from './mobile-farm.controller';
 
 @Module({
     imports: [
         TypeOrmModule.forFeature([Instance, Proxy, WarmupSchedule]),
         forwardRef(() => EvolutionModule),
     ],
-    controllers: [InstancesController],
+    controllers: [InstancesController, MobileFarmController],
     providers: [InstancesService, ChipHealthService, AndroidService],
     exports: [InstancesService, AndroidService],
 })

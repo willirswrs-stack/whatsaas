@@ -36,10 +36,12 @@ import { EventsModule } from './modules/events/events.module';
 import { ReconnectionModule } from './modules/reconnection/reconnection.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { OrderWebhooksModule } from './modules/order-webhooks/order-webhooks.module';
+import { SentryModule } from '@sentry/nestjs/setup';
 
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     // Environment Configuration & Validation (Fail Fast)
     ConfigModule.forRoot({
       isGlobal: true,

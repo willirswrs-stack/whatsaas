@@ -17,6 +17,25 @@ class CampaignSettingsDto {
     @IsOptional()
     @IsIn(['formal', 'casual', 'direct', 'mixed', 'none', 'random'])
     greetingStyle?: 'formal' | 'casual' | 'direct' | 'mixed' | 'none' | 'random';
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    metaTemplateId?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    wabaAccountId?: string;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    metaVariables?: Record<string, string>;
+
+    @ApiProperty({ required: false })
+    @IsOptional()
+    @IsString()
+    metaMediaUrl?: string;
 }
 
 export class CreateCampaignDto {

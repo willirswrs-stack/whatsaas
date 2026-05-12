@@ -196,9 +196,6 @@ export class MetaGraphApiService {
         }
     }
 
-    /**
-     * Upload media for template header
-     */
     async uploadMedia(
         phoneNumberId: string,
         accessToken: string,
@@ -207,18 +204,45 @@ export class MetaGraphApiService {
     ): Promise<string> {
         try {
             const client = this.createClient(accessToken);
+            
+            let buffer: Buffer;
+            let filename = `media.${mediaType}`;
+            let mimeType = 'application/octet-stream';
+            
+            if (mediaType === 'image') mimeType = 'image/jpeg';
+            else if (mediaType === 'video') mimeType = 'video/mp4';
+            else if (mediaType === 'document') mimeType = 'application/pdf';
 
             // First, get the media from URL
-            const mediaResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+            if (mediaUrl.startsWith('http://localhost') || mediaUrl.startsWith('http://host.docker.internal')) {
+                // Read local file directly bypassing external network stack
+                const fs = require('fs');
+                const path = require('path');
+                const parsedUrl = new URL(mediaUrl);
+                const localFileName = path.basename(parsedUrl.pathname);
+                const localPath = path.join(process.cwd(), 'uploads', localFileName);
+                if (!fs.existsSync(localPath)) {
+                   throw new Error(`Arquivo local não encontrado: ${localPath}`);
+                }
+                buffer = fs.readFileSync(localPath);
+                filename = localFileName;
+                if (filename.endsWith('.png')) mimeType = 'image/png';
+            } else {
+                const mediaResponse = await axios.get(mediaUrl, { responseType: 'arraybuffer' });
+                buffer = Buffer.from(mediaResponse.data);
+            }
 
-            // Upload to Meta
-            const formData = new FormData();
-            formData.append('messaging_product', 'whatsapp');
-            formData.append('file', new Blob([mediaResponse.data]), `media.${mediaType}`);
-            formData.append('type', mediaType);
+            const FormData = require('form-data');
+            const form = new FormData();
+            form.append('messaging_product', 'whatsapp');
+            form.append('type', mediaType === 'document' ? 'document' : (mediaType === 'video' ? 'video' : 'image'));
+            form.append('file', buffer, {
+                filename: filename,
+                contentType: mimeType,
+            });
 
-            const response = await client.post(`/${phoneNumberId}/media`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' },
+            const response = await client.post(`/${phoneNumberId}/media`, form, {
+                headers: { ...form.getHeaders() },
             });
 
             return response.data.id;

@@ -25,6 +25,7 @@ export interface CreateCampaignDto {
     flowId?: string;
     instanceId?: string;
     contactIds?: string[];
+    tagIds?: string[];
     segmentId?: string;
     scheduledAt?: string;
     aiSpinEnabled?: boolean;

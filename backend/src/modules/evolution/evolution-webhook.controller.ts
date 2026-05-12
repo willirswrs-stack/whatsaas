@@ -10,6 +10,8 @@ import { FlowExecution } from '../flows/entities/flow.entity';
 import { FlowsService } from '../flows/flows.service';
 import { Contact } from '../contacts/entities/contact.entity';
 
+import { SkipThrottle } from '@nestjs/throttler';
+
 interface EvolutionWebhookPayload {
     instance: string;
     event: string;
@@ -18,6 +20,7 @@ interface EvolutionWebhookPayload {
 
 import { EventsGateway } from '../events/events.gateway';
 
+@SkipThrottle()
 @Controller('webhooks')
 export class EvolutionWebhookController {
     private readonly logger = new Logger(EvolutionWebhookController.name);
@@ -286,6 +289,14 @@ export class EvolutionWebhookController {
                     this.flowsService.processExecution(execution.id).catch(err => {
                         this.logger.error(`Error resuming flow: ${err.message}`);
                     });
+                } else {
+                    // No active execution waiting for response, check for keyword triggers
+                    await this.flowsService.checkFlowTriggers(
+                        instance.tenantId,
+                        instance.id,
+                        contact.id,
+                        messageContent
+                    );
                 }
             }
         } catch (error) {

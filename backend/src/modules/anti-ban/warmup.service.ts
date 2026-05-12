@@ -18,23 +18,28 @@ import { InstancesService } from '../instances/instances.service';
 import { AiService } from '../ai/ai.service';
 import { InstanceStatus } from '../../common/enums/instance-status.enum';
 import { HumanBehaviorService } from './human-behavior.service';
+import { EventsGateway } from '../events/events.gateway';
+import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
+import { v4 as uuidv4 } from 'uuid';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // Define the Warmup Schedule
 export const WARMUP_SCHEDULE = [
-    { day: 1, limit: 50, interval: 90 },    // Day 1: 50 msgs
-    { day: 2, limit: 100, interval: 60 },   // Day 2: 100 msgs
-    { day: 3, limit: 150, interval: 45 },
-    { day: 4, limit: 250, interval: 35 },
-    { day: 5, limit: 400, interval: 25 },
-    { day: 6, limit: 600, interval: 20 },
-    { day: 7, limit: 800, interval: 15 },
-    { day: 8, limit: 1000, interval: 12 },
-    { day: 9, limit: 1300, interval: 10 },
-    { day: 10, limit: 1600, interval: 8 },
-    { day: 11, limit: 2000, interval: 6 },
-    { day: 12, limit: 2500, interval: 5 },
-    { day: 13, limit: 2800, interval: 4 },
-    { day: 14, limit: 3000, interval: 3 },  // Day 14: Graduated!
+    { day: 1, limit: 50, interval: 120, maxPartners: 1 },  // Dia 1: Apenas 1 parceiro (círculo íntimo)
+    { day: 2, limit: 100, interval: 90, maxPartners: 2 },  
+    { day: 3, limit: 150, interval: 60, maxPartners: 2 },
+    { day: 4, limit: 250, interval: 45, maxPartners: 3 },
+    { day: 5, limit: 400, interval: 35, maxPartners: 4 },
+    { day: 6, limit: 600, interval: 30, maxPartners: 5 },
+    { day: 7, limit: 800, interval: 25, maxPartners: 6 },
+    { day: 8, limit: 1000, interval: 20, maxPartners: 8 },
+    { day: 9, limit: 1300, interval: 15, maxPartners: 10 },
+    { day: 10, limit: 1600, interval: 12, maxPartners: 12 },
+    { day: 11, limit: 2000, interval: 10, maxPartners: 15 },
+    { day: 12, limit: 2500, interval: 8, maxPartners: 20 },
+    { day: 13, limit: 2800, interval: 6, maxPartners: 25 },
+    { day: 14, limit: 3000, interval: 5, maxPartners: 30 }, // Dia 14: Alta diversidade social
 ];
 
 // Max limit for mature chips
@@ -52,6 +57,8 @@ export class WarmupService {
         private instancesService: InstancesService,
         private aiService: AiService,
         private humanBehavior: HumanBehaviorService,
+        private eventsGateway: EventsGateway,
+        private whatsappFactory: WhatsAppProviderFactory,
     ) { }
 
     // =========================================================================
@@ -189,8 +196,9 @@ export class WarmupService {
      * Creates a warmup session (conversation) between two instances
      */
     /**
-     * Creates warmup sessions for ALL pairs of connected instances.
-     * With 3 instances (A, B, C), creates 3 sessions: A↔B, A↔C, B↔C
+     * Cria sessões de warmup para pares selecionados de instâncias.
+     * Diferente do All Pairs, aqui limitamos a diversidade de contatos individualmente,
+     * simulando um crescimento de rede social orgânico.
      */
     async createAllPairSessions(tenantId: string) {
         const instances = await this.instancesService.findAll(tenantId);
@@ -205,32 +213,49 @@ export class WarmupService {
             return { sessionsCreated: 0, reason: 'min_instances' };
         }
 
-        // Generate ALL unique pairs
-        const pairs: [any, any][] = [];
-        for (let i = 0; i < candidates.length; i++) {
-            for (let j = i + 1; j < candidates.length; j++) {
-                pairs.push([candidates[i], candidates[j]]);
+        this.logger.log(`🔄 Gerando rede de conversação dinâmica para ${candidates.length} instâncias...`);
+
+        const pairKeys = new Set<string>(); // Para evitar duplicatas A-B e B-A
+        const selectedPairs: [any, any][] = [];
+
+        for (const chip of candidates) {
+            // 1. Determina o limite de parceiros deste chip hoje
+            const schedule = this.getScheduleForDay(chip.warmupDay || 1);
+            const maxPartners = (schedule as any)?.maxPartners || 1;
+            
+            // 2. Seleciona parceiros aleatórios para este chip
+            const possiblePartners = candidates.filter(c => c.id !== chip.id);
+            const shuffledPartners = possiblePartners.sort(() => 0.5 - Math.random());
+            const chipsToTalkWith = shuffledPartners.slice(0, Math.min(maxPartners, possiblePartners.length));
+
+            for (const partner of chipsToTalkWith) {
+                const key = [chip.id, partner.id].sort().join(':');
+                if (!pairKeys.has(key)) {
+                    pairKeys.add(key);
+                    selectedPairs.push([chip, partner]);
+                }
             }
         }
 
-        this.logger.log(`🔄 Creating ${pairs.length} warmup sessions for ${candidates.length} instances`);
+        this.logger.log(`🔗 Gerados ${selectedPairs.length} pares únicos (Dentre ${candidates.length} candidatos)`);
 
         let sessionsCreated = 0;
-        let baseDelay = 0; // Stagger sessions so they don't all fire at once
+        let baseDelay = 0;
 
-        for (const [instA, instB] of pairs) {
+        for (const [instA, instB] of selectedPairs) {
             try {
                 const result = await this.createWarmupSession(tenantId, instA, instB, baseDelay);
                 if (result.success) {
                     sessionsCreated++;
-                    baseDelay += result.totalDurationMs + (Math.floor(Math.random() * 300000) + 120000); // 2-7 min gap between sessions
+                    // Escalona as sessões para não começarem todas exatamente ao mesmo tempo
+                    baseDelay += (Math.floor(Math.random() * 120000) + 60000); // 1-3 min gap
                 }
             } catch (err) {
                 this.logger.error(`Session error ${instA.instanceName}↔${instB.instanceName}: ${err.message}`);
             }
         }
 
-        return { sessionsCreated, totalPairs: pairs.length };
+        return { sessionsCreated, totalPairs: selectedPairs.length };
     }
 
     /**
@@ -364,6 +389,195 @@ export class WarmupService {
         };
     }
 
+    // =========================================================================
+    // LIVE SESSION — mensagens reais em tempo real com WebSocket
+    // =========================================================================
+
+    /**
+     * Dispara uma conversa real entre dois chips com delay de segundos.
+     * Emite eventos WebSocket 'warmup:live-message' em tempo real.
+     */
+    async createLiveSession(
+        tenantId: string,
+        instAId: string,
+        instBId: string,
+        sessionId: string,
+    ): Promise<any> {
+        const instances = await this.instancesService.findAll(tenantId);
+        const instA = instances.find(i => i.id === instAId);
+        const instB = instances.find(i => i.id === instBId);
+
+        if (!instA || !instB) {
+            return { success: false, reason: 'instances_not_found' };
+        }
+        
+        // 🔥 VALIDAR CONEXÃO REAL
+        if (instA.status !== 'connected' || instB.status !== 'connected') {
+            const disconnected: string[] = [];
+            if (instA.status !== 'connected') disconnected.push(instA.instanceName || instA.phone);
+            if (instB.status !== 'connected') disconnected.push(instB.instanceName || instB.phone);
+            
+            this.logger.warn(`[LIVE] Tentativa de iniciar conversa com instâncias desconectadas: ${disconnected.join(', ')}`);
+            return { 
+                success: false, 
+                reason: 'instance_disconnected',
+                message: `As seguintes instâncias estão desconectadas: ${disconnected.join(', ')}. Por favor, conecte-as antes de iniciar.`
+            };
+        }
+
+        if (!instA.phone || !instB.phone) {
+            return { success: false, reason: 'missing_phones' };
+        }
+
+        this.logger.log(`🔴 [LIVE] Starting live session: ${instA.instanceName} ↔ ${instB.instanceName}`);
+
+        // Generate conversation topics
+        const allTopics = ['trabalho', 'futebol', 'clima', 'comida', 'tecnologia', 'viagem', 'filmes', 'música', 'série'];
+        const topics = allTopics.sort(() => 0.5 - Math.random()).slice(0, 3);
+
+        let conversation: any[];
+        try {
+            conversation = await this.aiService.generateWarmupConversation({
+                messageCount: Math.floor(Math.random() * 6) + 6, // 6-11 msgs
+                topics,
+            });
+        } catch (e) {
+            this.logger.error(`[LIVE] AI error: ${e.message}`);
+            return { success: false, reason: 'ai_error' };
+        }
+
+        // Emit session start
+        this.eventsGateway.emitToTenant(tenantId, 'warmup:live-start', {
+            sessionId,
+            instA: { id: instA.id, name: instA.instanceName, phone: instA.phone },
+            instB: { id: instB.id, name: instB.instanceName, phone: instB.phone },
+            totalMessages: conversation.length,
+        });
+
+        // Fire messages asynchronously — don't block the HTTP response
+        this.sendLiveMessagesAsync(tenantId, sessionId, instA, instB, conversation);
+
+        return {
+            success: true,
+            messageCount: conversation.length,
+            sessionId,
+            instA: { id: instA.id, name: instA.instanceName, phone: instA.phone },
+            instB: { id: instB.id, name: instB.instanceName, phone: instB.phone },
+        };
+    }
+
+    /** Sends messages with human-like delays and emits WS events */
+    private async sendLiveMessagesAsync(
+        tenantId: string,
+        sessionId: string,
+        instA: Instance,
+        instB: Instance,
+        conversation: any[],
+    ) {
+        const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+        let index = 0;
+
+        for (const msg of conversation) {
+            const sender = msg.role === 'A' ? instA : instB;
+            const receiver = msg.role === 'A' ? instB : instA;
+            const provider = sender.provider || 'evolution';
+
+            // Emit 'typing' indicator
+            this.eventsGateway.emitToTenant(tenantId, 'warmup:live-typing', {
+                sessionId,
+                from: sender.instanceName,
+                role: msg.role,
+            });
+
+            // Realistic typing delay (1.5s min, up to ~5s for longer messages)
+            const typingMs = Math.max(1500, Math.min(msg.content.length * 40, 5000));
+            
+            let status: 'sent' | 'error' = 'sent';
+            let currentMsgType = 'text';
+            let currentMsgContent = msg.content;
+
+            try {
+                const client = this.whatsappFactory.getProvider(provider);
+                
+                if (msg.isAudio) {
+                    // 🎙️ RITUAL DO ÁUDIO REAL:
+                    this.logger.log(`[LIVE] Generating real voice audio for message index ${index}`);
+                    currentMsgType = 'audio';
+                    
+                    // 1. Determina o perfil de voz (busca no metaConfig ou fallback neutro)
+                    const voice = sender.metaConfig?.voiceProfile || 'alloy';
+                    this.logger.log(`[LIVE] Synthesizing voice using profile: ${voice}`);
+                    
+                    const buffer = await this.aiService.synthesizeSpeech(msg.content, voice as any);
+                    
+                    // 2. Persiste em pasta pública para o provedor puxar
+                    const uploadsDir = path.join(process.cwd(), 'uploads', 'temp_warmup');
+                    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+                    
+                    const filename = `voice_${uuidv4()}.mp3`;
+                    const filepath = path.join(uploadsDir, filename);
+                    fs.writeFileSync(filepath, buffer);
+                    
+                    // 🔥 ESTRATÉGIA NUCLEAR CORRIGIDA: Enviar Base64 PURO!
+                    // O teste final validou que a Evolution V2 espera a string Base64 SEM o prefixo dataUri!
+                    const base64Audio = buffer.toString('base64');
+                    
+                    // 4. Indica que está "gravando áudio" (simulação de 3s)
+                    await client.sendPresence(sender.instanceName, receiver.phone, 'recording', 3000);
+                    
+                    // 5. Envia como Mídia (Passando a string base64 pura diretamente)
+                    await client.sendMedia(sender.instanceName, receiver.phone, {
+                        type: 'audio',
+                        url: base64Audio,
+                        filename: 'audio.mp3'
+                    });
+                    
+                    // Limpeza rápida de arquivo não é recomendada de imediato (provedor precisa ler), rodar depois de alguns mins se necessário.
+                } else {
+                    // 📝 ENVIO DE TEXTO TRADICIONAL
+                    await client.sendPresence(sender.instanceName, receiver.phone, 'composing', typingMs);
+                    await client.sendText(sender.instanceName, receiver.phone, msg.content);
+                }
+
+                // Increment dailySent counter
+                await this.instanceRepo.increment({ id: sender.id }, 'dailySent', 1).catch(() => { });
+            } catch (e) {
+                this.logger.error(`[LIVE] Failed to send msg ${index}: ${e.message}`);
+                status = 'error';
+            }
+
+            // Emit message event
+            this.eventsGateway.emitToTenant(tenantId, 'warmup:live-message', {
+                sessionId,
+                index,
+                role: msg.role,
+                content: currentMsgContent,
+                isAudio: msg.isAudio,
+                from: sender.instanceName,
+                fromPhone: sender.phone,
+                to: receiver.instanceName,
+                toPhone: receiver.phone,
+                status,
+                timestamp: new Date().toISOString(),
+            });
+
+            index++;
+
+            // Gap between messages: 2-8 seconds (natural rhythm)
+            if (index < conversation.length) {
+                await delay(2000 + Math.random() * 6000);
+            }
+        }
+
+        // Emit session complete
+        this.eventsGateway.emitToTenant(tenantId, 'warmup:live-end', {
+            sessionId,
+            totalSent: index,
+        });
+
+        this.logger.log(`🔴 [LIVE] Session ${sessionId} complete — ${index} messages sent.`);
+    }
+
     /**
      * Get metadata for a specific warmup day
      */
@@ -397,6 +611,7 @@ export class WarmupService {
                 dailyLimit: i.dailyLimit,
                 sent: i.dailySent,
                 status: i.status,
+                metaConfig: i.metaConfig,
                 health: i.status === 'connected' ? 95 + Math.floor(Math.random() * 5) : 50
             }))
         };

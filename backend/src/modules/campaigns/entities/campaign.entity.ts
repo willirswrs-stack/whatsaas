@@ -100,6 +100,11 @@ export class Campaign {
         greetingStyle?: 'formal' | 'casual' | 'direct' | 'mixed' | 'none' | 'random';
         timezone?: string;
         daysOfWeek?: number[];
+        metaTemplateId?: string;
+        wabaAccountId?: string;
+        metaVariables?: Record<string, string>;
+        metaMediaUrl?: string;
+        metaMediaId?: string;
     };
 
     @Column({ name: 'total_contacts', default: 0 })

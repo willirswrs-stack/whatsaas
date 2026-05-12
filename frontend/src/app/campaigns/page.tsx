@@ -7,6 +7,8 @@ import { instancesService, Instance } from '@/lib/instances';
 import { flowsApi, Flow } from '@/lib/flows';
 import { getErrorMessage } from '@/lib/auth';
 import { connectSocket } from '@/lib/socket';
+import { metaTemplatesService, WabaAccount, MetaTemplate } from '@/lib/meta-templates';
+import api from '@/lib/api';
 
 const statusConfig: Record<string, { color: string; label: string; bg: string }> = {
     running: { color: 'var(--accent-success)', label: 'Em execução', bg: 'rgba(34, 197, 94, 0.15)' },
@@ -24,6 +26,10 @@ export default function CampaignsPage() {
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [tags, setTags] = useState<Tag[]>([]);
     const [instances, setInstances] = useState<Instance[]>([]);
+    const [wabaAccounts, setWabaAccounts] = useState<WabaAccount[]>([]);
+    const [metaTemplates, setMetaTemplates] = useState<MetaTemplate[]>([]);
+    const [selectedWabaAccountId, setSelectedWabaAccountId] = useState('');
+    const [isLoadingMetaTemplates, setIsLoadingMetaTemplates] = useState(false);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
@@ -42,6 +48,7 @@ export default function CampaignsPage() {
     const [newCampaign, setNewCampaign] = useState({
         name: '',
         templateId: '',
+        metaTemplateId: '',
         flowId: '',
         instanceId: '',
         contactIds: [] as string[],
@@ -55,9 +62,13 @@ export default function CampaignsPage() {
     });
     const [isCreating, setIsCreating] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [isUploading, setIsUploading] = useState(false);
+    const [metaVariables, setMetaVariables] = useState<Record<string, string>>({});
+    const [metaMediaUrl, setMetaMediaUrl] = useState<string>('');
     const [contactSearch, setContactSearch] = useState('');
     const [selectedTagId, setSelectedTagId] = useState<string>('');
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const mediaInputRef = useRef<HTMLInputElement>(null);
 
     // Filtrar contatos por nome ou telefone
     const filteredContacts = contacts.filter(contact => {
@@ -157,13 +168,14 @@ export default function CampaignsPage() {
         try {
             setIsLoading(true);
             setError('');
-            const [campaignsRes, templatesData, flowsData, contactsData, instancesData, tagsData] = await Promise.all([
+            const [campaignsRes, templatesData, flowsData, contactsData, instancesData, tagsData, wabaAccountsData] = await Promise.all([
                 campaignsService.listPaginated(page, 10).catch(() => ({ data: [], meta: {} })),
                 campaignsService.listTemplates().catch(() => []),
                 flowsApi.getFlows().catch(() => []),
                 campaignsService.listContacts().catch(() => []),
                 instancesService.list().catch(() => []),
-                campaignsService.listTags().catch(() => [])
+                campaignsService.listTags().catch(() => []),
+                metaTemplatesService.listAccounts().catch(() => [])
             ]);
             setCampaigns(campaignsRes.data || []);
             setMeta(campaignsRes.meta || {});
@@ -172,6 +184,7 @@ export default function CampaignsPage() {
             setContacts(contactsData);
             setTags(tagsData);
             setInstances(instancesData.filter((i: Instance) => i.status === 'connected'));
+            setWabaAccounts(wabaAccountsData);
         } catch (err) {
             setError(getErrorMessage(err));
             setCampaigns([]);
@@ -179,6 +192,23 @@ export default function CampaignsPage() {
             setContacts([]);
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const loadMetaTemplates = async (accountId: string) => {
+        if (!accountId) {
+            setMetaTemplates([]);
+            setNewCampaign(prev => ({ ...prev, metaTemplateId: '' }));
+            return;
+        }
+        try {
+            setIsLoadingMetaTemplates(true);
+            const data = await metaTemplatesService.listTemplates(accountId);
+            setMetaTemplates(data.filter(t => t.status === 'APPROVED'));
+        } catch {
+            setMetaTemplates([]);
+        } finally {
+            setIsLoadingMetaTemplates(false);
         }
     };
 
@@ -194,6 +224,7 @@ export default function CampaignsPage() {
                 flowId: newCampaign.flowId || undefined,
                 instanceId: newCampaign.instanceId || undefined,
                 contactIds: newCampaign.contactIds,
+                tagIds: selectedTagId ? [selectedTagId] : [],
                 aiSpinEnabled: newCampaign.aiSpinEnabled,
                 variationCount: newCampaign.variationCount,
                 minDelaySec: newCampaign.minDelaySec,
@@ -201,18 +232,53 @@ export default function CampaignsPage() {
                 settings: {
                     greetingStyle: newCampaign.greetingStyle,
                     activeHoursStart: newCampaign.activeHoursStart,
-                    activeHoursEnd: newCampaign.activeHoursEnd
+                    activeHoursEnd: newCampaign.activeHoursEnd,
+                    ...(newCampaign.metaTemplateId ? { 
+                        metaTemplateId: newCampaign.metaTemplateId,
+                        wabaAccountId: selectedWabaAccountId || undefined,
+                        metaVariables,
+                        metaMediaUrl
+                    } : {})
                 }
             });
             setCampaigns([campaign, ...campaigns]);
             setShowModal(false);
-            setNewCampaign({ name: '', templateId: '', flowId: '', instanceId: '', contactIds: [], aiSpinEnabled: true, variationCount: 10, minDelaySec: 5, maxDelaySec: 15, greetingStyle: 'random', activeHoursStart: '08:00', activeHoursEnd: '20:00' });
+            setNewCampaign({ name: '', templateId: '', metaTemplateId: '', flowId: '', instanceId: '', contactIds: [], aiSpinEnabled: true, variationCount: 10, minDelaySec: 5, maxDelaySec: 15, greetingStyle: 'random', activeHoursStart: '08:00', activeHoursEnd: '20:00' });
+            setSelectedWabaAccountId('');
+            setMetaTemplates([]);
             setContactSearch('');
+            setMetaVariables({});
+            setMetaMediaUrl('');
             setSuccessMessage('Campanha criada com sucesso!');
         } catch (err) {
             setError(getErrorMessage(err));
         } finally {
             setIsCreating(false);
+        }
+    };
+
+    const handleMediaUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        try {
+            setIsUploading(true);
+            setError('');
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const res = await api.post('/uploads/media', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            
+            if (res.data?.url) {
+                setMetaMediaUrl(res.data.url);
+            }
+        } catch (err) {
+            setError(getErrorMessage(err));
+        } finally {
+             setIsUploading(false);
+             if (mediaInputRef.current) mediaInputRef.current.value = '';
         }
     };
 
@@ -494,6 +560,7 @@ export default function CampaignsPage() {
                                     <th>Entregues</th>
                                     <th>Lidas</th>
                                     <th>Falhas</th>
+                                    <th>Custo (Meta)</th>
                                     <th>Ações</th>
                                 </tr>
                             </thead>
@@ -508,6 +575,9 @@ export default function CampaignsPage() {
                                     const progressPercent = total > 0 ? Math.round(((sent + failed) / total) * 100) : 0;
                                     const deliveryRate = sent > 0 ? ((delivered / sent) * 100).toFixed(1) : '0';
                                     const readRate = delivered > 0 ? ((read / delivered) * 100).toFixed(1) : '0';
+                                    
+                                    const isMeta = !!campaign.settings?.metaTemplateId;
+                                    const estimatedCost = isMeta ? (sent * 0.0633) : 0;
 
                                     return (
                                         <tr key={campaign.id}>
@@ -582,6 +652,15 @@ export default function CampaignsPage() {
                                                 >
                                                     {failed.toLocaleString()}
                                                 </button>
+                                            </td>
+                                            <td className="text-center">
+                                                {isMeta ? (
+                                                    <span className="font-mono text-sm px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--accent)] border border-[var(--border)]" title="Estimativa: Meta marketing message">
+                                                        {estimatedCost.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[var(--text-muted)]">-</span>
+                                                )}
                                             </td>
                                             <td>
                                                 <div className="flex items-center gap-1">
@@ -771,6 +850,12 @@ export default function CampaignsPage() {
             {showModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="glass-card p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        {error && (
+                            <div className="mb-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                                {error}
+                                <button className="ml-2 underline" onClick={() => setError('')}>Fechar</button>
+                            </div>
+                        )}
                         <h2 className="text-xl font-bold mb-4">Nova Campanha</h2>
 
                         <div className="space-y-4">
@@ -816,10 +901,10 @@ export default function CampaignsPage() {
                                 </p>
                             </div>
 
-                            {/* SELEÇÃO DE INSTÂNCIA - OBRIGATÓRIO */}
+                            {/* SELEÇÃO DE INSTÂNCIA - OBRIGATÓRIO (ou opcional se usar WABA) */}
                             <div>
                                 <label className="block text-sm font-medium mb-2">
-                                    <span className="text-red-400">*</span> Número WhatsApp (Chip)
+                                    {!newCampaign.metaTemplateId && <span className="text-red-400">*</span>} Número WhatsApp (Chip)
                                 </label>
                                 {instances.length === 0 ? (
                                     <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -835,7 +920,7 @@ export default function CampaignsPage() {
                                         className="input w-full"
                                         value={newCampaign.instanceId}
                                         onChange={(e) => setNewCampaign({ ...newCampaign, instanceId: e.target.value })}
-                                        required
+                                        required={!newCampaign.metaTemplateId}
                                     >
                                         <option value="">Selecione o chip para disparo...</option>
                                         {instances.map(inst => (
@@ -852,6 +937,180 @@ export default function CampaignsPage() {
                                     Selecione qual número WhatsApp será usado para enviar as mensagens
                                 </p>
                             </div>
+
+                            {/* META TEMPLATES */}
+                            {wabaAccounts.length > 0 && (
+                                <div className="p-4 bg-gradient-to-r from-blue-500/10 to-indigo-500/10 border border-blue-500/30 rounded-lg">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <span className="text-2xl">💬</span>
+                                        <div>
+                                            <h4 className="font-medium text-[var(--text-primary)]">Template Meta (opcional)</h4>
+                                            <p className="text-xs text-[var(--text-muted)]">Envie com um template oficial aprovado pela Meta</p>
+                                        </div>
+                                    </div>
+
+                                    {/* Conta WABA */}
+                                    <div className="mb-3">
+                                        <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Conta WABA</label>
+                                        <select
+                                            className="input w-full"
+                                            value={selectedWabaAccountId}
+                                            onChange={(e) => {
+                                                setSelectedWabaAccountId(e.target.value);
+                                                setNewCampaign(prev => ({ ...prev, metaTemplateId: '' }));
+                                                loadMetaTemplates(e.target.value);
+                                            }}
+                                        >
+                                            <option value="">Selecionar conta WABA...</option>
+                                            {wabaAccounts.map(acc => (
+                                                <option key={acc.id} value={acc.id}>
+                                                    {acc.name} — {acc.phoneNumber}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Templates da conta selecionada */}
+                                    {selectedWabaAccountId && (
+                                        <div>
+                                            <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Template</label>
+                                            {isLoadingMetaTemplates ? (
+                                                <div className="flex items-center gap-2 py-2 text-sm text-[var(--text-muted)]">
+                                                    <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                                    Carregando templates...
+                                                </div>
+                                            ) : metaTemplates.length === 0 ? (
+                                                <p className="text-sm text-[var(--text-muted)] py-2">
+                                                    Nenhum template aprovado encontrado nesta conta.
+                                                </p>
+                                            ) : (
+                                                <select
+                                                    className="input w-full"
+                                                    value={newCampaign.metaTemplateId}
+                                                    onChange={(e) => setNewCampaign(prev => ({ ...prev, metaTemplateId: e.target.value }))}
+                                                >
+                                                    <option value="">Selecionar template...</option>
+                                                    {metaTemplates.map(t => (
+                                                        <option key={t.id} value={`${t.name}|${t.language}`}>
+                                                            {t.name} ({t.language})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {/* Mapeamento de Variáveis do Template Meta */}
+                                    {selectedWabaAccountId && newCampaign.metaTemplateId && (
+                                        <div className="mt-4 p-4 border border-blue-500/20 bg-blue-500/5 rounded-lg">
+                                            <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                                                <span>⚙️</span> Configuração de Variáveis (Opcional)
+                                            </h4>
+                                            <p className="text-xs text-[var(--text-muted)] mb-4">
+                                                Defina valores fixos para as variáveis do template. Deixe em branco para usar o Nome do Contato automaticamente.
+                                            </p>
+                                            
+                                            {(() => {
+                                                const selOpt = metaTemplates.find(t => `${t.name}|${t.language}` === newCampaign.metaTemplateId);
+                                                if (!selOpt || !selOpt.components) return null;
+                                                
+                                                return selOpt.components.map((comp: any, idx: number) => {
+                                                    if (comp.type === 'BODY') {
+                                                        const text = comp.text || '';
+                                                        const matchNum = (text.match(/\{\{\d+\}\}/g) || []).length;
+                                                        if (matchNum === 0) return null;
+                                                        return (
+                                                            <div key={`body-${idx}`} className="mb-3 space-y-2">
+                                                                <span className="text-xs font-medium text-purple-400">Variáveis do Texto Principal (Body)</span>
+                                                                {Array.from({ length: matchNum }).map((_, i) => (
+                                                                    <input 
+                                                                        key={`body_var_${i}`}
+                                                                        type="text" 
+                                                                        placeholder={`\{\{${i+1}\}\}: Padrão será Nome do Contato`}
+                                                                        className="input w-full text-sm"
+                                                                        value={metaVariables[`body_${i+1}`] || ''}
+                                                                        onChange={e => setMetaVariables(prev => ({...prev, [`body_${i+1}`]: e.target.value}))}
+                                                                    />
+                                                                ))}
+                                                            </div>
+                                                        );
+                                                    } else if (comp.type === 'HEADER' && comp.format === 'TEXT' && comp.text?.includes('{{1}}')) {
+                                                        return (
+                                                            <div key={`head-${idx}`} className="mb-3 space-y-2">
+                                                                <span className="text-xs font-medium text-emerald-400">Variável do Cabeçalho</span>
+                                                                <input 
+                                                                    type="text" 
+                                                                    placeholder="{{1}}: Padrão será Nome do Contato"
+                                                                    className="input w-full text-sm"
+                                                                    value={metaVariables['header_1'] || ''}
+                                                                    onChange={e => setMetaVariables(prev => ({...prev, 'header_1': e.target.value}))}
+                                                                />
+                                                            </div>
+                                                        );
+                                                    } else if (comp.type === 'HEADER' && ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(comp.format)) {
+                                                        return (
+                                                            <div key={`headmedia-${idx}`} className="mb-3 space-y-2">
+                                                                <span className="text-xs font-medium text-blue-400">Mídia do Cabeçalho ({comp.format})</span>
+                                                                <div className="flex gap-2">
+                                                                    <input 
+                                                                        type="url" 
+                                                                        placeholder="URL da mídia (ou faça upload)"
+                                                                        className="input w-full text-sm flex-1"
+                                                                        value={metaMediaUrl}
+                                                                        onChange={e => setMetaMediaUrl(e.target.value)}
+                                                                    />
+                                                                    <div>
+                                                                        <input 
+                                                                            type="file" 
+                                                                            ref={mediaInputRef}
+                                                                            className="hidden" 
+                                                                            accept={comp.format === 'IMAGE' ? 'image/*' : comp.format === 'VIDEO' ? 'video/*' : '*/*'} 
+                                                                            onChange={handleMediaUpload}
+                                                                        />
+                                                                        <button 
+                                                                            type="button" 
+                                                                            onClick={() => mediaInputRef.current?.click()}
+                                                                            disabled={isUploading}
+                                                                            className="btn btn-secondary h-full text-xs px-3 whitespace-nowrap"
+                                                                        >
+                                                                            {isUploading ? 'Enviando...' : 'Upload'}
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                                {metaMediaUrl && comp.format === 'IMAGE' && (
+                                                                    <div className="mt-2 w-24 h-24 rounded border border-blue-500/30 overflow-hidden relative group">
+                                                                        <img src={metaMediaUrl} alt="Preview" className="w-full h-full object-cover" />
+                                                                        <button type="button" onClick={() => setMetaMediaUrl('')} className="absolute inset-0 bg-black/60 text-white opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-xs">Remover</button>
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    } else if (comp.type === 'BUTTONS') {
+                                                        return comp.buttons?.map((btn: any, bIdx: number) => {
+                                                            if (btn.url?.includes('{{1}}') || btn.text?.includes('{{1}}')) {
+                                                                return (
+                                                                    <div key={`btn-${bIdx}`} className="mb-3 space-y-2">
+                                                                        <span className="text-xs font-medium text-orange-400">Variável do Botão "{btn.text}"</span>
+                                                                        <input 
+                                                                            type="text" 
+                                                                            placeholder="{{1}}: URL ou texto dinâmico"
+                                                                            className="input w-full text-sm"
+                                                                            value={metaVariables[`button_${bIdx}_1`] || ''}
+                                                                            onChange={e => setMetaVariables(prev => ({...prev, [`button_${bIdx}_1`]: e.target.value}))}
+                                                                        />
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        });
+                                                    }
+                                                    return null;
+                                                });
+                                            })()}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
 
                             {/* IA SPIN - VARIAÇÕES DE TEXTO */}
                             <div className="p-4 bg-gradient-to-r from-purple-500/10 to-blue-500/10 border border-purple-500/30 rounded-lg">
@@ -1042,19 +1301,21 @@ export default function CampaignsPage() {
                                 </div>
 
                                 {/* Campo de Busca de Contatos */}
-                                {/* Filtros: Busca + Tags */}
-                                <div className="flex gap-2 mb-2">
-                                    <div className="relative flex-1">
+                                <div className="mb-3 p-3 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
+                                    <label className="block text-sm font-medium mb-2 text-[var(--text-primary)] relative">
+                                        Pesquisar Contato por Nome/Telefone
+                                    </label>
+                                    <div className="relative w-full">
                                         <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                             <circle cx="11" cy="11" r="8" />
                                             <path d="m21 21-4.35-4.35" />
                                         </svg>
                                         <input
                                             type="text"
-                                            placeholder="Buscar por nome ou telefone..."
+                                            placeholder="Digite o nome ou telefone para filtrar a lista..."
                                             value={contactSearch}
                                             onChange={(e) => setContactSearch(e.target.value)}
-                                            className="input w-full pl-10 py-2 text-sm"
+                                            className="input w-full pl-10 py-2 text-sm bg-white dark:bg-zinc-800"
                                         />
                                         {contactSearch && (
                                             <button
@@ -1066,6 +1327,8 @@ export default function CampaignsPage() {
                                             </button>
                                         )}
                                     </div>
+                                </div>
+                                <div className="flex justify-end mb-2">
                                     <select
                                         className="input w-40 text-sm py-2 px-3"
                                         value={selectedTagId}
@@ -1132,7 +1395,9 @@ export default function CampaignsPage() {
                                 className="btn btn-secondary flex-1"
                                 onClick={() => {
                                     setShowModal(false);
-                                    setNewCampaign({ name: '', templateId: '', flowId: '', instanceId: '', contactIds: [], aiSpinEnabled: true, variationCount: 10, minDelaySec: 5, maxDelaySec: 15, greetingStyle: 'random', activeHoursStart: '08:00', activeHoursEnd: '20:00' });
+                                    setNewCampaign({ name: '', templateId: '', metaTemplateId: '', flowId: '', instanceId: '', contactIds: [], aiSpinEnabled: true, variationCount: 10, minDelaySec: 5, maxDelaySec: 15, greetingStyle: 'random', activeHoursStart: '08:00', activeHoursEnd: '20:00' });
+                                    setSelectedWabaAccountId('');
+                                    setMetaTemplates([]);
                                 }}
                             >
                                 Cancelar
@@ -1140,7 +1405,7 @@ export default function CampaignsPage() {
                             <button
                                 className="btn btn-primary flex-1"
                                 onClick={createCampaign}
-                                disabled={isCreating || !newCampaign.name.trim() || !newCampaign.instanceId}
+                                disabled={isCreating || !newCampaign.name.trim() || (!newCampaign.instanceId && !newCampaign.metaTemplateId)}
                             >
                                 {isCreating ? 'Criando...' : 'Criar Campanha'}
                             </button>

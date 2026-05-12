@@ -6,7 +6,7 @@ import { InstanceStatus as EnumInstanceStatus } from '../../common/enums/instanc
  * Abstract interface for WhatsApp API providers (WAHA, Evolution, etc.)
  */
 
-export type ProviderType = 'waha' | 'evolution';
+export type ProviderType = 'waha' | 'evolution' | 'mobile_farm' | 'antidetect';
 
 export interface InstanceResult {
     instanceId: string;
@@ -78,4 +78,12 @@ export interface IWhatsAppProvider {
      * Check if number is on WhatsApp
      */
     isOnWhatsApp(instanceName: string, phone: string): Promise<boolean>;
+
+    /**
+     * Scan maturity metrics (chat count, groups, etc) for chip analytics
+     */
+    getMaturityMetrics(instanceName: string): Promise<{
+        chatCount: number;
+        groupCount: number;
+    }>;
 }

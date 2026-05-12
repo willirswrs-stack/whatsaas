@@ -1,9 +1,11 @@
 'use client';
+// NOTA: token key = 'accessToken' (ver api.ts)
 
 import { useEffect, useState, useRef } from 'react';
+import { io, Socket } from 'socket.io-client';
 import { Header } from '@/components/Header';
 import { warmupService, WarmupStats } from '@/lib/warmup';
-import { MobileFarmView } from '@/components/mobile-farm/MobileFarmView';
+import api from '@/lib/api';
 
 const rampStages = [
     { days: '1-3', limit: 10, label: 'Iniciante' },
@@ -12,131 +14,143 @@ const rampStages = [
     { days: '15+', limit: 100, label: 'Avançado' },
 ];
 
-const WhatsAppMockup = ({
-    simulatedChips,
-    visibleMessages,
-    isSimulatingTyping,
-    setSimulatorVisible,
-    chatEndRef,
-    bottomPlaceholderRef,
-    viewRole // 'A' or 'B'
-}: any) => {
+// ─── WhatsApp Mockup (unchanged visual) ────────────────────────────────────
+const WhatsAppMockup = ({ simulatedChips, visibleMessages, isSimulatingTyping, onClose, viewRole, isLive }: any) => {
     const isViewA = viewRole === 'A';
-    const myChip = isViewA ? simulatedChips?.A : simulatedChips?.B;
     const theirChip = isViewA ? simulatedChips?.B : simulatedChips?.A;
+    
+    const localBottomRef = useRef<HTMLDivElement>(null);
+    
+    useEffect(() => {
+        localBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [visibleMessages.length, isSimulatingTyping]);
 
     return (
-        <div className="w-full xl:max-w-md glass-card p-0 overflow-hidden flex flex-col h-[600px] border border-[var(--border-primary)] shadow-xl rounded-2xl relative">
-            {/* Status Bar */}
+        <div className="w-full xl:max-w-md glass-card p-0 overflow-hidden flex flex-col h-[500px] lg:h-[600px] border border-[var(--border-primary)] shadow-xl rounded-2xl relative">
             <div className="bg-[#f0f2f5] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] px-4 py-2.5 flex items-center justify-between z-10 w-full border-b border-gray-200 dark:border-gray-800">
                 <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center shrink-0 overflow-hidden relative">
+                    <div className="w-10 h-10 bg-gray-300 dark:bg-gray-600 rounded-full flex items-center justify-center shrink-0">
                         <svg className="w-8 h-8 text-white mt-2" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
                         </svg>
                     </div>
                     <div className="flex flex-col">
-                        <h3 className="font-medium leading-tight text-[16px]">
-                            {theirChip ? theirChip.name : `Simulação IA Ao Vivo`}
+                        <h3 className="font-medium leading-tight text-[16px] flex items-center gap-2">
+                            {theirChip ? (theirChip.phone || theirChip.name) : 'Simulação IA'}
+                            {isLive && <span className="flex items-center gap-1 text-[9px] bg-red-500/20 text-red-400 border border-red-500/30 px-1.5 py-0.5 rounded-full font-bold"><span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse"/>AO VIVO</span>}
                         </h3>
-                        <p className="text-[13px] text-[#54656f] dark:text-[#8696a0] shrink-0 truncate max-w-[200px]">
-                            {isSimulatingTyping ? (
-                                <span className="text-[#027eb5] dark:text-[#53bdeb] italic">digitando...</span>
-                            ) : (
-                                theirChip ? `visto por último hoje às 14:59` : `Warmup em Andamento`
-                            )}
+                        <p className="text-[13px] text-[#54656f] dark:text-[#8696a0] truncate max-w-[200px]">
+                            {isSimulatingTyping ? <span className="text-[#027eb5] dark:text-[#53bdeb] italic">digitando...</span> : (theirChip ? theirChip.phone || 'visto por último hoje' : 'Warmup em Andamento')}
                         </p>
                     </div>
                 </div>
-                <div className="flex gap-4 sm:gap-6 items-center">
-                    <button className="text-[#54656f] dark:text-[#aebac1] hover:bg-black/5 dark:hover:bg-white/5 p-2 rounded-full transition-colors hidden sm:block"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg></button>
-                    <button className="text-[#54656f] dark:text-[#aebac1] hover:bg-black/5 dark:hover:bg-white/5 p-2 rounded-full transition-colors"><svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M15.9 14.3H15l-.3-.3c1-1.1 1.6-2.7 1.6-4.3 0-3.7-3-6.7-6.7-6.7S3 6 3 9.7s3 6.7 6.7 6.7c1.6 0 3.2-.6 4.3-1.6l.3.3v.8l5.1 5.1 1.5-1.5-5-5.2zm-6.2 0c-2.6 0-4.6-2.1-4.6-4.6s2.1-4.6 4.6-4.6 4.6 2.1 4.6 4.6-2 4.6-4.6 4.6z"></path></svg></button>
+                <div className="flex gap-4 items-center">
                     {isViewA && (
-                        <button onClick={() => setSimulatorVisible(false)} className="text-[#54656f] dark:text-[#aebac1] hover:bg-black/5 dark:hover:bg-white/5 p-2 rounded-full transition-colors ml-[-8px]">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        <button onClick={onClose} className="text-[#54656f] dark:text-[#aebac1] hover:bg-red-500/20 dark:hover:bg-red-500/20 p-2 rounded-full transition-colors">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* Chat Body - WhatsApp Background Data URI */}
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-[#efeae2] dark:bg-[#0b141a] relative"
-                style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundSize: 'contain' }}
-                ref={isViewA ? chatEndRef : null}>
-
+                style={{ backgroundImage: 'url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png")', backgroundSize: 'contain' }}>
                 <div className="flex justify-center mb-4 mt-2">
                     <span className="text-[11px] font-medium bg-[#ffeecd] dark:bg-[#182229] dark:text-[#8696a0] px-3 py-1.5 rounded-lg shadow-sm">
-                        Hoje, Conversa Gerada por IA
+                        {isLive ? 'Hoje — Conversa Real ao Vivo' : 'Hoje, Conversa Gerada por IA'}
                     </span>
                 </div>
-
                 <div className="space-y-[2px] pb-2">
                     {visibleMessages.map((msg: any, idx: number) => {
                         const msgRole = msg.role || msg.sender;
                         const isSender = msgRole === viewRole;
                         const isFirstInChain = idx === 0 || (visibleMessages[idx - 1].role || visibleMessages[idx - 1].sender) !== msgRole;
-
                         return (
                             <div key={idx} className={`flex ${isSender ? 'justify-end' : 'justify-start'} ${isFirstInChain ? 'mt-2' : ''}`}>
                                 <div className={`relative max-w-[80%] sm:max-w-[65%] px-3 pt-[6px] pb-2 rounded-lg shadow-md animate-fadeIn ${isSender
                                     ? `bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] ${isFirstInChain ? 'rounded-tr-none' : ''}`
                                     : `bg-[#ffffff] dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] ${isFirstInChain ? 'rounded-tl-none' : ''}`
-                                    }`}>
+                                }`}>
                                     {isFirstInChain && (
-                                        <div className={`absolute top-0 w-3 h-3 ${isSender 
-                                            ? 'right-[-8px] text-[#d9fdd3] dark:text-[#005c4b]' 
-                                            : 'left-[-8px] text-[#ffffff] dark:text-[#202c33]'}`}>
-                                            <svg viewBox="0 0 10 10" className="fill-current">
-                                                {isSender ? <path d="M0 0 L10 0 L0 10 Z" /> : <path d="M10 0 L0 0 L10 10 Z" />}
-                                            </svg>
+                                        <div className={`absolute top-0 w-3 h-3 ${isSender ? 'right-[-8px] text-[#d9fdd3] dark:text-[#005c4b]' : 'left-[-8px] text-[#ffffff] dark:text-[#202c33]'}`}>
+                                            <svg viewBox="0 0 10 10" className="fill-current">{isSender ? <path d="M0 0 L10 0 L0 10 Z" /> : <path d="M10 0 L0 0 L10 10 Z" />}</svg>
                                         </div>
                                     )}
                                     <div className="text-[14px] leading-[19px] whitespace-pre-wrap word-break flex flex-wrap items-end gap-2 text-[#111b21] dark:text-[#e9edef] mx-[2px]">
-                                        <span>{msg.content}</span>
+                                        {msg.isAudio ? (
+                                            <div className="flex items-center gap-2 py-1">
+                                                <div className="text-[#53bdeb] shrink-0">
+                                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                                                </div>
+                                                <div className="flex-1 h-6 flex items-center overflow-hidden opacity-50">
+                                                    <div className="w-full h-[2px] bg-current relative">
+                                                        <div className="absolute w-2 h-2 rounded-full bg-[#53bdeb] -top-0.5 left-1/4"></div>
+                                                    </div>
+                                                </div>
+                                                <span className="text-xs italic opacity-70">Mensagem de voz</span>
+                                            </div>
+                                        ) : (
+                                            <span>{msg.content}</span>
+                                        )}
                                         <div className="text-[11px] text-[#667781] dark:text-[#8696a0] flex items-center gap-1 ml-auto shrink-0 relative top-[2px]">
-                                            12:{String((40 + idx) % 60).padStart(2, '0')}
-                                            {isSender && (
-                                                <svg className="w-[16px] h-[11px] text-[#53bdeb] dark:text-[#53bdeb]" viewBox="0 0 16 15" fill="currentColor">
-                                                    <path d="M15.01 3.316l-.478-.372a.365.365 0 00-.51.063L8.666 9.879a.32.32 0 01-.484.033L6.03 7.84a.365.365 0 00-.51.063l-.478.372a.365.365 0 00.063.51l2.56 2.05a.73.73 0 001.02-.063L14.947 3.826a.365.365 0 00-.063-.51zm-4.32 2.385l-.478-.372a.365.365 0 00-.51.063L5.432 10.66l-2.02-1.614a.365.365 0 00-.51.063l-.478.372a.365.365 0 00.063.51l2.56 2.05a.73.73 0 001.02-.063l4.63-5.945a.365.365 0 00-.063-.51z" />
-                                                </svg>
-                                            )}
+                                            {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : `12:${String((40 + idx) % 60).padStart(2, '0')}`}
+                                            {isSender && (!msg.status || msg.status === 'sent') && <svg className="w-[16px] h-[11px] text-[#53bdeb]" viewBox="0 0 16 15" fill="currentColor"><path d="M15.01 3.316l-.478-.372a.365.365 0 00-.51.063L8.666 9.879a.32.32 0 01-.484.033L6.03 7.84a.365.365 0 00-.51.063l-.478.372a.365.365 0 00.063.51l2.56 2.05a.73.73 0 001.02-.063L14.947 3.826a.365.365 0 00-.063-.51zm-4.32 2.385l-.478-.372a.365.365 0 00-.51.063L5.432 10.66l-2.02-1.614a.365.365 0 00-.51.063l-.478.372a.365.365 0 00.063.51l2.56 2.05a.73.73 0 001.02-.063l4.63-5.945a.365.365 0 00-.063-.51z" /></svg>}
+                                            {isSender && msg.status === 'error' && <span className="text-red-500 font-bold text-[12px]" title="Falha ao enviar">✕</span>}
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         );
                     })}
-                    <div ref={isViewA ? bottomPlaceholderRef : null}></div>
+                    {isSimulatingTyping && (
+                        <div className="flex justify-start mt-2">
+                            <div className="bg-[#fff] dark:bg-[#202c33] rounded-lg rounded-tl-none px-4 py-3 shadow-md">
+                                <div className="flex gap-1 items-center">
+                                    {[0, 150, 300].map(d => <div key={d} className="w-2 h-2 bg-[#8696a0] rounded-full animate-bounce" style={{ animationDelay: `${d}ms` }} />)}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                    <div ref={localBottomRef} />
                 </div>
             </div>
 
-            {/* Input Footer */}
             <div className="bg-[#f0f2f5] dark:bg-[#202c33] px-3 py-3 flex gap-3 items-center z-10 sticky bottom-0 border-t border-gray-200 dark:border-gray-800">
-                <button className="text-[#54656f] dark:text-[#8696a0] hover:bg-black/5 dark:hover:bg-white/5 p-2 rounded-full transition-colors hidden sm:block"><svg className="w-[26px] h-[26px]" viewBox="0 0 24 24" fill="currentColor"><path d="M9.153 11.603c.795 0 1.439-.879 1.439-1.962s-.644-1.962-1.439-1.962-1.439.879-1.439 1.962.644 1.962 1.439 1.962zm-3.204 1.362c-.026-.307-.131 5.218 6.063 5.551 6.066-.25 6.066-5.551 6.066-5.551-6.096-.134-9.288 0-12.129 0zm11.363-1.108s-.666 1.962-1.439 1.962-1.439-.879-1.439-1.962.644-1.962 1.439-1.962 1.439.879 1.439 1.962z"></path></svg></button>
-                <button className="text-[#54656f] dark:text-[#8696a0] hover:bg-black/5 dark:hover:bg-white/5 p-2 rounded-full transition-colors"><svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z"></path></svg></button>
-                <div className="flex-1 bg-white dark:bg-[#2a3942] rounded-lg px-4 py-[9px] text-[15px] text-[#54656f] dark:text-[#d1d7db] shadow-none flex items-center">
-                    Mensagem gerada por IA...
+                <div className="flex-1 bg-white dark:bg-[#2a3942] rounded-lg px-4 py-[9px] text-[15px] text-[#54656f] dark:text-[#d1d7db] flex items-center">
+                    {isLive ? 'Mensagem real sendo enviada...' : 'Mensagem gerada por IA...'}
                 </div>
-                <button className="text-[#54656f] dark:text-[#8696a0] hover:bg-black/5 dark:hover:bg-white/5 p-2 rounded-full transition-colors"><svg className="w-[26px] h-[26px]" viewBox="0 0 24 24" fill="currentColor"><path d="M11.999 14.942c2.001 0 3.531-1.53 3.531-3.531V4.35c0-2.001-1.53-3.531-3.531-3.531S8.469 2.35 8.469 4.35v7.061c0 2.001 1.53 3.531 3.531 3.531zM8.969 4.35c0-1.668 1.365-3.031 3.031-3.031s3.031 1.363 3.031 3.031v7.061c0 1.668-1.365 3.031-3.031 3.031s-3.031-1.363-3.031-3.031V4.35zm7.061 7.061c0 2.238-1.848 4.088-4.088 4.088s-4.088-1.85-4.088-4.088H5.942c0 3.03 2.28 5.568 5.163 6.012v2.988h2.001v-2.988c2.884-.445 5.163-2.983 5.163-6.012h-2.238z"></path></svg></button>
             </div>
         </div>
     );
 };
 
+// ─── Page ──────────────────────────────────────────────────────────────────
 export default function WarmupPage() {
     const [stats, setStats] = useState<WarmupStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
-    const [generatedConversation, setGeneratedConversation] = useState<any[] | null>(null);
+    
+    // 🚀 SUPORTE A MÚLTIPLAS SESSÕES SIMULTÂNEAS
+    const [activeSessions, setActiveSessions] = useState<Record<string, {
+        id: string;
+        isLive: boolean;
+        chips: { A: any; B: any };
+        messages: any[];
+        isTyping: boolean;
+    }>>({});
+    
     const [simulatorVisible, setSimulatorVisible] = useState(false);
-    const [simulatedChips, setSimulatedChips] = useState<{ A: any, B: any } | null>(null);
-    const [visibleMessages, setVisibleMessages] = useState<any[]>([]);
-    const [isSimulatingTyping, setIsSimulatingTyping] = useState(false);
+    const [isLive, setIsLive] = useState(false);
+    const [selectedChips, setSelectedChips] = useState<string[]>([]);
+    const [liveLoading, setLiveLoading] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const bottomPlaceholderRef = useRef<HTMLDivElement>(null);
+    const socketRef = useRef<Socket | null>(null);
+
+    useEffect(() => { loadData(); }, []);
 
     useEffect(() => {
-        loadData();
+        return () => { socketRef.current?.disconnect(); };
     }, []);
 
     const loadData = async () => {
@@ -144,84 +158,168 @@ export default function WarmupPage() {
             setLoading(true);
             const data = await warmupService.getStats();
             setStats(data);
-        } catch (error) {
-            console.error('Failed to load warmup stats:', error);
+        } catch (e) {
+            console.error(e);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleCreateSession = async (instAId?: string, instBId?: string) => {
+    // ── Simulated IA session ──
+    const handleCreateSession = async () => {
         try {
             setActionLoading(true);
-            setSimulatorVisible(false);
-
-            const result = await warmupService.createSession(instAId, instBId);
+            setIsLive(false);
+            const result = await warmupService.createSession();
             loadData();
-
             if (result.success && result.conversation) {
-                setGeneratedConversation(result.conversation);
-                if (result.instA && result.instB) {
-                    setSimulatedChips({ A: result.instA, B: result.instB });
-                }
+                const sid = `sim-${Date.now()}`;
+                
+                // Add session
+                setActiveSessions(prev => ({
+                    ...prev,
+                    [sid]: {
+                        id: sid,
+                        isLive: false,
+                        chips: { A: result.instA, B: result.instB },
+                        messages: [],
+                        isTyping: false
+                    }
+                }));
+                
                 setSimulatorVisible(true);
-                setVisibleMessages([]);
-
-                setTimeout(() => {
-                    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                    simulateConversationFlow(result.conversation);
-                }, 500);
+                simulateFlow(sid, result.conversation);
             } else if (result.reason === 'min_instances') {
                 alert('Chips insuficientes no Warmup.');
-            } else {
-                alert('Sessão de Warmup manual iniciada com sucesso!');
             }
-        } catch (error) {
-            console.error('Failed to start session:', error);
-        } finally {
-            setActionLoading(false);
+        } catch (e) { console.error(e); }
+        finally { setActionLoading(false); }
+    };
+ 
+    const simulateFlow = (sid: string, conversation: any[]) => {
+        let i = 0;
+        const next = () => {
+            if (i >= conversation.length) { 
+                setActiveSessions(prev => prev[sid] ? { ...prev, [sid]: { ...prev[sid], isTyping: false } } : prev);
+                return; 
+            }
+            const msg = conversation[i];
+            if (msg.sender && !msg.role) msg.role = msg.sender;
+            
+            setActiveSessions(prev => prev[sid] ? { ...prev, [sid]: { ...prev[sid], isTyping: true } } : prev);
+            
+            setTimeout(() => {
+                setActiveSessions(prev => {
+                    const s = prev[sid];
+                    if (!s) return prev;
+                    return {
+                        ...prev,
+                        [sid]: {
+                            ...s,
+                            isTyping: false,
+                            messages: [...s.messages, msg]
+                        }
+                    };
+                });
+                i++;
+                setTimeout(() => bottomPlaceholderRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+                if (i < conversation.length) setTimeout(next, 1500 + Math.random() * 1000);
+            }, Math.max(1500, msg.content.length * 50));
+        };
+        next();
+    };
+
+    // ── Live real session ──
+    const toggleChip = (id: string) => {
+        setSelectedChips(prev => {
+            if (prev.includes(id)) return prev.filter(x => x !== id);
+            if (prev.length >= 2) return [prev[1], id];
+            return [...prev, id];
+        });
+    };
+
+    const handleStartLive = async () => {
+        if (selectedChips.length < 2) return;
+        setLiveLoading(true);
+ 
+        // Garante conexão única WebSocket
+        if (!socketRef.current) {
+            const token = typeof window !== 'undefined' ? localStorage.getItem('accessToken') : null;
+            const apiBase = api.defaults.baseURL || 'http://localhost:3333/api/v1';
+            const wsBase = apiBase.split('/api/v1')[0]; 
+            
+            const socket = io(`${wsBase}/events`, { auth: { token }, transports: ['websocket'] });
+            socketRef.current = socket;
+ 
+            socket.on('warmup:live-typing', (data: any) => {
+                setActiveSessions(prev => prev[data.sessionId] ? { ...prev, [data.sessionId]: { ...prev[data.sessionId], isTyping: true } } : prev);
+            });
+ 
+            socket.on('warmup:live-message', (data: any) => {
+                setActiveSessions(prev => {
+                    const s = prev[data.sessionId];
+                    if (!s) return prev;
+                    return {
+                        ...prev,
+                        [data.sessionId]: {
+                            ...s,
+                            isTyping: false,
+                            messages: [...s.messages, data]
+                        }
+                    };
+                });
+                setTimeout(() => bottomPlaceholderRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+            });
+ 
+            socket.on('warmup:live-end', (data: any) => {
+                setActiveSessions(prev => prev[data.sessionId] ? { ...prev, [data.sessionId]: { ...prev[data.sessionId], isTyping: false } } : prev);
+            });
+        }
+ 
+        try {
+            const res = await api.post('/warmup/live-session', { instAId: selectedChips[0], instBId: selectedChips[1] });
+            if (res.data.success) {
+                const sid = res.data.sessionId;
+                // Adiciona no conjunto de sessões ativas
+                setActiveSessions(prev => ({
+                    ...prev,
+                    [sid]: {
+                        id: sid,
+                        isLive: true,
+                        chips: { A: res.data.instA, B: res.data.instB },
+                        messages: [],
+                        isTyping: false
+                    }
+                }));
+                
+                setSimulatorVisible(true);
+                setLiveLoading(false);
+                setSelectedChips([]); // Limpa para poder selecionar o próximo par!
+                setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 300);
+            } else {
+                alert(res.data.message || `Erro: ${res.data.reason}`);
+                setLiveLoading(false);
+            }
+        } catch (e: any) {
+            alert(e?.response?.data?.message || 'Erro ao iniciar sessão ao vivo.');
+            setLiveLoading(false);
         }
     };
 
-    const simulateConversationFlow = (conversation: any[]) => {
-        let currentIndex = 0;
-        const nextMessage = () => {
-            if (currentIndex >= conversation.length) {
-                setIsSimulatingTyping(false);
-                return;
-            }
-            const msg = conversation[currentIndex];
-            if (msg.sender && !msg.role) msg.role = msg.sender;
-            setIsSimulatingTyping(true);
-            setTimeout(() => {
-                setVisibleMessages(prev => [...prev, msg]);
-                setIsSimulatingTyping(false);
-                currentIndex++;
-                setTimeout(() => {
-                    bottomPlaceholderRef.current?.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
-                if (currentIndex < conversation.length) {
-                    setTimeout(nextMessage, 1500 + Math.random() * 1000);
-                }
-            }, Math.max(1500, msg.content.length * 50));
-        };
-        nextMessage();
+    const handleCloseSimulator = () => {
+        setSimulatorVisible(false);
+        socketRef.current?.disconnect();
     };
 
     if (loading && !stats) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-[var(--bg-primary)]">
-                <div className="w-8 h-8 rounded-full border-2 border-[var(--accent-primary)] border-t-transparent animate-spin"></div>
+                <div className="w-8 h-8 rounded-full border-2 border-[var(--accent-primary)] border-t-transparent animate-spin" />
             </div>
         );
     }
 
-    const safeStats = stats || {
-        activeChips: 0,
-        totalMessagesSent: 0,
-        avgHealth: 0,
-        instances: []
-    };
+    const safeStats = stats || { activeChips: 0, totalMessagesSent: 0, avgHealth: 0, instances: [] };
 
     return (
         <div className="animate-fadeIn pb-12">
@@ -231,15 +329,10 @@ export default function WarmupPage() {
                 <div className="flex items-center gap-3">
                     <img src="/icons/sidebar/warmup.png" alt="Warm-up" className="w-10 h-10 object-contain drop-shadow-md" />
                     <div>
-                        <h1 className="page-title">Warm-up & Mobile Farm</h1>
-                        <p className="text-sm text-[var(--text-muted)]">Maturação automatizada de chips reais e gestão de dispositivos USB</p>
+                        <h1 className="page-title">Warm-up de Chips</h1>
+                        <p className="text-sm text-[var(--text-muted)]">Maturação automatizada de chips e conversas reais em tempo real</p>
                     </div>
                 </div>
-            </div>
-
-            {/* Mobile Farm View - Integrated here */}
-            <div className="container mx-auto px-4 max-w-7xl mb-8">
-                <MobileFarmView />
             </div>
 
             {/* Stats */}
@@ -269,9 +362,7 @@ export default function WarmupPage() {
                             <div key={index} className="relative">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-3">
-                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold ${index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : index === 2 ? 'bg-yellow-500' : 'bg-green-500'}`}>
-                                            {index + 1}
-                                        </div>
+                                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white text-sm font-bold ${['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500'][index]}`}>{index + 1}</div>
                                         <div>
                                             <p className="font-medium text-[var(--text-primary)]">{stage.label}</p>
                                             <p className="text-xs text-[var(--text-muted)]">Dias {stage.days}</p>
@@ -280,41 +371,174 @@ export default function WarmupPage() {
                                     <span className="text-lg font-bold text-[var(--text-primary)]">{stage.limit} <span className="text-sm font-normal text-[var(--text-muted)]">msgs/dia</span></span>
                                 </div>
                                 <div className="h-3 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
-                                    <div className={`h-full rounded-full ${index === 0 ? 'bg-red-500' : index === 1 ? 'bg-orange-500' : index === 2 ? 'bg-yellow-500' : 'bg-green-500'}`} style={{ width: `${(stage.limit / 100) * 100}%` }}></div>
+                                    <div className={`h-full rounded-full ${['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500'][index]}`} style={{ width: `${stage.limit}%` }} />
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                {/* Chips Table */}
+                {/* Chips Table — now with selection */}
                 <div className="lg:col-span-2 glass-card p-6">
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4 flex items-center justify-between">
-                        <span>📱 Chips em Warm-up</span>
-                        <button onClick={loadData} className="text-xs text-indigo-400 hover:text-indigo-300">Atualizar</button>
-                    </h3>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div className="flex items-center gap-2">
+                            <span className="text-lg font-semibold text-[var(--text-primary)]">📱 Chips em Warm-up</span>
+                            <button onClick={loadData} className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">Atualizar</button>
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                            <button
+                                onClick={handleCreateSession}
+                                disabled={actionLoading || safeStats.instances.length < 2}
+                                className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white text-xs font-bold rounded-lg hover:shadow-lg transition-all disabled:opacity-50 flex items-center gap-2"
+                            >
+                                {actionLoading ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : '🔥'}
+                                Simular Conversa IA
+                            </button>
+                            <button
+                                onClick={handleStartLive}
+                                disabled={selectedChips.length < 2 || liveLoading}
+                                className={`px-4 py-2 text-xs font-bold rounded-lg transition-all flex items-center gap-2 ${selectedChips.length === 2
+                                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:shadow-lg hover:shadow-emerald-500/20'
+                                    : 'bg-white/5 text-gray-500 border border-white/10 cursor-not-allowed'
+                                }`}
+                            >
+                                {liveLoading
+                                    ? <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    : <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />}
+                                {selectedChips.length === 2 ? '🔴 Conversa Real' : `Selecione 2 chips (${selectedChips.length}/2)`}
+                            </button>
+                        </div>
+                    </div>
+
+                    {selectedChips.length < 2 && safeStats.instances.length >= 2 && (
+                        <p className="text-xs text-gray-500 mb-3 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full" />
+                            Clique em dois chips para selecioná-los e iniciar uma conversa real entre eles
+                        </p>
+                    )}
+
                     <div className="table-container">
                         {safeStats.instances.length > 0 ? (
-                            <table className="table">
+                            <table className="table w-full">
                                 <thead>
-                                    <tr><th>Número</th><th>Dia</th><th>Limite</th><th>Status</th><th>Saúde</th></tr>
+                                    <tr><th className="w-8" /><th>Número</th><th>Dia</th><th>Limite</th><th>Status</th><th>Saúde</th></tr>
                                 </thead>
                                 <tbody>
-                                    {safeStats.instances.map((chip, index) => (
-                                        <tr key={index}>
-                                            <td className="font-medium">{chip.phone || chip.id}</td>
-                                            <td><span className="text-[var(--accent-warning)]">{chip.day}</span>/14+</td>
-                                            <td>{chip.dailyLimit}</td>
-                                            <td>{chip.sent} env</td>
-                                            <td><span className={chip.health >= 80 ? 'text-green-500' : 'text-yellow-500'}>{chip.health}%</span></td>
-                                        </tr>
-                                    ))}
+                                    {safeStats.instances.map((chip, index) => {
+                                        const isSelected = selectedChips.includes(chip.id);
+                                        const selIdx = selectedChips.indexOf(chip.id);
+                                        return (
+                                            <tr key={index} onClick={() => toggleChip(chip.id)}
+                                                className={`cursor-pointer transition-all ${isSelected ? 'bg-indigo-500/10 ring-1 ring-inset ring-indigo-500/30' : 'hover:bg-white/5'}`}>
+                                                <td>
+                                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center text-[10px] font-black transition-all ${isSelected ? 'bg-indigo-500 border-indigo-400 text-white' : 'border-[#343b4d]'}`}>
+                                                        {isSelected ? selIdx + 1 : ''}
+                                                    </div>
+                                                </td>
+                                                <td className="font-medium">
+                                                    <div className="flex items-center gap-2">
+                                                        {isSelected && (
+                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-full ${selIdx === 0 ? 'bg-indigo-500/20 text-indigo-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                                                {selIdx === 0 ? 'A' : 'B'}
+                                                            </span>
+                                                        )}
+                                                        {chip.phone || chip.id}
+                                                        {chip.metaConfig?.voiceProfile && (
+                                                            <span className="ml-2 text-[9px] font-bold tracking-wider uppercase flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/20 text-gray-300 border border-white/10 group-hover:border-white/20 transition-all">
+                                                                <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="opacity-70"><path d="M12 2c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm7 9c0 3.87-3.13 7-7 7s-7-3.13-7-7H3c0 4.53 3.32 8.36 7.57 8.93V22h2.86v-3.07c4.25-.57 7.57-4.4 7.57-8.93h-2z"/></svg>
+                                                                {chip.metaConfig.voiceProfile}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td><span className="text-[var(--accent-warning)]">{chip.day}</span>/14+</td>
+                                                <td>{chip.dailyLimit}</td>
+                                                <td>{chip.sent} env</td>
+                                                <td><span className={chip.health >= 80 ? 'text-green-500' : 'text-yellow-500'}>{chip.health}%</span></td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
-                        ) : <div className="text-center py-8">Nenhum chip ativo.</div>}
+                        ) : <div className="text-center py-8 text-[var(--text-muted)]">Nenhum chip ativo.</div>}
                     </div>
                 </div>
             </div>
+
+            {/* Simulator Modal — Agora com SUPORTE A MÚLTIPLAS SESSÕES (War Room Layout) */}
+            {simulatorVisible && Object.keys(activeSessions).length > 0 && (
+                <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto p-4 md:p-8 flex flex-col">
+                    
+                    {/* Floating Controls */}
+                    <div className="sticky top-0 z-[110] flex items-center justify-between bg-[#1a1c24]/80 backdrop-blur-md border border-white/10 p-4 rounded-2xl mb-8 max-w-6xl mx-auto w-full shadow-2xl shadow-black/50">
+                        <div className="flex items-center gap-4">
+                            <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+                            <div>
+                                <h2 className="text-lg font-bold text-white">Painel de Controle Real</h2>
+                                <p className="text-xs text-gray-400">{Object.keys(activeSessions).length} {Object.keys(activeSessions).length === 1 ? 'conversa ativa' : 'conversas ativas em paralelo'}</p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => { 
+                                setActiveSessions({}); 
+                                setSimulatorVisible(false);
+                                if (socketRef.current) socketRef.current.disconnect();
+                                socketRef.current = null;
+                            }} 
+                            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-xl text-xs font-bold uppercase transition-all"
+                        >
+                            Encerrar Todas
+                        </button>
+                    </div>
+
+                    <div className="space-y-16 w-full max-w-6xl mx-auto pb-20">
+                        {Object.values(activeSessions).map((session) => (
+                            <div key={session.id} className="relative animate-slideUp">
+                                {/* Background glow for distinct session separation */}
+                                <div className="absolute -inset-4 bg-indigo-500/5 rounded-[2rem] blur-xl" />
+                                
+                                <div className="relative flex flex-col lg:flex-row items-center justify-center gap-6 bg-white/5 border border-white/10 p-6 md:p-8 rounded-[2rem]">
+                                    
+                                    <WhatsAppMockup 
+                                        simulatedChips={session.chips} 
+                                        visibleMessages={session.messages} 
+                                        isSimulatingTyping={session.isTyping} 
+                                        onClose={() => {
+                                            setActiveSessions(prev => {
+                                                const copy = { ...prev };
+                                                delete copy[session.id];
+                                                return copy;
+                                            });
+                                        }} 
+                                        viewRole="A" 
+                                        isLive={session.isLive} 
+                                    />
+                                    
+                                    <div className="hidden lg:flex flex-col items-center gap-3 text-white/30 py-8">
+                                        <div className={`w-12 h-12 rounded-full border-2 ${session.isLive ? 'border-red-500/30 text-red-400' : 'border-indigo-500/30 text-indigo-400'} flex items-center justify-center text-xl font-bold bg-black/30 shadow-lg`}>
+                                            {session.isLive ? '🔴' : '🤖'}
+                                        </div>
+                                        <div className="h-24 w-0.5 bg-gradient-to-b from-white/20 via-white/5 to-transparent" />
+                                        <span className="text-[10px] font-black uppercase tracking-[0.2em] transform -rotate-90 my-8">
+                                            {session.isLive ? 'CONVERSA REAL' : 'SYNC IA'}
+                                        </span>
+                                        <div className="h-24 w-0.5 bg-gradient-to-t from-white/20 via-white/5 to-transparent" />
+                                    </div>
+                                    
+                                    <WhatsAppMockup 
+                                        simulatedChips={session.chips} 
+                                        visibleMessages={session.messages} 
+                                        isSimulatingTyping={session.isTyping} 
+                                        viewRole="B" 
+                                        isLive={session.isLive} 
+                                    />
+                                    
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

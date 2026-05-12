@@ -144,9 +144,29 @@ export class EvolutionAdapter implements IWhatsAppProvider {
             const response = await this.request('GET', `/instance/connectionState/${instanceName}`);
             const state = response.instance?.state || response.state;
 
+            let phoneNumber = response.instance?.owner || response.instance?.ownerJid || response.instance?.phoneNumber || response.instance?.wuid || response.owner;
+            
+            // 🔥 FALLBACK: Em algumas versões v2 da Evolution, connectionState NÃO retorna o proprietário.
+            // Se não obtivemos o número, puxamos a lista geral e filtramos pelo nome da instância.
+            if (!phoneNumber && this.mapStatus(state) === EnumInstanceStatus.CONNECTED) {
+                try {
+                    const allInstances = await this.request('GET', '/instance/fetchInstances');
+                    const matched = Array.isArray(allInstances) 
+                        ? allInstances.find((i: any) => i.name === instanceName || i.instanceName === instanceName) 
+                        : null;
+                    
+                    if (matched) {
+                        phoneNumber = matched.ownerJid || matched.number || matched.owner;
+                        this.logger.log(`Fallback phoneNumber recovery success for ${instanceName}: ${phoneNumber}`);
+                    }
+                } catch (fallbackErr) {
+                    this.logger.warn(`Fallback recovery failed: ${fallbackErr.message}`);
+                }
+            }
+
             return {
                 status: this.mapStatus(state),
-                phoneNumber: response.instance?.owner || response.instance?.ownerJid || response.instance?.phoneNumber || response.instance?.wuid || response.owner,
+                phoneNumber,
                 name: response.instance?.profileName,
             };
         } catch (error: any) {
@@ -189,8 +209,25 @@ export class EvolutionAdapter implements IWhatsAppProvider {
         caption?: string;
         filename?: string;
     }): Promise<SendMessageResult> {
-        // Evolution API uses /message/sendMedia endpoint
-        const extension = media.url.split('.').pop()?.split('?')[0] || (media.type === 'video' ? 'mp4' : media.type === 'audio' ? 'mp3' : media.type === 'image' ? 'jpg' : 'pdf');
+        // 🔥 CRÍTICO: Para Evolution v2, áudios reais (PTT/Mensagem de Voz) 
+        // DEVEM usar o endpoint específico /message/sendWhatsAppAudio
+        if (media.type === 'audio') {
+            const response = await this.request('POST', `/message/sendWhatsAppAudio/${instanceName}`, {
+                number: this.formatPhone(to),
+                audio: media.url,
+                delay: 1000, // Pequena simulação nativa
+            });
+
+            this.logger.log(`Sent WhatsApp Voice Note (PTT) to ${to} via Evolution API`);
+
+            return {
+                messageId: response.key?.id || 'unknown',
+                status: 'sent',
+            };
+        }
+
+        // Fallback para outras mídias (Imagens, Documentos, Vídeos)
+        const extension = media.url.split('.').pop()?.split('?')[0] || (media.type === 'video' ? 'mp4' : media.type === 'image' ? 'jpg' : 'pdf');
 
         const response = await this.request('POST', `/message/sendMedia/${instanceName}`, {
             number: this.formatPhone(to),
@@ -252,6 +289,31 @@ export class EvolutionAdapter implements IWhatsAppProvider {
             // OR we assume false to be safe? 
             // Better to return false if we want strict filtering as requested by user.
             return false;
+        }
+    }
+
+    async getMaturityMetrics(instanceName: string): Promise<{ chatCount: number; groupCount: number }> {
+        try {
+            // POST /chat/findChats/{instance} body {} to get ALL chats from cache/db
+            const chats = await this.request('POST', `/chat/findChats/${instanceName}`, {});
+            
+            if (!Array.isArray(chats)) {
+                return { chatCount: 0, groupCount: 0 };
+            }
+
+            const groupCount = chats.filter((c: any) => {
+                const jid = c.remoteJid || c.id || '';
+                return jid.endsWith('@g.us');
+            }).length;
+
+            const chatCount = chats.length - groupCount;
+
+            this.logger.log(`Maturity Metrics for ${instanceName}: ${chatCount} private chats, ${groupCount} groups`);
+
+            return { chatCount, groupCount };
+        } catch (error: any) {
+            this.logger.error(`Failed to scan maturity for ${instanceName}: ${error.message}`);
+            return { chatCount: 0, groupCount: 0 };
         }
     }
 

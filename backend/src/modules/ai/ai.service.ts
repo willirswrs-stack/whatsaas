@@ -220,6 +220,32 @@ export class AiService {
     }
 
     /**
+     * Synthesize text to audio speech using OpenAI TTS
+     * Returns audio buffer
+     */
+    async synthesizeSpeech(text: string, voice: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' = 'alloy'): Promise<Buffer> {
+        if (!this.openai) {
+            throw new Error('OpenAI client not initialized (missing API KEY)');
+        }
+
+        try {
+            this.logger.log(`[TTS] Synthesizing speech: "${text.substring(0, 30)}..."`);
+            
+            const mp3 = await this.openai.audio.speech.create({
+                model: "tts-1",
+                voice: voice,
+                input: text,
+            });
+
+            const buffer = Buffer.from(await mp3.arrayBuffer());
+            return buffer;
+        } catch (error: any) {
+            this.logger.error(`TTS Generation Error: ${error.message}`);
+            throw error;
+        }
+    }
+
+    /**
      * Generate using OpenAI
      */
     private async generateWithOpenAI(

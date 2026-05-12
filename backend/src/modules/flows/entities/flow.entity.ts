@@ -91,6 +91,9 @@ export class Flow {
 
     @Column({ type: 'varchar', length: 50, nullable: true })
     channel: string;
+    
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    category: string;
 
     @Column({ type: 'varchar', length: 20, default: 'draft' })
     status: 'draft' | 'active' | 'paused' | 'archived';

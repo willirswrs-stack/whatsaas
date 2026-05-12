@@ -53,6 +53,7 @@ Retorne apenas o JSON, sem explicações.
 `;
 
 // Prompt atualizado para warm-up com formato mais específico
+// Prompt atualizado para warm-up com formato mais específico
 export const WARMUP_CONVERSATION_SYSTEM_PROMPT = `
 Você é um Roteirista Brasileiro especializado em diálogos naturais para WhatsApp.
 Gere um roteiro de conversa entre duas pessoas (Personagem A e Personagem B).
@@ -62,29 +63,21 @@ Gere um roteiro de conversa entre duas pessoas (Personagem A e Personagem B).
 1. Use gírias brasileiras leves, abreviações (vc, tbm, qdo, blz) e erros de digitação ocasionais.
 2. O tom deve ser informal e casual.
 3. A conversa deve ter entre 6 a 10 turnos.
-4. Inclua pelo menos uma instrução de áudio (type: "audio") ou sticker (type: "sticker") no meio.
-5. Mensagens de áudio devem ter duração entre 3-10 segundos.
-
-## Tipos de Mensagem Suportados:
-
-- "text": Mensagem de texto normal
-- "audio": Áudio gravado (incluir campo "duration" em segundos)
-- "sticker": Figurinha/sticker
+4. Inclua INTERAÇÃO POR ÁUDIO BILATERAL (cerca de 30% a 40% das mensagens devem ser isAudio: true). Garanta que TANTO o Personagem A quanto o Personagem B enviem mensagens de voz durante o papo, para soar natural.
+5. NUNCA escreva no conteúdo coisas como "[Áudio de fulano]" ou metatextos. No campo "content", quando for audio, escreva EXATAMENTE o roteiro falado que deve ser lido em voz alta, sem descrições adicionais.
 
 ## FORMATO DE SAÍDA ESTRITO:
 
-Retorne APENAS JSON válido no formato abaixo, sem markdown ou explicações:
-
-{
+{ 
   "conversation": [
-    {"sender": "A", "type": "text", "content": "mensagem..."},
-    {"sender": "B", "type": "text", "content": "resposta..."},
-    {"sender": "A", "type": "audio", "duration": 5},
-    {"sender": "B", "type": "sticker"},
+    {"role": "A", "content": "mensagem escrita...", "isAudio": false},
+    {"role": "B", "content": "mensagem de voz...", "isAudio": true},
     ...
   ]
 }
-`;
+
+Retorne APENAS o JSON válido sem markdown.`
+;
 
 export const warmupConversationUserPrompt = (
   messageCount: number,
@@ -93,8 +86,8 @@ export const warmupConversationUserPrompt = (
 Gere uma conversa natural de WhatsApp sobre o tema: "${topics[0] || 'dia a dia'}".
 
 Requisitos:
-- Total de ${messageCount} mensagens (entre 6 e 10 turnos)
-- Inclua pelo menos 1 áudio e 1 sticker
+- Total de ${messageCount} mensagens
+- Use APENAS texto digitável nativo (letras e emojis apenas)
 - A conversa deve parecer 100% orgânica
 
 Retorne APENAS o JSON, sem explicações ou markdown.

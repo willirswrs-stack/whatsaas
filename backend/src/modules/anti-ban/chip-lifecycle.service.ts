@@ -38,11 +38,13 @@ export class ChipLifecycleService {
 
   async promoteStage(instanceId: string) {
     const instance = await this.instanceRepo.findOne({ where: { id: instanceId } });
+    if (!instance) return;
+
     if (instance.warmupDay >= 3 && instance.provider === 'mobile_farm' as any) {
-      this.logger.log(`📱 Chip ${instance.phone} pronto para migração para Web Antidetect.`);
+      this.logger.log(`📱 Chip ${instance.phone || instance.id} pronto para migração para Web Antidetect.`);
     }
     if (instance.warmupDay >= 10) {
-      this.logger.log(`⭐ Chip ${instance.phone} atingiu maturidade máxima. Pronto para venda!`);
+      this.logger.log(`⭐ Chip ${instance.phone || instance.id} atingiu maturidade máxima. Pronto para venda!`);
     }
   }
 }

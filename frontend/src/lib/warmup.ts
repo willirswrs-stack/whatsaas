@@ -37,5 +37,14 @@ export const warmupService = {
     async createSession(instAId?: string, instBId?: string): Promise<any> {
         const response = await api.post('/warmup/session', { instAId, instBId });
         return response.data;
+    },
+
+    async listMobileDevices(): Promise<any[]> {
+        const response = await api.get('/mobile-farm/devices');
+        return response.data;
+    },
+
+    async openWhatsApp(deviceId: string): Promise<void> {
+        await api.post(`/mobile-farm/devices/${deviceId}/open-whatsapp`);
     }
 };

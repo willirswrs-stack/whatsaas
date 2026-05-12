@@ -1,4 +1,4 @@
-
+import './instrument';
 import { NestFactory } from '@nestjs/core';
 import { json, urlencoded } from 'express';
 import { ValidationPipe } from '@nestjs/common';

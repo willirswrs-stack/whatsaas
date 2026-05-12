@@ -13,6 +13,7 @@ import { DISPATCH_QUEUE } from '../../config/bull.config';
 // Anti-Ban Module
 import { AntiBanModule } from '../anti-ban/anti-ban.module';
 import { FlowsModule } from '../flows/flows.module';
+import { MetaTemplatesModule } from '../meta-templates/meta-templates.module';
 
 @Module({
     imports: [
@@ -30,6 +31,7 @@ import { FlowsModule } from '../flows/flows.module';
         WhatsAppModule,
         AntiBanModule, // HBS, Pattern Breaker, Delay Generator
         FlowsModule,
+        MetaTemplatesModule,
     ],
     providers: [DispatcherProcessor, DispatcherService],
     exports: [DispatcherService, DispatcherProcessor],

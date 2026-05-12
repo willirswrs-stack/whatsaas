@@ -105,6 +105,15 @@ export class InstancesController {
         return this.instancesService.findOne(id, tenantId);
     }
 
+    @Post(':id/scan-maturity')
+    @ApiOperation({ summary: 'Scan instance maturity' })
+    async scanMaturity(
+        @Param('id') id: string,
+        @CurrentTenant() tenantId: string,
+    ) {
+        return this.instancesService.scanMaturity(id, tenantId);
+    }
+
     @Get(':id/health')
     @ApiOperation({ summary: 'Get health score for instance' })
     async getHealth(@Param('id') id: string) {

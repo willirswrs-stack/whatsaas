@@ -15,6 +15,8 @@ import { Instance } from '../instances/entities/instance.entity';
 import { WarmupService } from './warmup.service';
 import { WARMUP_QUEUE } from '../../config/bull.config';
 import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
+import { HumanBehaviorService } from './human-behavior.service';
+import { ActivePreventionService } from './active-prevention.service';
 
 @Processor(WARMUP_QUEUE)
 @Injectable()

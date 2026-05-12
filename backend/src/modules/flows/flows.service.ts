@@ -290,6 +290,18 @@ export class FlowsService implements OnModuleInit {
             throw new BadRequestException('O fluxo não tem um nó de início');
         }
 
+        // --- Business Hours Check ---
+        const hoursConfig = startNode.data.config?.businessHours;
+        if (hoursConfig?.enabled && !dto.initialVariables?.isTest) {
+            const isInside = this.isWithinBusinessHours(hoursConfig);
+            if (!isInside) {
+                console.log(`[Flow] Execution blocked for ${flow.name}: Outside business hours.`);
+                // For now, we just don't start it. 
+                // Later we could redirect to a specific node or send a message.
+                return null;
+            }
+        }
+
         const execution = this.executionRepository.create({
             flowId: dto.flowId,
             contactId: dto.contactId,
@@ -661,18 +673,43 @@ export class FlowsService implements OnModuleInit {
                     const message = nodeData?.config?.message || nodeData?.config?.text || 'Escolha uma opção:';
                     const buttons = nodeData?.config?.buttons || [];
 
-                    // Send as text with button labels listed (most providers need special API for interactive buttons)
-                    let fullMessage = message;
-                    if (buttons.length > 0) {
-                        const buttonList = buttons.map((b: any, i: number) => `${i + 1}. ${b.label || b.text || b}`).join('\n');
-                        fullMessage = `${message}\n\n${buttonList}`;
-                    }
-
                     // PREVENÇÃO ATIVA
                     await provider.sendPresence?.(instance.instanceName, contact.phone, 'composing', 2000);
                     await this.activePrevention.applyPrevention(instance.id);
 
-                    await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+                    // Try sending real interactive buttons if supported by provider (e.g. Evolution API)
+                    try {
+                        // Evolution Cloud specific (if supported)
+                        if ((instance.provider as string) === 'evolution_cloud' && (provider as any).sendButtons) {
+                            const res = await (provider as any).sendButtons(instance.instanceName, contact.phone, {
+                                text: message,
+                                buttons: buttons.map((b: any) => ({
+                                    id: b.id || `btn-${Math.random().toString(36).substr(2, 9)}`,
+                                    label: b.label || b.text || b
+                                }))
+                            });
+                            const messageId = res?.messageId;
+                            if (messageId) {
+                                await this.updateCampaignContactMessageId(execution, messageId);
+                            }
+                        } else {
+                            // Fallback: Send as text with numbered list
+                            let fullMessage = message;
+                            if (buttons.length > 0) {
+                                const buttonList = buttons.map((b: any, i: number) => `${i + 1}. ${b.label || b.text || b}`).join('\n');
+                                fullMessage = `${message}\n\n${buttonList}`;
+                            }
+                            await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+                        }
+                    } catch (btnErr) {
+                        console.error(`[Flow] Error sending buttons at node ${nextNode.id}, falling back to text:`, btnErr.message);
+                        let fullMessage = message;
+                        if (buttons.length > 0) {
+                            const buttonList = buttons.map((b: any, i: number) => `${i + 1}. ${b.label || b.text || b}`).join('\n');
+                            fullMessage = `${message}\n\n${buttonList}`;
+                        }
+                        await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+                    }
 
                     execution.logs.push({
                         nodeId: nextNode.id,
@@ -794,6 +831,7 @@ export class FlowsService implements OnModuleInit {
                     case 'equals': conditionMet = String(actualValue) === String(value); break;
                     case 'contains': conditionMet = String(actualValue).includes(String(value)); break;
                     case 'not_equals': conditionMet = String(actualValue) !== String(value); break;
+                    case 'starts_with': conditionMet = String(actualValue).startsWith(String(value)); break;
                     case 'gt': conditionMet = Number(actualValue) > Number(value); break;
                     case 'lt': conditionMet = Number(actualValue) < Number(value); break;
                     case 'exists': conditionMet = !!actualValue; break;
@@ -802,8 +840,8 @@ export class FlowsService implements OnModuleInit {
 
                 console.log(`[Flow] Condition node ${nextNode.id}: field=${field}, op=${operator}, expected=${value}, actual=${actualValue}, met=${conditionMet}`);
 
-                // Select the correct output handle
-                const handleId = conditionMet ? 'true' : 'false';
+                // Select the correct output handle (Match frontend ids 'yes'/'no')
+                const handleId = conditionMet ? 'yes' : 'no';
                 const condEdge = this.findNextEdge(flow.edges, nextNode.id, handleId);
 
                 execution.logs.push({
@@ -844,6 +882,8 @@ export class FlowsService implements OnModuleInit {
                     switch (cond.operator) {
                         case 'equals': met = String(actualValue) === String(cond.value); break;
                         case 'contains': met = String(actualValue).includes(String(cond.value)); break;
+                        case 'not_equals': met = String(actualValue) !== String(cond.value); break;
+                        case 'starts_with': met = String(actualValue).startsWith(String(cond.value)); break;
                         case 'gt': met = Number(actualValue) > Number(cond.value); break;
                         case 'lt': met = Number(actualValue) < Number(cond.value); break;
                         default: met = false;
@@ -1044,8 +1084,9 @@ export class FlowsService implements OnModuleInit {
             // ==================== SAVE INFO NODE ====================
             else if (['saveInfo'].includes(nodeType)) {
                 const nodeData = nextNode.data as any;
-                const field = nodeData?.config?.field || '';
-                const value = nodeData?.config?.value || '';
+                // Support both frontend (fieldName/fieldValue) and backend (field/value) naming
+                const field = nodeData?.config?.field || nodeData?.config?.fieldName || '';
+                const value = nodeData?.config?.value || nodeData?.config?.fieldValue || '';
 
                 if (field) {
                     execution.variables = { ...execution.variables, [field]: value };
@@ -1112,7 +1153,7 @@ export class FlowsService implements OnModuleInit {
             // ==================== MOVE FLOW NODE ====================
             else if (['moveFlow'].includes(nodeType)) {
                 const nodeData = nextNode.data as any;
-                const targetFlowId = nodeData?.config?.flowId || nodeData?.config?.targetFlowId || '';
+                const targetFlowId = nodeData?.config?.flowId || nodeData?.config?.targetFlowId || nodeData?.config?.targetFlow || '';
 
                 console.log(`[Flow] MoveFlow node ${nextNode.id}: target flow=${targetFlowId}`);
 
@@ -1149,6 +1190,70 @@ export class FlowsService implements OnModuleInit {
                         action: 'move_flow_skipped',
                         timestamp: new Date().toISOString(),
                         data: { reason: 'no_target_flow' }
+                    });
+                }
+            }
+
+            // ==================== AI NODES (ChatGPT, Gemini, etc) ====================
+            else if (['openai', 'chatgpt', 'gemini', 'llama', 'anthropic', 'groq', 'customLlm'].includes(nodeType)) {
+                const { instance, contact } = await this.getExecutionContext(execution);
+                const nodeData = nextNode.data as any;
+                const token = nodeData?.config?.token || nodeData?.config?.apiKey || '';
+                const prompt = nodeData?.config?.prompt || nodeData?.config?.systemPrompt || 'Você é um assistente virtual útil.';
+                const userMessage = execution.variables?.lastAnswer || 'Olá';
+
+                console.log(`[Flow] AI node ${nextNode.id}: type=${nodeType}, promptLength=${prompt.length}`);
+
+                if (token && contact) {
+                    try {
+                        const providerMap: any = {
+                            'openai': 'openai',
+                            'chatgpt': 'openai',
+                            'anthropic': 'anthropic',
+                        };
+                        const aiProvider = providerMap[nodeType] || 'openai';
+
+                        const response = await this.aiService.generateResponseWithKey(
+                            prompt,
+                            userMessage,
+                            token,
+                            aiProvider
+                        );
+
+                        // Save response to variables
+                        execution.variables = {
+                            ...execution.variables,
+                            [`${nodeType}Response`]: response,
+                            lastAiResponse: response,
+                        };
+
+                        // Auto-send response if configured (default to true for simple nodes)
+                        if (nodeData?.config?.autoSend !== false && instance?.status === 'connected') {
+                            const whatsappProvider = this.whatsappFactory.getProvider(instance.provider);
+                            await whatsappProvider.sendText(instance.instanceName, contact.phone, response);
+                        }
+
+                        execution.logs.push({
+                            nodeId: nextNode.id,
+                            action: 'ai_response_generated',
+                            timestamp: new Date().toISOString(),
+                            data: { type: nodeType, status: 'success' }
+                        });
+                    } catch (aiErr) {
+                        console.error(`[Flow] AI Error at node ${nextNode.id}:`, aiErr.message);
+                        execution.logs.push({
+                            nodeId: nextNode.id,
+                            action: 'ai_failed',
+                            timestamp: new Date().toISOString(),
+                            data: { error: aiErr.message }
+                        });
+                    }
+                } else {
+                    execution.logs.push({
+                        nodeId: nextNode.id,
+                        action: 'ai_skipped',
+                        timestamp: new Date().toISOString(),
+                        data: { reason: !token ? 'no_token' : 'no_contact' }
                     });
                 }
             }
@@ -1292,6 +1397,23 @@ export class FlowsService implements OnModuleInit {
                                     tagIds,
                                 });
                                 console.log(`[Flow] ✅ Removed ${tagIds.length} tags from contact ${execution.contactId}`);
+                            } else if (action === 'block') {
+                                await this.contactsService.blockContact(tenantId, execution.contactId);
+                                console.log(`[Flow] 🚫 Contact ${execution.contactId} blocked`);
+                            } else if (action === 'unblock') {
+                                await this.contactsService.unblockContact(tenantId, execution.contactId);
+                                console.log(`[Flow] 🔓 Contact ${execution.contactId} unblocked`);
+                            } else if (action === 'optOut') {
+                                await this.contactsService.setOptOut(tenantId, execution.contactId, true);
+                                console.log(`[Flow] 🚪 Contact ${execution.contactId} marked as opt-out`);
+                            } else if (action === 'changeCategory') {
+                                const newCategory = nodeData?.config?.categoryName || nodeData?.config?.category || '';
+                                if (newCategory) {
+                                    await this.contactsService.updateContact(tenantId, execution.contactId, {
+                                        category: newCategory
+                                    });
+                                    console.log(`[Flow] 🏷️ Contact ${execution.contactId} category changed to ${newCategory}`);
+                                }
                             }
                         }
                     }
@@ -1441,6 +1563,10 @@ export class FlowsService implements OnModuleInit {
             initialVariables: { isTest: true }
         });
 
+        if (!execution) {
+            throw new BadRequestException('Erro ao iniciar execução de teste.');
+        }
+
         return {
             message: 'Teste iniciado com sucesso',
             executionId: execution.id,
@@ -1463,5 +1589,70 @@ export class FlowsService implements OnModuleInit {
         console.log(`[Flow] Resuming execution ${executionId}`);
 
         return this.processExecution(executionId);
+    }
+
+    // ============ HELPERS ============
+
+    private isWithinBusinessHours(config: any): boolean {
+        if (!config || !config.enabled || !config.days) return true;
+
+        const now = new Date();
+        const daysMap: Record<number, string> = {
+            0: 'sun', 1: 'mon', 2: 'tue', 3: 'wed', 4: 'thu', 5: 'fri', 6: 'sat'
+        };
+
+        const currentDayId = daysMap[now.getDay()];
+        const dayConfig = config.days.find((d: any) => d.id === currentDayId);
+
+        if (!dayConfig) return false; // Closed today
+
+        const [startH, startM] = dayConfig.start.split(':').map(Number);
+        const [endH, endM] = dayConfig.end.split(':').map(Number);
+
+        const currentH = now.getHours();
+        const currentM = now.getMinutes();
+
+        const currentTime = currentH * 60 + currentM;
+        const startTime = startH * 60 + startM;
+        const endTime = endH * 60 + endM;
+
+        return currentTime >= startTime && currentTime <= endTime;
+    }
+
+    async checkFlowTriggers(tenantId: string, instanceId: string, contactId: string, message: string) {
+        const activeFlows = await this.flowRepository.find({
+            where: { tenantId, status: 'active' }
+        });
+
+        const normalizedMsg = message.toLowerCase().trim();
+
+        for (const flow of activeFlows) {
+            const startNode = flow.nodes.find(n => n.data.type === 'start');
+            if (!startNode) continue;
+
+            const triggers = startNode.data.config?.triggers || [];
+            const hasMatch = triggers.some((t: any) => {
+                if (t.type === 'keyword') {
+                    const val = t.value.toLowerCase().trim();
+                    if (t.match === 'exact') return normalizedMsg === val;
+                    if (t.match === 'contains') return normalizedMsg.includes(val);
+                    if (t.match === 'starts_with') return normalizedMsg.startsWith(val);
+                }
+                return false;
+            });
+
+            if (hasMatch) {
+                console.log(`[Flow] Trigger matched for flow "${flow.name}" with message: "${message}"`);
+                // Start execution
+                return this.startExecution(tenantId, {
+                    flowId: flow.id,
+                    contactId,
+                    instanceId,
+                    initialVariables: { triggerMessage: message }
+                });
+            }
+        }
+
+        return null;
     }
 }

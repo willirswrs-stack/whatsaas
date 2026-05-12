@@ -152,12 +152,81 @@ export class InstancesService {
 
         if (shouldSave) {
             await this.instanceRepo.save(instance);
+            
+            // 🚀 GATILHO AUTOMÁTICO: Se acabou de conectar e o chip ainda tem maturidade 0, disparar o Scan de Raio-X
+            if (status.status === InstanceStatus.CONNECTED && (!instance.warmupDay || instance.warmupDay === 0)) {
+                this.logger.log(`Auto-scanning maturity for veteran chip ${instance.instanceName}`);
+                // Não bloqueamos a requisição HTTP para isso, rodamos em background
+                this.scanMaturity(id, tenantId).catch(e => this.logger.warn(`Auto-scan failed: ${e.message}`));
+            }
         }
 
         return {
             instance,
             providerStatus: status,
         };
+    }
+
+    /**
+     * Scan Chip for Historical Conversations to accurately estimate maturity
+     */
+    async scanMaturity(id: string, tenantId: string) {
+        const instance = await this.findOne(id, tenantId);
+        
+        if (instance.status !== InstanceStatus.CONNECTED) {
+            throw new ConflictException('Chip must be connected to scan maturity');
+        }
+
+        const provider = this.providerFactory.getProvider((instance.provider as ProviderType) || 'evolution');
+        
+        this.logger.log(`[SCAN] Starting maturity scan for ${instance.instanceName}...`);
+        
+        try {
+            const metrics = await provider.getMaturityMetrics(instance.instanceName);
+            const chatCount = metrics.chatCount || 0;
+            const groupCount = metrics.groupCount || 0;
+
+            let calculatedDay = 0;
+
+            // 🧪 HEURÍSTICA DE MATURIDADE WHATSAAS:
+            if (chatCount > 150) calculatedDay = 21;      // Veterano Absoluto
+            else if (chatCount > 80) calculatedDay = 18; // Veterano Avançado
+            else if (chatCount > 40) calculatedDay = 14; // Maduro (Warmup Completo)
+            else if (chatCount > 20) calculatedDay = 10; // Médio
+            else if (chatCount > 10) calculatedDay = 7;  // Ativo básico
+            else if (chatCount > 3) calculatedDay = 3;   // Em uso
+
+            // Bônus de Grupo (Grupos dão + confianca no algoritmo Meta)
+            if (groupCount > 10 && calculatedDay < 21) calculatedDay = Math.min(21, calculatedDay + 5);
+            else if (groupCount > 3 && calculatedDay < 18) calculatedDay += 3;
+
+            // Somente aplicamos se a maturidade real for MAIOR que a salva no BD
+            const currentDay = instance.warmupDay || 0;
+            
+            if (calculatedDay > currentDay) {
+                this.logger.log(`[SCAN] Chip ${instance.instanceName} promoted from Day ${currentDay} to Day ${calculatedDay} based on ${chatCount} chats!`);
+                
+                instance.warmupDay = calculatedDay;
+                // Opcionalmente forçar dailyLimit alto já de cara pra veteranos
+                if (calculatedDay >= 14 && (!instance.dailyLimit || instance.dailyLimit < 150)) {
+                    instance.dailyLimit = 150; 
+                }
+                
+                await this.instanceRepo.save(instance);
+            }
+
+            return {
+                success: true,
+                metrics: { chatCount, groupCount },
+                previousWarmupDay: currentDay,
+                newWarmupDay: instance.warmupDay,
+                promotion: calculatedDay > currentDay
+            };
+
+        } catch (error: any) {
+            this.logger.error(`Failed maturity scan: ${error.message}`);
+            throw error;
+        }
     }
 
     async update(id: string, tenantId: string, data: Partial<Instance>) {

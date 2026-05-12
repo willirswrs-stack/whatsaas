@@ -20,6 +20,8 @@ export class WhatsAppProviderFactory {
     ) {
         this.providers.set('waha', wahaAdapter);
         this.providers.set('evolution', evolutionAdapter);
+        this.providers.set('mobile_farm', evolutionAdapter);
+        this.providers.set('antidetect', evolutionAdapter);
     }
 
     /**
