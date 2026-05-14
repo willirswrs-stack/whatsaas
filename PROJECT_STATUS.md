@@ -1,7 +1,35 @@
 # 📋 WhatSaas - Project Status & Progress Log
 
-> **Última atualização:** 2026-01-09 00:30
-> **Status geral:** 🟢 Pronto para configuração de produção
+> **Última atualização:** 2026-04-28 07:18
+> **Status geral:** 🟢 Fase de Go-Live e Infraestrutura SRE
+
+---
+
+## 🚀 Sessão de Trabalho - 2026-05-12
+
+### Resumo das Implementações Críticas
+- ✅ **Painel Super Admin Master (Nasa Mode):** Totalmente expandido com grade de 6 cards de telemetria (Clientes, WhatsApp On, Proxies, Volume de Mensagens, Tokens de IA, Vozes Clonadas) e Gráfico de Eficiência de Rotação.
+- ✅ **Interruptores Globais (Master Killswitches):** Criado sistema de Feature Flags controláveis pelo Admin que ativa/desativa instantaneamente na memória recursos pesados (ElevenLabs, OpenAI, Proxies) via frontend.
+- ✅ **Monetização Inteligente Asaas:** Arquitetura de pagamentos integrada ao `AsaasService` com geração de link/boleto e um Webhook público automático para ativação de conta e bloqueio por inadimplência.
+- ✅ **Trava Bancária (TenantGuard):** Blindagem na API que bloqueia qualquer requisição de um cliente se o status dele no banco for alterado para `suspended`.
+- ✅ **Login Social Multi-Provedor:** Desenvolvido e ativado motores OAuth2 para Google, Facebook e GitHub, com sistema que provisiona o espaço de trabalho instantaneamente no banco após o primeiro clique.
+- ✅ **Estratégia de Preços Elite (Injeção DB):** Remodelados e injetados os 4 planos oficiais no Banco de Dados (Trial 3 dias/1 chip, Starter R$97, Pro R$197, Enterprise R$497).
+- ✅ **Estabilização Crítica do Servidor:** Corrigidos erros ocultos de compilação (`JwtAuthGuard` fantasma e tipagem Express), restaurando a compilação com **Sucesso Total (Exit Code 0)**.
+
+### Próximas Etapas Recomendadas (Próxima Sessão)
+1. [ ] Configurar chaves reais de API do Google/Meta/GitHub no `.env` para testes reais de autenticação de ponta a ponta.
+2. [ ] Validar recepção de eventos webhooks do Asaas usando o sandbox oficial.
+
+---
+
+## 🚀 Sessão de Trabalho - 2026-04-28
+
+### Resumo
+- ✅ Integrado monitoramento do Sentry (`@sentry/nestjs` no backend e `@sentry/nextjs` no frontend).
+- ✅ Criado script de backup `scripts/backup.js` nativo em Node.js com dump do Postgres (`wathsaas-postgres`), compressão e rotatividade (7 dias).
+- ✅ Criado script para teste de carga (`scripts/stress-test.js`) contra API e filas BullMQ.
+- ✅ Adicionado componente interativo `SupportWidget` na dashboard do Next.js.
+- 🚧 Teste do backup e de scripts foi inicializado, mas necessita de validação definitiva da conexão do pg_dump dentro do container na próxima sessão.
 
 ---
 

@@ -86,4 +86,9 @@ export interface IWhatsAppProvider {
         chatCount: number;
         groupCount: number;
     }>;
+
+    /**
+     * Join a WhatsApp group via invite URL
+     */
+    joinGroup(instanceName: string, inviteUrl: string): Promise<any>;
 }

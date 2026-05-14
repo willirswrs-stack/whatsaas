@@ -12,6 +12,7 @@ interface ChipCardProps {
     dailySent: number;
     proxy?: string;
     instanceId: string;
+    metaConfig?: Record<string, any>;
     onQrCode?: (instanceId: string) => void;
     onConfig?: (instanceId: string) => void;
     onDelete?: (instanceId: string) => void;
@@ -66,6 +67,7 @@ export function ChipCard({
     dailySent,
     proxy,
     instanceId,
+    metaConfig,
     onQrCode,
     onConfig,
     onDelete,
@@ -74,6 +76,23 @@ export function ChipCard({
     const [healthScore, setHealthScore] = useState<number | null>(null);
     const [isWarmupEnabled, setIsWarmupEnabled] = useState(warmupEnabled);
     const [isTogglingWarmup, setIsTogglingWarmup] = useState(false);
+    const [currentVoice, setCurrentVoice] = useState(metaConfig?.voiceProfile || 'alloy');
+    const [isUpdatingVoice, setIsUpdatingVoice] = useState(false);
+    const [showAdvancedWarmup, setShowAdvancedWarmup] = useState(false);
+    const [nicheText, setNicheText] = useState(metaConfig?.warmupNiche || '');
+    const [groupWarmup, setGroupWarmup] = useState(!!metaConfig?.groupWarmupEnabled);
+    const [groupDay, setGroupDay] = useState(Number(metaConfig?.groupWarmupDay) || 5);
+    const [customLinks, setCustomLinks] = useState<string>((metaConfig?.customGroupLinks || []).join('\n'));
+    const [isSavingAdvanced, setIsSavingAdvanced] = useState(false);
+
+    const voices = [
+        { id: 'alloy', name: 'Alloy', category: 'Neutro' },
+        { id: 'echo', name: 'Echo', category: 'Masculino' },
+        { id: 'onyx', name: 'Onyx', category: 'Grave' },
+        { id: 'nova', name: 'Nova', category: 'Energética' },
+        { id: 'shimmer', name: 'Shimmer', category: 'Suave' },
+        { id: 'fable', name: 'Fable', category: 'Narrativo' },
+    ];
 
     useEffect(() => {
         // Load health score
@@ -100,6 +119,45 @@ export function ChipCard({
             console.error('Failed to toggle warmup:', err);
         } finally {
             setIsTogglingWarmup(false);
+        }
+    };
+
+    const handleVoiceChange = async (voiceId: string) => {
+        if (isUpdatingVoice || voiceId === currentVoice) return;
+        setIsUpdatingVoice(true);
+        try {
+            await instancesService.update(instanceId, {
+                metaConfig: { voiceProfile: voiceId }
+            } as any);
+            setCurrentVoice(voiceId);
+        } catch (err) {
+            console.error('Failed to update voice:', err);
+        } finally {
+            setIsUpdatingVoice(false);
+        }
+    };
+
+    const handleSaveAdvanced = async () => {
+        if (isSavingAdvanced) return;
+        setIsSavingAdvanced(true);
+        try {
+            const parsedLinks = customLinks
+                .split('\n')
+                .map(l => l.trim())
+                .filter(l => l.length > 10 && l.includes('chat.whatsapp.com'));
+
+            await instancesService.update(instanceId, {
+                metaConfig: { 
+                    warmupNiche: nicheText,
+                    groupWarmupEnabled: groupWarmup,
+                    groupWarmupDay: groupDay,
+                    customGroupLinks: parsedLinks
+                }
+            } as any);
+        } catch (err) {
+            console.error('Failed to update advanced warmup config:', err);
+        } finally {
+            setIsSavingAdvanced(false);
         }
     };
 
@@ -193,6 +251,126 @@ export function ChipCard({
                         className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${isWarmupEnabled ? 'translate-x-5' : 'translate-x-0'}`}
                     />
                 </button>
+            </div>
+
+            {/* Voice Config — PREMIUN NEON DESIGN AS PER USER MOCKUP */}
+            <div className="flex items-center justify-between py-2 border-t border-[var(--border-color)]">
+                <div className="flex items-center gap-2">
+                    <div className="relative flex items-center justify-center w-5 h-5">
+                        <div className="absolute inset-0 bg-fuchsia-500 opacity-20 blur-md rounded-full" />
+                        <svg className="w-4 h-4 text-fuchsia-500 filter drop-shadow-[0_0_3px_rgba(217,70,239,0.8)]" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 2c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm7 9c0 3.87-3.13 7-7 7s-7-3.13-7-7H3c0 4.53 3.32 8.36 7.57 8.93V22h2.86v-3.07c4.25-.57 7.57-4.4 7.57-8.93h-2z"/>
+                        </svg>
+                    </div>
+                    <span className="text-xs text-[var(--text-muted)]">Estilo de voz</span>
+                </div>
+                
+                <div className="relative flex items-center gap-2">
+                    {isUpdatingVoice && <div className="w-3 h-3 border border-fuchsia-400 border-t-transparent rounded-full animate-spin" />}
+                    <select
+                        value={currentVoice}
+                        disabled={isUpdatingVoice}
+                        onChange={(e) => handleVoiceChange(e.target.value)}
+                        className={`
+                            appearance-none bg-[#1e1b2e]/40 border border-fuchsia-500/30 hover:border-fuchsia-500/80 text-fuchsia-300 text-[11px] font-bold tracking-wide 
+                            rounded-full px-3 py-1 pr-6 transition-all duration-300 cursor-pointer outline-none
+                            shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_8px_rgba(217,70,239,0.2)]
+                            hover:shadow-[0_0_12px_rgba(217,70,239,0.4)]
+                        `}
+                        style={{
+                            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%23d946ef'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                            backgroundRepeat: 'no-repeat',
+                            backgroundPosition: 'right 8px center',
+                            backgroundSize: '10px'
+                        }}
+                    >
+                        {voices.map(v => (
+                            <option key={v.id} value={v.id} className="bg-[#1a1c24] text-white">{v.name}</option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            {/* Advanced Niche config toggle */}
+            <div className="border-t border-[var(--border-color)] pt-1">
+                <button 
+                    onClick={() => setShowAdvancedWarmup(!showAdvancedWarmup)}
+                    className="w-full flex items-center justify-between py-1.5 text-[10px] text-[var(--text-muted)] hover:text-orange-300 font-semibold uppercase tracking-wider transition-colors outline-none"
+                >
+                    <span className="flex items-center gap-1">
+                        ⚙️ Aquecimento por Nicho
+                    </span>
+                    <svg 
+                        className={`w-3 h-3 transition-transform duration-200 ${showAdvancedWarmup ? 'rotate-180' : ''}`} 
+                        fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"
+                    >
+                        <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                </button>
+
+                {showAdvancedWarmup && (
+                    <div className="flex flex-col gap-2 py-2 px-2 bg-black/20 border border-orange-500/20 rounded-lg animate-fadeIn mt-1 mb-2">
+                        <div>
+                            <label className="text-[9px] font-medium text-orange-300 mb-1 block">Nicho / Segmento</label>
+                            <input 
+                                type="text" 
+                                placeholder="Ex: Marketing Digital, Emagrecimento"
+                                value={nicheText}
+                                onChange={(e) => setNicheText(e.target.value)}
+                                className="w-full bg-[#1a1c24] border border-[var(--border-color)] focus:border-orange-500/50 text-xs rounded px-2 py-1 text-white focus:outline-none transition-all"
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                            <span className="text-[9px] text-[var(--text-muted)]">Automação de Grupos</span>
+                            <button
+                                onClick={() => setGroupWarmup(!groupWarmup)}
+                                className={`relative w-8 h-4 rounded-full transition-colors focus:outline-none ${groupWarmup ? 'bg-orange-500' : 'bg-[#2a2d3a]'}`}
+                            >
+                                <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${groupWarmup ? 'translate-x-4' : ''}`} />
+                            </button>
+                        </div>
+
+                        {groupWarmup && (
+                            <>
+                                <div className="flex items-center justify-between">
+                                    <span className="text-[9px] text-[var(--text-muted)]">Maturidade mínima (Dia)</span>
+                                    <input 
+                                        type="number" 
+                                        min="1"
+                                        max="14"
+                                        value={groupDay}
+                                        onChange={(e) => setGroupDay(Number(e.target.value))}
+                                        className="w-12 bg-[#1a1c24] border border-[var(--border-color)] focus:border-orange-500/50 text-[10px] rounded px-1 py-0.5 text-center text-white focus:outline-none"
+                                    />
+                                </div>
+
+                                <div className="mt-1">
+                                    <label className="text-[9px] font-medium text-orange-300 mb-1 block">Links de Grupos Personalizados (Um por linha)</label>
+                                    <textarea 
+                                        placeholder="Opcional: https://chat.whatsapp.com/..."
+                                        value={customLinks}
+                                        onChange={(e) => setCustomLinks(e.target.value)}
+                                        rows={2}
+                                        className="w-full bg-[#1a1c24] border border-[var(--border-color)] focus:border-orange-500/50 text-[9px] rounded px-2 py-1 text-white focus:outline-none transition-all font-mono resize-none"
+                                    />
+                                </div>
+                            </>
+                        )}
+
+                        <button
+                            onClick={handleSaveAdvanced}
+                            disabled={isSavingAdvanced}
+                            className="w-full bg-orange-500/10 border border-orange-500/30 hover:bg-orange-500/20 text-orange-400 text-[10px] font-bold py-1 rounded transition-all flex items-center justify-center gap-1"
+                        >
+                            {isSavingAdvanced ? (
+                                <div className="w-3 h-3 border border-orange-400 border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                'Confirmar Configuração'
+                            )}
+                        </button>
+                    </div>
+                )}
             </div>
 
             {/* Action buttons */}

@@ -1,5 +1,5 @@
 
-import { Controller, Post, Body, Logger } from '@nestjs/common';
+import { Controller, Post, Body, Logger, Inject, forwardRef } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
@@ -9,6 +9,7 @@ import { InstanceStatus } from '../../common/enums/instance-status.enum';
 import { FlowExecution } from '../flows/entities/flow.entity';
 import { FlowsService } from '../flows/flows.service';
 import { Contact } from '../contacts/entities/contact.entity';
+import { GroupWarmupService } from '../anti-ban/group-warmup.service';
 
 import { SkipThrottle } from '@nestjs/throttler';
 
@@ -38,6 +39,8 @@ export class EvolutionWebhookController {
         private contactRepo: Repository<Contact>,
         private eventsGateway: EventsGateway,
         private flowsService: FlowsService,
+        @Inject(forwardRef(() => GroupWarmupService))
+        private groupWarmupService: GroupWarmupService,
     ) { }
 
     @Post('evolution')
@@ -239,6 +242,14 @@ export class EvolutionWebhookController {
                 // Find instance to get tenantId
                 const instance = await this.instanceRepo.findOne({ where: { instanceName } });
                 if (!instance) continue;
+
+                // Intercept group messages for proactive, reactive warm-up interaction
+                if (remoteJid.endsWith('@g.us')) {
+                    this.groupWarmupService.handleGroupIncomingMessage(instanceName, remoteJid, messageContent).catch(err => {
+                        this.logger.error(`Failed during reactive group warmup: ${err.message}`);
+                    });
+                    continue; // Shield regular workflow engines from group chat clutter
+                }
 
                 // Find contact by phone
                 const contact = await this.contactRepo.findOne({

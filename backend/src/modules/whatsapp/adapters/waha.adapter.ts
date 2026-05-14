@@ -200,6 +200,19 @@ export class WahaAdapter implements IWhatsAppProvider {
         return { chatCount: 0, groupCount: 0 };
     }
 
+    async joinGroup(instanceName: string, inviteUrl: string): Promise<any> {
+        try {
+            this.logger.log(`[WAHA] Joining group via invite: ${inviteUrl} for instance ${instanceName}`);
+            const sessionName = 'default';
+            return await this.request('POST', `/api/${sessionName}/groups/accept-invite`, {
+                invite_url: inviteUrl,
+            });
+        } catch (error: any) {
+            this.logger.error(`Failed to join group in WAHA: ${error.message}`);
+            throw error;
+        }
+    }
+
     private async request<T = any>(method: string, path: string, body?: any): Promise<T> {
         const url = `${this.baseUrl}${path}`;
         const options: RequestInit = {

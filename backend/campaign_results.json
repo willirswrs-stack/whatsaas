@@ -1,0 +1,38 @@
+[
+  {
+    "campaign_id": "bfad4bc3-5649-4d78-9b53-026f8e4028b4",
+    "name": "Teste Trype-Angle Utilidade",
+    "phone": "5581982644714",
+    "status": "sent",
+    "message_id": "wamid.HBgMNTU4MTgyNjQ0NzE0FQIAERgSRUIyQkI2RDkwOEU3QkFGQzI3AA==",
+    "error_message": null,
+    "sent_at": "2026-04-10T17:45:53.781Z"
+  },
+  {
+    "campaign_id": "bfad4bc3-5649-4d78-9b53-026f8e4028b4",
+    "name": "Teste Trype-Angle Utilidade",
+    "phone": "553498871152",
+    "status": "sent",
+    "message_id": "wamid.HBgMNTUzNDk4ODcxMTUyFQIAERgSN0I1MzM5MDUyQ0U5MTgwREI2AA==",
+    "error_message": null,
+    "sent_at": "2026-04-10T17:45:53.747Z"
+  },
+  {
+    "campaign_id": "bfad4bc3-5649-4d78-9b53-026f8e4028b4",
+    "name": "Teste Trype-Angle Utilidade",
+    "phone": "5562981952897",
+    "status": "sent",
+    "message_id": "wamid.HBgMNTU2MjgxOTUyODk3FQIAERgSMDA3OTdGMDk3MUIwREEwMDdBAA==",
+    "error_message": null,
+    "sent_at": "2026-04-10T17:45:53.729Z"
+  },
+  {
+    "campaign_id": "bfad4bc3-5649-4d78-9b53-026f8e4028b4",
+    "name": "Teste Trype-Angle Utilidade",
+    "phone": "555596467847",
+    "status": "sent",
+    "message_id": "wamid.HBgMNTU1NTk2NDY3ODQ3FQIAERgSNTM0QTA1QTBCOTM3MUZCOUZBAA==",
+    "error_message": null,
+    "sent_at": "2026-04-10T17:45:53.635Z"
+  }
+]

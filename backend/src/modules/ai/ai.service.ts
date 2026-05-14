@@ -184,10 +184,12 @@ export class AiService {
     async generateWarmupConversation(options: {
         messageCount: number;
         topics: string[];
+        niche?: string;
     }): Promise<WarmupConversation[]> {
         const userPrompt = warmupConversationUserPrompt(
             options.messageCount,
             options.topics,
+            options.niche,
         );
 
         try {
@@ -223,20 +225,26 @@ export class AiService {
      * Synthesize text to audio speech using OpenAI TTS
      * Returns audio buffer
      */
-    async synthesizeSpeech(text: string, voice: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' = 'alloy'): Promise<Buffer> {
+    async synthesizeSpeech(text: string, voice: 'alloy' | 'echo' | 'fable' | 'onyx' | 'nova' | 'shimmer' | string = 'alloy', speed: number = 1.0, model: string = 'tts-1-hd'): Promise<Buffer> {
         if (!this.openai) {
             throw new Error('OpenAI client not initialized (missing API KEY)');
         }
-
+ 
+        // Clamp speed within OpenAI acceptable bounds
+        const safeSpeed = Math.min(4.0, Math.max(0.25, speed || 1.0));
+        // Accept both tts-1 and tts-1-hd models
+        const safeModel = model === 'tts-1' ? 'tts-1' : 'tts-1-hd';
+ 
         try {
-            this.logger.log(`[TTS] Synthesizing speech: "${text.substring(0, 30)}..."`);
+            this.logger.log(`[TTS] Synthesizing speech [${safeModel}]: "${text.substring(0, 30)}..." | Voice: ${voice}`);
             
             const mp3 = await this.openai.audio.speech.create({
-                model: "tts-1",
-                voice: voice,
+                model: safeModel as any,
+                voice: voice as any,
                 input: text,
+                speed: safeSpeed,
             });
-
+ 
             const buffer = Buffer.from(await mp3.arrayBuffer());
             return buffer;
         } catch (error: any) {

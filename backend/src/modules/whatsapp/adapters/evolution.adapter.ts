@@ -317,6 +317,20 @@ export class EvolutionAdapter implements IWhatsAppProvider {
         }
     }
 
+    async joinGroup(instanceName: string, inviteUrl: string): Promise<any> {
+        try {
+            this.logger.log(`[Evolution] Joining group via invite: ${inviteUrl} for instance ${instanceName}`);
+            // Fornecemos chaves alternativas para cobrir variações da API Evolution v1/v2
+            return await this.request('POST', `/group/joinByInvite/${instanceName}`, {
+                inviteUrl: inviteUrl,
+                invite: inviteUrl,
+            });
+        } catch (error: any) {
+            this.logger.error(`Failed to join group for ${instanceName}: ${error.message}`);
+            throw error;
+        }
+    }
+
     private async request(method: string, path: string, body?: any): Promise<any> {
         const url = `${this.baseUrl}${path}`;
         const controller = new AbortController();

@@ -8,6 +8,7 @@ export interface WarmupInstanceWrapper {
     sent: number;
     status: string;
     health: number;
+    metaConfig?: Record<string, any>;
 }
 
 export interface WarmupStats {

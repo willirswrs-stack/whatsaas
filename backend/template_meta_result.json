@@ -1,0 +1,11 @@
+{
+  "error": "Request failed with status code 400",
+  "response": {
+    "error": {
+      "message": "Invalid OAuth access token - Cannot parse access token",
+      "type": "OAuthException",
+      "code": 190,
+      "fbtrace_id": "AMW5EhY7AWtjWpbi37mJ8JD"
+    }
+  }
+}

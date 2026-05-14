@@ -19,7 +19,9 @@ import { AiService } from '../ai/ai.service';
 import { InstanceStatus } from '../../common/enums/instance-status.enum';
 import { HumanBehaviorService } from './human-behavior.service';
 import { EventsGateway } from '../events/events.gateway';
+import { ElevenLabsService } from '../ai/elevenlabs.service';
 import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
+import { GroupWarmupService } from './group-warmup.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -56,9 +58,11 @@ export class WarmupService {
         @Inject(forwardRef(() => InstancesService))
         private instancesService: InstancesService,
         private aiService: AiService,
+        private elevenLabs: ElevenLabsService,
         private humanBehavior: HumanBehaviorService,
         private eventsGateway: EventsGateway,
         private whatsappFactory: WhatsAppProviderFactory,
+        private groupWarmupService: GroupWarmupService,
     ) { }
 
     // =========================================================================
@@ -127,6 +131,13 @@ export class WarmupService {
             // Collect tenant IDs for session generation
             if (instance.status === 'connected') {
                 tenantIds.add(instance.tenantId);
+                
+                // 🚀 GATILHO DE GRUPOS: Executar rotina de caça e entrada em grupos
+                this.groupWarmupService.processGroupWarmupForInstance(instance)
+                    .then(res => {
+                        if (res.success) this.logger.log(`[WarmupRoutine] Grupos para ${instance.instanceName}: ${res.message}`);
+                    })
+                    .catch(e => this.logger.warn(`[WarmupRoutine] Falha no aquecimento de grupos de ${instance.instanceName}: ${e.message}`));
             }
         }
 
@@ -306,11 +317,14 @@ export class WarmupService {
             'trânsito', 'família', 'notícias', 'memes', 'jogos', 'café'];
         const randomTopics = allTopics.sort(() => 0.5 - Math.random()).slice(0, 3);
 
+        const niche = instA.metaConfig?.warmupNiche || instB.metaConfig?.warmupNiche || null;
+
         let conversation;
         try {
             conversation = await this.aiService.generateWarmupConversation({
                 messageCount: Math.floor(Math.random() * 8) + 8, // 8-15 messages (more than before)
                 topics: randomTopics,
+                niche: niche || undefined,
             });
 
             if (!conversation || !Array.isArray(conversation)) {
@@ -435,11 +449,14 @@ export class WarmupService {
         const allTopics = ['trabalho', 'futebol', 'clima', 'comida', 'tecnologia', 'viagem', 'filmes', 'música', 'série'];
         const topics = allTopics.sort(() => 0.5 - Math.random()).slice(0, 3);
 
+        const niche = instA.metaConfig?.warmupNiche || instB.metaConfig?.warmupNiche || null;
+
         let conversation: any[];
         try {
             conversation = await this.aiService.generateWarmupConversation({
                 messageCount: Math.floor(Math.random() * 6) + 6, // 6-11 msgs
                 topics,
+                niche: niche || undefined,
             });
         } catch (e) {
             this.logger.error(`[LIVE] AI error: ${e.message}`);
@@ -504,11 +521,25 @@ export class WarmupService {
                     this.logger.log(`[LIVE] Generating real voice audio for message index ${index}`);
                     currentMsgType = 'audio';
                     
-                    // 1. Determina o perfil de voz (busca no metaConfig ou fallback neutro)
+                    // 1. Determina o perfil de voz e velocidade (busca no metaConfig ou fallback neutro)
                     const voice = sender.metaConfig?.voiceProfile || 'alloy';
-                    this.logger.log(`[LIVE] Synthesizing voice using profile: ${voice}`);
+                    const speed = Number(sender.metaConfig?.voiceSpeed) || 1.0;
+                    const model = sender.metaConfig?.voiceModel || 'tts-1-hd';
+                    this.logger.log(`[LIVE] Synthesizing voice using profile: ${voice}, speed: ${speed}, model: ${model}`);
                     
-                    const buffer = await this.aiService.synthesizeSpeech(msg.content, voice as any);
+                    let buffer: Buffer;
+                    // Se o ID for grande, assume-se ElevenLabs clonada
+                    if (voice.length > 15 && this.elevenLabs.hasKey()) {
+                        try {
+                            this.logger.log(`[LIVE] Utilizando ElevenLabs para clonagem de voz`);
+                            buffer = await this.elevenLabs.synthesizeSpeech(msg.content, voice);
+                        } catch (e) {
+                            this.logger.warn(`ElevenLabs falhou, fallback para OpenAI: ${e.message}`);
+                            buffer = await this.aiService.synthesizeSpeech(msg.content, 'alloy', speed, model);
+                        }
+                    } else {
+                        buffer = await this.aiService.synthesizeSpeech(msg.content, voice as any, speed, model);
+                    }
                     
                     // 2. Persiste em pasta pública para o provedor puxar
                     const uploadsDir = path.join(process.cwd(), 'uploads', 'temp_warmup');

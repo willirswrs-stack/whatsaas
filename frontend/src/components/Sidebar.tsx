@@ -32,12 +32,13 @@ export function Sidebar() {
 
     return (
         <aside className="sidebar flex flex-col h-full bg-[#1e2330] border-r border-[#2d3241]">
-            <div className="sidebar-logo p-3 flex justify-center border-b border-[#2d3241] min-h-[100px] items-center">
-                <Link href="/" className="flex items-center w-full justify-center">
+            <div className="sidebar-logo p-2 flex justify-center border-b border-[#2d3241] min-h-[140px] items-center overflow-hidden">
+                <Link href="/" className="flex items-center w-full justify-center p-1">
                     <img
                         src="/logo.png"
                         alt="WhatSaas"
-                        className="h-20 w-auto object-contain drop-shadow-[0_0_8px_rgba(37,211,102,0.3)] hover:scale-105 transition-transform duration-300"
+                        className="w-full max-w-[210px] object-contain drop-shadow-[0_0_15px_rgba(37,211,102,0.5)] hover:scale-105 transition-all duration-300"
+                        style={{ height: '110px', width: 'auto' }}
                     />
                 </Link>
             </div>
@@ -69,13 +70,13 @@ export function Sidebar() {
                             Super Admin
                         </p>
                         <Link
-                            href="/admin/ai-agent"
-                            className={`nav-item ${pathname === '/admin/ai-agent' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
+                            href="/admin/dashboard"
+                            className={`nav-item ${pathname === '/admin/dashboard' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
                         >
-                            <div className="w-6 h-6 flex items-center justify-center bg-indigo-500/10 rounded-md group-hover:bg-indigo-500/20 text-indigo-400">
-                                🤖
+                            <div className="w-6 h-6 flex items-center justify-center bg-cyan-500/10 rounded-md group-hover:bg-cyan-500/20 text-cyan-400">
+                                🖥️
                             </div>
-                            <span className="text-sm font-medium">Configurar IA</span>
+                            <span className="text-sm font-medium">Dashboard Global</span>
                         </Link>
                         <Link
                             href="/admin/tenants"
@@ -84,7 +85,39 @@ export function Sidebar() {
                             <div className="w-6 h-6 flex items-center justify-center bg-emerald-500/10 rounded-md group-hover:bg-emerald-500/20 text-emerald-400">
                                 🏢
                             </div>
-                            <span className="text-sm font-medium">Tenants</span>
+                            <span className="text-sm font-medium">Tenants (Clientes)</span>
+                        </Link>
+                        <Link
+                            href="/admin/logs"
+                            className={`nav-item ${pathname === '/admin/logs' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
+                        >
+                            <div className="w-6 h-6 flex items-center justify-center bg-yellow-500/10 rounded-md group-hover:bg-yellow-500/20 text-yellow-400">
+                                📜
+                            </div>
+                            <span className="text-sm font-medium">Logs do Servidor</span>
+                        </Link>
+                        <a
+                            href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '')}/admin/queues` || 'http://localhost:3333/admin/queues'}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group"
+                        >
+                            <div className="w-6 h-6 flex items-center justify-center bg-red-500/10 rounded-md group-hover:bg-red-500/20 text-red-400">
+                                📊
+                            </div>
+                            <span className="text-sm font-medium flex items-center gap-1">
+                                Filas BullMQ
+                                <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></svg>
+                            </span>
+                        </a>
+                        <Link
+                            href="/admin/ai-agent"
+                            className={`nav-item ${pathname === '/admin/ai-agent' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
+                        >
+                            <div className="w-6 h-6 flex items-center justify-center bg-indigo-500/10 rounded-md group-hover:bg-indigo-500/20 text-indigo-400">
+                                🤖
+                            </div>
+                            <span className="text-sm font-medium">Configurar IA</span>
                         </Link>
                     </div>
                 )}

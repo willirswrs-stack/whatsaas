@@ -1,0 +1,50 @@
+﻿      "id": "7cb4461b-a93a-4c84-b831-3dbcc8cf8c42",
+      "method": "POST",
+      "url": "/api/v1/webhooks/evolution",
+      "query": {},
+      "params": {
+        "path": [
+          "webhooks",
+          "evolution"
+        ]
+      },
+      "headers": {
+        "accept": "application/json, text/plain, */*",
+        "content-type": "application/json",
+        "user-agent": "axios/1.13.2",
+        "content-length": "523",
+        "accept-encoding": "gzip, compress, deflate, br",
+        "host": "host.docker.internal:3333",
+        "connection": "keep-alive"
+      },
+      "remoteAddress": "127.0.0.1",
+      "remotePort": 55808
+    }
+    [35mres[39m: {
+      "statusCode": 201,
+      "headers": {
+        "cross-origin-opener-policy": "same-origin",
+        "cross-origin-resource-policy": "same-origin",
+        "origin-agent-cluster": "?1",
+        "referrer-policy": "no-referrer",
+        "strict-transport-security": "max-age=31536000; includeSubDomains",
+        "x-content-type-options": "nosniff",
+        "x-dns-prefetch-control": "off",
+        "x-download-options": "noopen",
+        "x-frame-options": "SAMEORIGIN",
+        "x-permitted-cross-domain-policies": "none",
+        "x-xss-protection": "0",
+        "vary": "Origin",
+        "access-control-allow-credentials": "true",
+        "x-ratelimit-limit": "100",
+        "x-ratelimit-remaining": "99",
+        "x-ratelimit-reset": "60",
+        "content-type": "application/json; charset=utf-8",
+        "content-length": "17",
+        "etag": "W/\"11-AwthwvtwQvtPwO9Ch6SuPA2Y7Wg\""
+      }
+    }
+    [35mresponseTime[39m: 1
+[17:25:00.110] [34mDEBUG[39m (17340): [36mTriggering reconnection check...[39m
+    [35mcontext[39m: "ReconnectionProcessor"
+[90m[4mquery:[24m[39m [94mSELECT[0m [37m"instance"[0m[37m.[0m[37m"id"[0m [94mAS[0m [37m"instance_id"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"tenant_id"[0m [94mAS[0m [37m"instance_tenant_id"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"phone"[0m [94mAS[0m [37m"instance_phone"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"instance_name"[0m [94mAS[0m [37m"instance_instance_name"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"status"[0m [94mAS[0m [37m"instance_status"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"channel_type"[0m [94mAS[0m [37m"instance_channel_type"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"provider"[0m [94mAS[0m [37m"instance_provider"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"proxy_id"[0m [94mAS[0m [37m"instance_proxy_id"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"meta_config"[0m [94mAS[0m [37m"instance_meta_config"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"evolution_config"[0m [94mAS[0m [37m"instance_evolution_config"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"warmup_day"[0m [94mAS[0m [37m"instance_warmup_day"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"warmup_enabled"[0m [94mAS[0m [37m"instance_warmup_enabled"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"daily_limit"[0m [94mAS[0m [37m"instance_daily_limit"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"daily_sent"[0m [94mAS[0m [37m"instance_daily_sent"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"connected_at"[0m [94mAS[0m [37m"instance_connected_at"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"last_connection_check_at"[0m [94mAS[0m [37m"instance_last_connection_check_at"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"last_reconnect_attempt_at"[0m [94mAS[0m [37m"instance_last_reconnect_attempt_at"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"reconnect_attempts"[0m [94mAS[0m [37m"instance_reconnect_attempts"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"reconnect_locked_until"[0m [94mAS[0m [37m"instance_reconnect_locked_until"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"last_reconnect_error_code"[0m [94mAS[0m [37m"instance_last_reconnect_error_code"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"last_reconnect_error_message"[0m [94mAS[0m [37m"instance_last_reconnect_error_message"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"created_at"[0m [94mAS[0m [37m"instance_created_at"[0m[37m,[0m [37m"instance"[0m[37m.[0m[37m"updated_at"[0m [94mAS[0m [37m"instance_updated_at"[0m [94mFROM[0m [37m"instances"[0m [37m"instance"[0m [94mWHERE[0m [37m"instance"[0m[37m.[0m[37m"provider"[0m [37m=[0m [37m$[0m[32m1[0m [94mAND[0m [37m"instance"[0m[37m.[0m[37m"status"[0m [94mIN[0m [37m([0m[37m$[0m[32m2[0m[37m,[0m [37m$[0m[32m3[0m[37m)[0m [94mAND[0m [37m([0m[37m"instance"[0m[37m.[0m[37m"reconnect_locked_until"[0m [94mIS NULL[0m [94mOR[0m [37m"instance"[0m[37m.[0m[37m"reconnect_locked_until"[0m [37m<=[0m [37m$[0m[32m4[0m[37m)[0m [94mORDER BY[0m [37m"instance"[0m[37m.[0m[37m"last_connection_check_at"[0m [94mASC[0m [37mNULLS[0m [37mFIRST[0m [94mLIMIT[0m [32m50[0m [90m-- PARAMETERS: ["evolution","disconnected","error","2026-02-12T20:25:00.110Z"][0m

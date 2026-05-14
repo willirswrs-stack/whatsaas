@@ -19,6 +19,7 @@ import { AiModule } from '../ai/ai.module';
 import { ChipLifecycleService } from './chip-lifecycle.service';
 import { ActivePreventionService } from './active-prevention.service';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { GroupWarmupService } from './group-warmup.service';
 
 @Module({
     imports: [
@@ -43,6 +44,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
         WarmupProcessor,
         ChipLifecycleService,
         ActivePreventionService,
+        GroupWarmupService,
     ],
     exports: [
         HumanBehaviorService,
@@ -55,6 +57,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
         WarmupService,
         ChipLifecycleService,
         ActivePreventionService,
+        GroupWarmupService,
     ],
 })
 export class AntiBanModule implements OnApplicationBootstrap {

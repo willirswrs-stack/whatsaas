@@ -5,6 +5,7 @@ import { Header } from '@/components/Header';
 import { ChipCard } from '@/components/ChipCard';
 import { instancesService, Instance, ProviderType } from '@/lib/instances';
 import { getErrorMessage } from '@/lib/auth';
+import api from '@/lib/api';
 
 export default function ChipsPage() {
     const [instances, setInstances] = useState<Instance[]>([]);
@@ -24,6 +25,13 @@ export default function ChipsPage() {
     const [configInstanceId, setConfigInstanceId] = useState<string | null>(null);
     const [proxies, setProxies] = useState<{ id: string; host: string }[]>([]);
     const [selectedProxyId, setSelectedProxyId] = useState<string>('');
+    const [selectedVoice, setSelectedVoice] = useState<string>('alloy');
+    const [selectedVoiceSpeed, setSelectedVoiceSpeed] = useState<number>(1.0);
+    const [selectedVoiceModel, setSelectedVoiceModel] = useState<'tts-1' | 'tts-1-hd'>('tts-1-hd');
+    const [customVoiceName, setCustomVoiceName] = useState<string>('');
+    const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+    const [isCloningVoice, setIsCloningVoice] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const pollingRef = useRef<NodeJS.Timeout | null>(null);
     const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -228,19 +236,101 @@ export default function ChipsPage() {
         const instance = instances.find(i => i.id === instanceId);
         setConfigInstanceId(instanceId);
         setSelectedProxyId(instance?.proxy?.id || '');
+        
+        const savedVoice = instance?.metaConfig?.voiceProfile || 'alloy';
+        const presets = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+        
+        if (!presets.includes(savedVoice) && savedVoice) {
+            setSelectedVoice('custom');
+            setCustomVoiceName(savedVoice);
+        } else {
+            setSelectedVoice(savedVoice);
+            setCustomVoiceName('');
+        }
+        
+        setSelectedVoiceSpeed(Number(instance?.metaConfig?.voiceSpeed) || 1.0);
+        setSelectedVoiceModel((instance?.metaConfig?.voiceModel as any) === 'tts-1' ? 'tts-1' : 'tts-1-hd');
     };
 
     const saveConfig = async () => {
         if (!configInstanceId) return;
         try {
+            const finalVoice = selectedVoice === 'custom' ? customVoiceName : selectedVoice;
+            
             await instancesService.update(configInstanceId, {
-                proxyId: selectedProxyId || null
-            });
+                proxyId: selectedProxyId || null,
+                metaConfig: { 
+                    voiceProfile: finalVoice || 'alloy',
+                    voiceSpeed: selectedVoiceSpeed,
+                    voiceModel: selectedVoiceModel
+                }
+            } as any);
             setSuccessMessage('Configuração salva!');
             setConfigInstanceId(null);
             loadInstances();
         } catch (err) {
             setError(getErrorMessage(err));
+        }
+    };
+
+    const handlePreviewAudio = async () => {
+        if (isPlayingPreview) return;
+        const previewVoice = selectedVoice === 'custom' ? customVoiceName : selectedVoice;
+        if (!previewVoice) {
+            alert('Por favor, informe o nome/ID da voz para ouvir a amostra.');
+            return;
+        }
+        
+        setIsPlayingPreview(true);
+        try {
+            const res = await api.post('/ai/preview', { 
+                voice: previewVoice, 
+                speed: selectedVoiceSpeed,
+                model: selectedVoiceModel
+            });
+            if (res.data?.audioBase64) {
+                const audio = new Audio(`data:audio/mpeg;base64,${res.data.audioBase64}`);
+                audio.play();
+                audio.onended = () => setIsPlayingPreview(false);
+                audio.onerror = () => {
+                    alert('Erro ao carregar arquivo de áudio.');
+                    setIsPlayingPreview(false);
+                };
+            }
+        } catch (err) {
+            console.error('Preview Error', err);
+            alert('Falha ao carregar preview de voz da API.');
+            setIsPlayingPreview(false);
+        }
+    };
+
+    const handleCloneVoiceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        
+        setIsCloningVoice(true);
+        setSuccessMessage('');
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('name', `Clone_${new Date().toLocaleDateString()}`);
+        
+        try {
+            const res = await api.post('/ai/clone-voice', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            
+            if (res.data?.voiceId) {
+                setSelectedVoice('custom');
+                setCustomVoiceName(res.data.voiceId);
+                setSuccessMessage('🔥 Voz clonada com sucesso na ElevenLabs!');
+            }
+        } catch (err: any) {
+            console.error('Clone error', err);
+            alert(err.response?.data?.message || 'Erro ao tentar clonar voz. Verifique se a chave da ElevenLabs está no .env');
+        } finally {
+            setIsCloningVoice(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
@@ -389,6 +479,7 @@ export default function ChipsPage() {
                                 warmupDay={instance.warmupDay}
                                 warmupEnabled={instance.warmupEnabled ?? true}
                                 proxy={instance.proxy?.host || 'Sem proxy'}
+                                metaConfig={instance.metaConfig}
                                 onQrCode={fetchQrCode}
                                 onConfig={openConfig}
                                 onDelete={deleteInstance}
@@ -630,6 +721,142 @@ export default function ChipsPage() {
                             <p className="text-xs text-[var(--text-muted)] mt-1">
                                 Use um proxy para proteger a instância e evitar bloqueios
                             </p>
+                        </div>
+
+                        <div className="mb-6 bg-white/5 border border-white/10 rounded-2xl p-5 relative overflow-hidden">
+                            {/* Efeito de brilho de fundo */}
+                            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -z-10 rounded-full" />
+
+                            <div className="flex items-center justify-between mb-4">
+                                <label className="flex items-center gap-2 text-sm font-bold text-indigo-100">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-indigo-400"><path d="M12 2c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm7 9c0 3.87-3.13 7-7 7s-7-3.13-7-7H3c0 4.53 3.32 8.36 7.57 8.93V22h2.86v-3.07c4.25-.57 7.57-4.4 7.57-8.93h-2z"/></svg>
+                                    Motor de Voz AI
+                                </label>
+                                
+                                <button
+                                    onClick={handlePreviewAudio}
+                                    disabled={isPlayingPreview}
+                                    type="button"
+                                    className={`
+                                        flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all
+                                        ${isPlayingPreview ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 animate-pulse' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-indigo-500/10 hover:text-indigo-300 hover:border-indigo-500/30'}
+                                    `}
+                                >
+                                    {isPlayingPreview ? (
+                                        <>🔊 Tocando...</>
+                                    ) : (
+                                        <>
+                                            <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                            Ouvir Amostra
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <select
+                                        className="input w-full bg-[#0f1117] border-white/10 focus:border-indigo-500"
+                                        value={selectedVoice}
+                                        onChange={(e) => setSelectedVoice(e.target.value)}
+                                    >
+                                        <optgroup label="Vozes Oficiais OpenAI">
+                                            <option value="alloy">Alloy (Versátil)</option>
+                                            <option value="echo">Echo (Direta)</option>
+                                            <option value="onyx">Onyx (Autoridade)</option>
+                                            <option value="nova">Nova (Energética)</option>
+                                            <option value="shimmer">Shimmer (Suave)</option>
+                                            <option value="fable">Fable (Narrativa)</option>
+                                        </optgroup>
+                                        <optgroup label="Avançado">
+                                            <option value="custom">✨ Usar Voz Customizada (ID)</option>
+                                        </optgroup>
+                                    </select>
+                                </div>
+
+                                {selectedVoice === 'custom' && (
+                                    <div className="animate-fadeIn">
+                                        <label className="block text-[10px] uppercase tracking-wider text-indigo-300 mb-1 font-bold">ID ou Nome da Voz</label>
+                                        <input 
+                                            type="text"
+                                            className="input w-full text-sm bg-[#0f1117] border-indigo-500/40 focus:border-indigo-500 placeholder:text-gray-600"
+                                            placeholder="Digite o ID da voz (ex: eleven_labs_id)..."
+                                            value={customVoiceName}
+                                            onChange={(e) => setCustomVoiceName(e.target.value)}
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="pt-2 border-t border-white/5">
+                                    <div className="flex items-center justify-between mb-1.5">
+                                        <label className="text-xs text-gray-400">Velocidade da Fala</label>
+                                        <span className="text-xs font-mono text-indigo-300 font-bold">{selectedVoiceSpeed}x</span>
+                                    </div>
+                                    <input 
+                                        type="range" 
+                                        min="0.25" 
+                                        max="2.0" 
+                                        step="0.05"
+                                        value={selectedVoiceSpeed}
+                                        onChange={(e) => setSelectedVoiceSpeed(parseFloat(e.target.value))}
+                                        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                    />
+                                    <div className="flex justify-between text-[9px] text-gray-600 px-0.5">
+                                        <span>Lento</span>
+                                        <span>Normal</span>
+                                        <span>Rápido</span>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-2 border-t border-white/5">
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-bold text-gray-300 flex items-center gap-1">
+                                            🚀 Modo Ultra HD (OpenAI)
+                                        </span>
+                                        <span className="text-[9px] text-gray-500">Voz mais natural, menos robótica.</span>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedVoiceModel(prev => prev === 'tts-1' ? 'tts-1-hd' : 'tts-1')}
+                                        className={`relative w-8 h-4.5 rounded-full transition-colors ${selectedVoiceModel === 'tts-1-hd' ? 'bg-indigo-500' : 'bg-gray-700'}`}
+                                    >
+                                        <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${selectedVoiceModel === 'tts-1-hd' ? 'translate-x-3.5' : 'translate-x-0'}`} />
+                                    </button>
+                                </div>
+
+                                {/* CLONE TRIGGER */}
+                                <div className="pt-2">
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef} 
+                                        className="hidden" 
+                                        accept="audio/*"
+                                        onChange={handleCloneVoiceUpload}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={isCloningVoice}
+                                        className={`
+                                            w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all
+                                            ${isCloningVoice 
+                                                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30 animate-pulse cursor-wait' 
+                                                : 'bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border-indigo-500/30 text-indigo-300 hover:from-indigo-500/30 hover:to-purple-500/30 hover:border-indigo-400 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)]'
+                                            }
+                                        `}
+                                    >
+                                        {isCloningVoice ? (
+                                            <>⌛ PROCESSANDO CLONAGEM...</>
+                                        ) : (
+                                            <>
+                                                <span className="text-base">🧬</span>
+                                                CLONAR MINHA VOZ (UPLOAD)
+                                            </>
+                                        )}
+                                    </button>
+                                    <p className="text-[9px] text-center text-gray-500 mt-1.5">Requer ELEVENLABS_API_KEY no backend.</p>
+                                </div>
+                            </div>
                         </div>
 
                         <div className="flex gap-3">

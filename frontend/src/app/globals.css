@@ -450,9 +450,8 @@ body::before {
 }
 
 .sidebar-logo {
-  padding: 0 24px 8px;
+  padding: 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  margin-bottom: 8px;
 }
 
 .sidebar-nav {

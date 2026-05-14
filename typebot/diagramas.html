@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagramas - Typebot Social Distribuidora</title>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7f6;
+            color: #333;
+            margin: 0;
+            padding: 40px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 40px;
+        }
+        .diagram-box {
+            background: #fff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            margin-bottom: 50px;
+        }
+        h2 {
+            color: #34495e;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+        .desc {
+            color: #7f8c8d;
+            margin-bottom: 30px;
+            font-size: 1.1em;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Arquitetura Modular: Typebot Social Distribuidora</h1>
+
+    <div class="diagram-box">
+        <h2>Módulo 1: Bot Principal (Roteador)</h2>
+        <p class="desc">Responsável por dar as boas-vindas, verificar o cadastro e direcionar o cliente para o setor correto.</p>
+        <div class="mermaid">
+graph TD
+    classDef start fill:#4CAF50,color:white,stroke-width:2px;
+    classDef menu fill:#2196F3,color:white,stroke-width:2px;
+    classDef jump fill:#9C27B0,color:white,stroke-width:2px;
+    classDef check fill:#FF9800,color:white,stroke-width:2px;
+
+    A((Início do Atendimento)):::start --> B[Boas-vindas e Identificação]
+    B --> C{Validação de CPF/CNPJ}:::check
+    
+    C -->|Não Encontrado| J1[[ PULAR PARA: Bot CPF Não Encontrado ]]:::jump
+    C -->|Encontrado| D[Mostra o Cadastro Vinculado]
+    
+    D --> E[Exibe Menu Principal de 1 a 10]:::menu
+    
+    E -->|Opção 3| J2[[ PULAR PARA: Bot Financeiro ]]:::jump
+    E -->|Opções 1, 2, 4 a 9| J3[[ PULAR PARA: Outros Setores... ]]:::jump
+    E -->|Opção 10 ou #sair| F((Finalizar Atendimento)):::start
+        </div>
+    </div>
+
+    <div class="diagram-box">
+        <h2>Módulo 2: Bot de CPF Não Encontrado</h2>
+        <p class="desc">Fluxo isolado apenas para lidar com usuários que não possuem cadastro no sistema.</p>
+        <div class="mermaid">
+graph TD
+    classDef start fill:#4CAF50,color:white,stroke-width:2px;
+    classDef menu fill:#2196F3,color:white,stroke-width:2px;
+    classDef action fill:#FF9800,color:white,stroke-width:2px;
+
+    A((Início do Sub-fluxo)):::start --> B[Mensagem: Buscando CPF/CNPJ...]
+    B --> C[Mensagem: Cadastro não consta no sistema]
+    C --> D[Menu de Opções 1 a 4]:::menu
+    
+    D -->|1 - Novo CPF| E[Caixa para Digitar Novo CPF]:::action
+    D -->|2 - Falar c/ Vendedor| F[Redireciona para Atendente Humano]:::action
+    D -->|3 - Fazer Cadastro| G[Redireciona para Setor de Cadastros]:::action
+    D -->|4 - Finalizar| H((Finalizar Atendimento)):::start
+        </div>
+    </div>
+
+    <div class="diagram-box">
+        <h2>Módulo 3: Bot Financeiro (Correção de Notas)</h2>
+        <p class="desc">Gerencia o envio das Notas Fiscais e Boletos em PDF com os nomes dinâmicos arrumados.</p>
+        <div class="mermaid">
+graph TD
+    classDef start fill:#4CAF50,color:white,stroke-width:2px;
+    classDef menu fill:#2196F3,color:white,stroke-width:2px;
+    classDef api fill:#9C27B0,color:white,stroke-width:2px;
+    classDef file fill:#607D8B,color:white,stroke-width:2px;
+
+    A((Início: Bot Financeiro)):::start --> B[Menu Financeiro 1 a 5]:::menu
+    B -->|Opção 2 - Boletos a Vencer| C[Mensagem: Buscando informações...]
+    B -->|Opção 3 - Atendente| D[Redireciona p/ Humano Financeiro]
+    B -->|Opção 4 ou 5| J1[[ VOLTAR: Bot Principal ]]:::api
+    
+    C --> E{API: Buscar Boletos no Sankhya}:::api
+    E --> F[Mostra a Lista de Notas Fiscais]
+    F --> G[Menu: Qual Nro da Nota vc quer?]:::menu
+    
+    G -->|Digita o Número| H[Envia Arquivo PDF da Nota com Nome Correto]:::file
+    H --> I[Menu Final: Quer outra nota?]:::menu
+    
+    I -->|Opção 1 - Sim| G
+    I -->|Opção 0 - Encerrar| Z((Finalizar Atendimento)):::start
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

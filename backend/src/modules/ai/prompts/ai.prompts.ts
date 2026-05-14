@@ -82,13 +82,22 @@ Retorne APENAS o JSON válido sem markdown.`
 export const warmupConversationUserPrompt = (
   messageCount: number,
   topics: string[],
-): string => `
-Gere uma conversa natural de WhatsApp sobre o tema: "${topics[0] || 'dia a dia'}".
+  niche?: string,
+): string => {
+  let contextLine = `Gere uma conversa natural de WhatsApp sobre o tema: "${topics[0] || 'dia a dia'}".`;
+  
+  if (niche) {
+    contextLine = `Gere uma conversa natural de WhatsApp contextualizada inteiramente no nicho de mercado: "${niche}". Ambos os participantes têm interesse direto nesse meio e devem conversar sobre tópicos relevantes a este nicho de forma fluida e orgânica.`;
+  }
+
+  return `
+${contextLine}
 
 Requisitos:
 - Total de ${messageCount} mensagens
 - Use APENAS texto digitável nativo (letras e emojis apenas)
-- A conversa deve parecer 100% orgânica
+- A conversa deve parecer 100% orgânica, utilizando de forma natural os vocabulários típicos e interesses do assunto/nicho definido.
 
 Retorne APENAS o JSON, sem explicações ou markdown.
 `;
+};

@@ -1,9 +1,11 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { IsString, IsNumber, IsOptional, IsIn, IsArray, Min, Max } from 'class-validator';
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { AiService } from './ai.service';
+import { ElevenLabsService } from './elevenlabs.service';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 
 class SpinDto {
@@ -35,12 +37,28 @@ class WarmupScriptDto {
     topics: string[];
 }
 
+class PreviewVoiceDto {
+    @IsString()
+    voice: string;
+
+    @IsOptional()
+    @IsNumber()
+    speed?: number;
+
+    @IsOptional()
+    @IsString()
+    model?: string;
+}
+
 @ApiTags('ai')
 @ApiBearerAuth()
 @Controller('ai')
 @UseGuards(AuthGuard('jwt'), TenantGuard)
 export class AiController {
-    constructor(private readonly aiService: AiService) { }
+    constructor(
+        private readonly aiService: AiService,
+        private readonly elevenLabs: ElevenLabsService,
+    ) { }
 
     @Post('spin')
     @ApiOperation({ summary: 'Generate message variations using AI' })
@@ -70,6 +88,58 @@ export class AiController {
         return {
             success: true,
             conversation,
+        };
+    }
+
+    @Post('preview')
+    @ApiOperation({ summary: 'Generate real-time audio preview for a voice' })
+    async preview(@Body() dto: PreviewVoiceDto) {
+        const sampleText = 'Olá! Esta é uma amostra da minha voz para o aquecimento automático.';
+        
+        let buffer: Buffer;
+        // Se for um ID de voz longo (estilo ElevenLabs), tenta ElevenLabs primeiro
+        if (dto.voice.length > 15 && this.elevenLabs.hasKey()) {
+            try {
+                buffer = await this.elevenLabs.synthesizeSpeech(sampleText, dto.voice);
+            } catch (e) {
+                // Fallback pro openai caso falhe
+                buffer = await this.aiService.synthesizeSpeech(sampleText, 'alloy', dto.speed || 1.0, dto.model || 'tts-1-hd');
+            }
+        } else {
+            buffer = await this.aiService.synthesizeSpeech(
+                sampleText, 
+                dto.voice, 
+                dto.speed || 1.0,
+                dto.model || 'tts-1-hd'
+            );
+        }
+        
+        return {
+            success: true,
+            audioBase64: buffer.toString('base64'),
+            format: 'audio/mpeg'
+        };
+    }
+
+    @Post('clone-voice')
+    @UseInterceptors(FileInterceptor('file'))
+    @ApiOperation({ summary: 'Clones a custom voice using ElevenLabs' })
+    async cloneVoice(
+        @Body('name') name: string,
+        @UploadedFile() file: any
+    ) {
+        if (!file) throw new Error('Arquivo de áudio não enviado.');
+        
+        const voiceId = await this.elevenLabs.cloneVoice(
+            name || `Voz_${Date.now()}`,
+            file.buffer,
+            file.originalname || 'sample.mp3'
+        );
+
+        return {
+            success: true,
+            voiceId,
+            message: 'Voz clonada com sucesso via ElevenLabs!'
         };
     }
 }

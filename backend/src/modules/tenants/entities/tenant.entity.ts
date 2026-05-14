@@ -78,6 +78,12 @@ export class Tenant {
     @Column({ name: 'trial_ends_at', nullable: true })
     trialEndsAt: Date;
 
+    @Column({ name: 'asaas_customer_id', nullable: true })
+    asaasCustomerId: string;
+
+    @Column({ name: 'asaas_subscription_id', nullable: true })
+    asaasSubscriptionId: string;
+
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;
 

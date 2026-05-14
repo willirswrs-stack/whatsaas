@@ -25,6 +25,78 @@ export class AuthService {
         private configService: ConfigService,
     ) { }
 
+    async handleSocialLogin(profile: { email: string, firstName: string, lastName?: string, provider: string }): Promise<AuthResponseDto> {
+        if (!profile.email) {
+            throw new UnauthorizedException('Social profile does not share an email address.');
+        }
+
+        // 1. Try to find existing user
+        let user = await this.userRepo.findOne({
+            where: { email: profile.email },
+            relations: ['tenant', 'tenant.plan'],
+        });
+
+        // 2. If not found, AUTO-REGISTER (Auto-Provisioning)
+        if (!user) {
+            // Get default plan (Trial Gratúito)
+            const defaultPlan = await this.planRepo.findOne({
+                where: { name: 'Trial Gratúito' },
+            });
+
+            // Create tenant dynamically
+            const name = `${profile.firstName} ${profile.lastName || ''}`.trim();
+            const slug = `${profile.provider}-${Date.now()}`; // Safe unique slug placeholder
+            
+            const tenant = this.tenantRepo.create({
+                name: `${name}'s Workspace`,
+                slug,
+                email: profile.email,
+                planId: defaultPlan?.id,
+                status: 'trial', // Start as trial
+                trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial for social
+            });
+            const savedTenant = await this.tenantRepo.save(tenant);
+
+            // Create user (generate arbitrary pass since they use social)
+            const randomPass = await bcrypt.hash(Math.random().toString(36), 10);
+            user = this.userRepo.create({
+                tenantId: savedTenant.id,
+                email: profile.email,
+                passwordHash: randomPass,
+                name: name,
+                role: 'owner',
+            });
+            await this.userRepo.save(user);
+            
+            // Re-fetch full relations
+            user = await this.userRepo.findOne({
+                where: { id: user.id },
+                relations: ['tenant', 'tenant.plan'],
+            });
+        }
+
+        if (!user) throw new UnauthorizedException('Failed to authenticate user.');
+
+        // 3. Generate and return session tokens
+        const tokens = this.generateTokens(user, user.tenant);
+
+        return {
+            ...tokens,
+            tenant: {
+                id: user.tenant.id,
+                name: user.tenant.name,
+                slug: user.tenant.slug,
+                plan: user.tenant.plan,
+            },
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            },
+        };
+    }
+
     async register(dto: RegisterDto): Promise<AuthResponseDto> {
         // Check if email already exists
         const existingTenant = await this.tenantRepo.findOne({
@@ -34,9 +106,9 @@ export class AuthService {
             throw new ConflictException('Email already registered');
         }
 
-        // Get default plan (Starter)
+        // Get default plan (Trial Gratúito)
         const defaultPlan = await this.planRepo.findOne({
-            where: { name: 'Starter' },
+            where: { name: 'Trial Gratúito' },
         });
 
         // Create tenant
@@ -50,7 +122,8 @@ export class AuthService {
             slug,
             email: dto.email,
             planId: defaultPlan?.id,
-            trialEndsAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000), // 14 days trial
+            status: 'trial',
+            trialEndsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), // 3 days trial
         });
         await this.tenantRepo.save(tenant);
 

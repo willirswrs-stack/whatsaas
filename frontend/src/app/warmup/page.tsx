@@ -465,9 +465,9 @@ export default function WarmupPage() {
                 </div>
             </div>
 
-            {/* Simulator Modal — Agora com SUPORTE A MÚLTIPLAS SESSÕES (War Room Layout) */}
-            {simulatorVisible && Object.keys(activeSessions).length > 0 && (
-                <div className="fixed inset-0 z-[100] bg-black/85 backdrop-blur-md animate-fadeIn overflow-y-auto p-4 md:p-8 flex flex-col">
+            {/* Dashboard de Sessões — Agora INTEGRADO À PÁGINA para permitir múltiplas seleções simultâneas */}
+            {Object.keys(activeSessions).length > 0 && (
+                <div className="mt-16 pt-12 border-t border-white/10 container mx-auto px-4 max-w-7xl flex flex-col relative animate-fadeIn">
                     
                     {/* Floating Controls */}
                     <div className="sticky top-0 z-[110] flex items-center justify-between bg-[#1a1c24]/80 backdrop-blur-md border border-white/10 p-4 rounded-2xl mb-8 max-w-6xl mx-auto w-full shadow-2xl shadow-black/50">
@@ -536,6 +536,10 @@ export default function WarmupPage() {
                                 </div>
                             </div>
                         ))}
+                        
+                        {/* Scroll Anchors dynamically tracked by system hooks */}
+                        <div ref={bottomPlaceholderRef} className="h-4 w-full" />
+                        <div ref={chatEndRef} className="h-2 w-full" />
                     </div>
                 </div>
             )}

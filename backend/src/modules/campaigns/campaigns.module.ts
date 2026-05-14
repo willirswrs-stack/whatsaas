@@ -18,6 +18,7 @@ import { SettingsModule } from '../settings/settings.module';
 import { SCHEDULER_QUEUE } from '../../config/bull.config';
 import { CampaignSchedulerProcessor } from './campaign-scheduler.processor';
 import { Flow } from '../flows/entities';
+import { Tenant } from '../tenants/entities/tenant.entity';
 
 @Module({
     imports: [
@@ -28,6 +29,7 @@ import { Flow } from '../flows/entities';
             Contact,
             Template,
             Flow,
+            Tenant,
         ]),
         BullModule.registerQueue({
             name: SCHEDULER_QUEUE,

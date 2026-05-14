@@ -1,6 +1,9 @@
 import { Injectable, NotFoundException, Logger, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import axios from 'axios';
+import { SocksProxyAgent } from 'socks-proxy-agent';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 
 import { Instance, Proxy } from './entities/instance.entity';
 import { WhatsAppProviderFactory, ProviderType } from '../whatsapp';
@@ -231,6 +234,16 @@ export class InstancesService {
 
     async update(id: string, tenantId: string, data: Partial<Instance>) {
         const instance = await this.findOne(id, tenantId);
+        
+        // Manter integridade de metadados anteriores e mesclar novos configurações
+        if (data.metaConfig) {
+            const currentMeta = instance.metaConfig || {};
+            data.metaConfig = {
+                ...currentMeta,
+                ...data.metaConfig
+            };
+        }
+
         Object.assign(instance, data);
         return this.instanceRepo.save(instance);
     }
@@ -280,5 +293,52 @@ export class InstancesService {
         if (!proxy) throw new NotFoundException('Proxy not found');
         await this.proxyRepo.remove(proxy);
         return { success: true };
+    }
+
+    async testProxy(data: {
+        host: string;
+        port: number;
+        type: string;
+        username?: string;
+        password?: string;
+    }) {
+        const startTime = Date.now();
+        const auth = data.username ? `${data.username}:${data.password}@` : '';
+        const proxyUrl = `${data.type}://${auth}${data.host}:${data.port}`;
+        
+        try {
+            this.logger.log(`[PROXY TEST] Inciando teste para: ${data.type}://${data.host}:${data.port}`);
+            let agent: any;
+            
+            if (data.type.includes('socks')) {
+                agent = new SocksProxyAgent(proxyUrl);
+            } else {
+                agent = new HttpsProxyAgent(proxyUrl);
+            }
+
+            // Tentamos bater na API de IP do Google/Ipify pra validar se o proxy navega externamente
+            const response = await axios.get('https://api.ipify.org?format=json', {
+                httpsAgent: agent,
+                httpAgent: agent,
+                timeout: 8000 // 8s limite de paciencia
+            });
+
+            const latency = Date.now() - startTime;
+            this.logger.log(`[PROXY TEST] ✅ Sucesso! IP retornado: ${response.data?.ip} | Latência: ${latency}ms`);
+            
+            return {
+                online: true,
+                latencyMs: latency,
+                ip: response.data?.ip
+            };
+        } catch (error: any) {
+            const latency = Date.now() - startTime;
+            this.logger.warn(`[PROXY TEST] ❌ Falha no teste: ${error.message}`);
+            return {
+                online: false,
+                latencyMs: latency,
+                error: error.message || 'Tempo limite excedido ou proxy recusou a conexão.'
+            };
+        }
     }
 }

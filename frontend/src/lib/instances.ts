@@ -22,6 +22,7 @@ export interface Instance {
         id: string;
         host: string;
     };
+    metaConfig?: Record<string, any>;
     qrCode?: string;
     createdAt: string;
 }

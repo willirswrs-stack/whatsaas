@@ -74,12 +74,20 @@ export class InstancesController {
         return this.instancesService.createProxy(tenantId, data);
     }
 
+    @Post('proxies/test')
+    @ApiOperation({ summary: 'Test a proxy connection validity' })
+    async testProxy(
+        @Body() data: { host: string; port: number; type: string; username?: string; password?: string },
+    ) {
+        return this.instancesService.testProxy(data);
+    }
+
     // Rotas com parâmetros dinâmicos - devem ficar por último
     @Patch(':id')
     @ApiOperation({ summary: 'Update instance configuration' })
     async update(
         @Param('id') id: string,
-        @Body() data: { proxyId?: string; warmupEnabled?: boolean },
+        @Body() data: { proxyId?: string; warmupEnabled?: boolean; metaConfig?: Record<string, any> },
         @CurrentTenant() tenantId: string,
     ) {
         return this.instancesService.update(id, tenantId, data as any);

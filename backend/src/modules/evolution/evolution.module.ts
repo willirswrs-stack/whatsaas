@@ -11,6 +11,7 @@ import { Contact } from '../contacts/entities/contact.entity';
 
 import { EventsModule } from '../events/events.module';
 import { FlowsModule } from '../flows/flows.module';
+import { AntiBanModule } from '../anti-ban/anti-ban.module';
 
 @Module({
     imports: [
@@ -18,6 +19,7 @@ import { FlowsModule } from '../flows/flows.module';
         TypeOrmModule.forFeature([Instance, CampaignContact, Campaign, FlowExecution, Contact]),
         EventsModule,
         forwardRef(() => FlowsModule),
+        forwardRef(() => AntiBanModule),
     ],
     controllers: [EvolutionWebhookController],
     providers: [EvolutionApiService],

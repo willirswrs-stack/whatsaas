@@ -2,6 +2,7 @@ import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { Instance, Proxy, WarmupSchedule } from './entities/instance.entity';
+import { Tenant } from '../tenants/entities/tenant.entity';
 import { InstancesController } from './instances.controller';
 import { InstancesService } from './instances.service';
 import { EvolutionModule } from '../evolution/evolution.module';
@@ -12,7 +13,7 @@ import { MobileFarmController } from './mobile-farm.controller';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Instance, Proxy, WarmupSchedule]),
+        TypeOrmModule.forFeature([Instance, Proxy, WarmupSchedule, Tenant]),
         forwardRef(() => EvolutionModule),
     ],
     controllers: [InstancesController, MobileFarmController],

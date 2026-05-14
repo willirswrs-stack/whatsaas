@@ -19,6 +19,8 @@ import { envValidationSchema } from './config/env.validation';
 // Modules
 import { HealthModule } from './modules/health/health.module';
 import { BullBoardModule } from './modules/bull-board/bull-board.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { BillingModule } from './modules/billing/billing.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { EvolutionModule } from './modules/evolution/evolution.module';
 import { DispatcherModule } from './modules/dispatcher/dispatcher.module';
@@ -132,6 +134,8 @@ import { SentryModule } from '@sentry/nestjs/setup';
     // Application Modules
     HealthModule,
     BullBoardModule, // <-- Monitoramento de Filas
+    AdminModule,     // <-- Novo Módulo Administrativo
+    BillingModule,   // <-- Motor Financeiro e Assinaturas
     EventsModule,
     CryptoModule,
     AuthModule,

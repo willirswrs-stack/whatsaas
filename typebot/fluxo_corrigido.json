@@ -1,0 +1,178 @@
+{
+  "name": "Social Distribuidora - Fluxo Corrigido",
+  "description": "Fluxo gerado com as validações e correções solicitadas para os problemas de roteamento e menus",
+  "variables": [
+    "telefone",
+    "nome_cliente",
+    "cpf_cnpj",
+    "cadastro_vinculado",
+    "opcao_menu",
+    "numero_nota",
+    "dados_boletos",
+    "nome_arquivo_pdf"
+  ],
+  "sectors": [
+    {
+      "name": "1. Boas-Vindas e Identificação",
+      "blocks": [
+        {
+          "type": "text",
+          "content": "Você pode cancelar este atendimento a qualquer momento digitando #sair"
+        },
+        {
+          "type": "text",
+          "content": "Bem Vindo {{nome_cliente}} à Social Distribuidora de Peças e Acessórios 🚛⚙️💡🛠️❄️.\nSó um instante que estamos identificando seu telefone 📱 em nosso sistema 👨🏻‍💻."
+        },
+        {
+          "type": "text",
+          "content": "Olá {{nome_cliente}}, tudo bem? 🤠"
+        },
+        {
+          "type": "text",
+          "content": "Verificamos que você está vinculado ao cadastro ({{cadastro_vinculado}}). ✅"
+        },
+        {
+          "type": "text",
+          "content": "Bem Vindo à Social Distribuidora de Peças e Acessórios! 🚛⚙️💡🛠️❄️\nSou o Socialito, mascote da Social Distribuidora. 🤠"
+        },
+        {
+          "type": "text",
+          "content": "Seguem abaixo as opções para atendimento rápido, por favor digite o número da opção desejada."
+        },
+        {
+          "type": "textInput",
+          "saveTo": "opcao_menu",
+          "validation": "number_between_1_and_10",
+          "options": "1 - Consultar Informações de Pedido\n2 - Falar com um Consultor de Vendas\n3 - Financeiro\n4 - Garantia\n5 - Expedição\n6 - Fazer ou Atualizar Cadastro\n7 - Consultar nossas ofertas\n8 - Comprar\n9 - Pesquisar Produtos\n10 - Finalizar Atendimento"
+        }
+      ],
+      "routing": [
+        { "condition": "opcao_menu == 3", "goTo": "3. Menu Financeiro" },
+        { "condition": "opcao_menu == 10", "goTo": "7. Encerramento" }
+      ]
+    },
+    {
+      "name": "2. Fluxo Não Encontrado (CPF/CNPJ)",
+      "blocks": [
+        {
+          "type": "text",
+          "content": "Estaremos realizando a busca em nosso sistema do CPF ou CNPJ informado.\nPor favor aguarde um instante, será bem rápido 🏎️."
+        },
+        {
+          "type": "text",
+          "content": "Desculpe, mas o CPF ou CNPJ informado não consta em nosso cadastro 😕."
+        },
+        {
+          "type": "textInput",
+          "saveTo": "opcao_menu",
+          "validation": "number_between_1_and_4",
+          "options": "Pode por favor escolher uma das opções abaixo para seguirmos com nosso atendimento.\n1️⃣ - Digitar um novo CPF ou CNPJ 🔢\n2️⃣ - Falar com um Consultor de Vendas 👨🏻‍💻\n3️⃣ - Fazer Cadastro com o CPF ou CNPJ informado 💳\n4️⃣ - Finalizar o atendimento 🔚"
+        }
+      ],
+      "routing": [
+        { "condition": "opcao_menu == 4", "goTo": "7. Encerramento" }
+      ]
+    },
+    {
+      "name": "3. Menu Financeiro",
+      "blocks": [
+        {
+          "type": "textInput",
+          "saveTo": "opcao_menu",
+          "validation": "number_between_1_and_5_or_vendas",
+          "options": "Pode digitar uma das opções abaixo para continuarmos com seu atendimento:\n1️⃣ - Boletos Vencidos\n2️⃣ - Boletos a Vencer\n3️⃣ - Falar com um atendente\n4️⃣ - Voltar ao Menu Anterior\n5️⃣ - Voltar ao Menu Principal\n\nVocê também pode digitar vendas para ser direcionado a um de nossos vendedores 👨🏻‍💻."
+        }
+      ],
+      "routing": [
+        { "condition": "opcao_menu == 2", "goTo": "4. Boletos a Vencer" },
+        { "condition": "opcao_menu == 3", "goTo": "6. Transbordo (Falar com Atendente)" }
+      ]
+    },
+    {
+      "name": "4. Boletos a Vencer",
+      "blocks": [
+        {
+          "type": "text",
+          "content": "Você escolheu a opção de Boletos a Vencer, buscarei no sistema 👨🏻‍💻 se existem informações para a opção escolhida.\nPor favor aguarde um instante, será bem rápido 🏎️."
+        },
+        {
+          "type": "apiCall",
+          "description": "Chamar Webhook do Sankhya para buscar boletos a vencer e salvar na variavel dados_boletos"
+        },
+        {
+          "type": "text",
+          "content": "🚨 Encontrei aqui informações para lhe passar 🤠.\nSegue abaixo a relação das notas e Boletos a Vencer 🧾:\nCNPJ/CPF: {{cpf_cnpj}}\nCliente: {{cadastro_vinculado}}\n{{dados_boletos}}"
+        },
+        {
+          "type": "textInput",
+          "saveTo": "opcao_menu",
+          "validation": "number_between_1_and_4",
+          "options": "Por favor digite o número da opção 🔢 desejada abaixo para prosseguirmos na sua solicitação:\n1️⃣ - Desejo receber o arquivo com a Nota Fiscal e seus Boletos\n2️⃣ - Falar com um atendente\n3️⃣ - Voltar ao Menu Anterior\n4️⃣ - Voltar ao Menu Principal\n\nVocê também pode digitar vendas para ser direcionado a um de nossos vendedores 👨🏻‍💻."
+        }
+      ],
+      "routing": [
+        { "condition": "opcao_menu == 1", "goTo": "5. Envio de Arquivo Nota Fiscal" },
+        { "condition": "opcao_menu == 2", "goTo": "6. Transbordo (Falar com Atendente)" }
+      ]
+    },
+    {
+      "name": "5. Envio de Arquivo Nota Fiscal",
+      "blocks": [
+        {
+          "type": "textInput",
+          "saveTo": "numero_nota",
+          "options": "Por favor digite o nro da nota fiscal ✅ mostrada na relação listada anteriormente para que eu possa enviar o arquivo 🗃️ da nota digitada. 🤠\n\nVocê também pode digitar 0 para voltar ao menu anterior."
+        },
+        {
+          "type": "text",
+          "content": "Opa encontrei aqui a nota fiscal nº {{numero_nota}} ✅, já vou enviar o arquivo desta nota 🧾.\nSó um instante."
+        },
+        {
+          "type": "fileSend",
+          "fileUrl": "URL_DO_PDF_DA_NOTA",
+          "fileName": "Boletos_Nota_{{numero_nota}}.pdf",
+          "description": "CRÍTICO: O campo File Name deve ser preenchido para evitar que a nota chegue como 'Sem titulo'."
+        },
+        {
+          "type": "text",
+          "content": "Arquivo com a Nota Fiscal Enviado ✅!\nQuaisquer problemas ao baixar o arquivo enviado, visualização das informações ou dúvidas, pode entrar em contato conosco pelos nossos canais de atendimento. 📞📩📊"
+        },
+        {
+          "type": "textInput",
+          "saveTo": "opcao_menu",
+          "validation": "number_between_0_and_4",
+          "options": "Para continuar com nosso atendimento, por favor digite o número de uma das opções 🔢 abaixo:\n1️⃣ - Receber o arquivo de outra nota fiscal\n2️⃣ - Falar com um atendente\n3️⃣ - Voltar ao Menu Financeiro\n4️⃣ - Voltar ao Menu Principal\n0️⃣ - Finalizar esta conversa\n\nVocê também pode digitar vendas para ser direcionado a um de nossos vendedores 👨🏻‍💻."
+        }
+      ],
+      "routing": [
+        { "condition": "opcao_menu == 0", "goTo": "7. Encerramento" }
+      ]
+    },
+    {
+      "name": "6. Transbordo (Falar com Atendente)",
+      "blocks": [
+        {
+          "type": "text",
+          "content": "Você escolheu a opção 2️⃣ para falar com um de nossos atendentes do Departamento Financeiro 💰.\nSó alguns segundos ⏰ que nosso atendente irá conversar com você."
+        },
+        {
+          "type": "action",
+          "content": "Você foi redirecionado para o grupo: Financeiro\nOlá, em que posso ajudá-lo?"
+        }
+      ]
+    },
+    {
+      "name": "7. Encerramento",
+      "blocks": [
+        {
+          "type": "text",
+          "content": "A Social Distribuidora de Peças e Acessórios agradece o seu contato! Tenha um excelente dia! 👋"
+        },
+        {
+          "type": "endFlow",
+          "description": "Este bloco finaliza a conversa. A variável global #sair também deve apontar para cá."
+        }
+      ]
+    }
+  ]
+}
