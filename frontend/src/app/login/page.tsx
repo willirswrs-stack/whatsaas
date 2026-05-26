@@ -151,23 +151,7 @@ export default function LoginPage() {
                     </button>
                 </form>
 
-                {/* Divider and Social Logins */}
-                <div className="relative flex py-5 items-center my-2">
-                    <div className="flex-grow border-t border-white/10"></div>
-                    <span className="flex-shrink mx-4 text-xs text-[var(--text-muted)] font-medium uppercase tracking-widest">ou continue com</span>
-                    <div className="flex-grow border-t border-white/10"></div>
-                </div>
 
-                <div className="grid grid-cols-1 gap-3 mb-4">
-                    <a 
-                        href={`${(process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3333/api/v1').replace(/\/$/, '')}/auth/google`}
-                        className="flex justify-center items-center py-3 px-4 rounded-xl border border-gray-700 bg-[#1e2330] hover:bg-[#252b3b] transition-all hover:-translate-y-0.5 group gap-3 shadow-lg"
-                        title="Entrar com Conta Google"
-                    >
-                        <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                        <span className="text-sm font-bold text-gray-200">Continuar com Google</span>
-                    </a>
-                </div>
 
                 {/* Toggle Login/Register */}
                 <div className="mt-6 text-center">

@@ -39,6 +39,7 @@ import { ReconnectionModule } from './modules/reconnection/reconnection.module';
 import { UploadsModule } from './modules/uploads/uploads.module';
 import { OrderWebhooksModule } from './modules/order-webhooks/order-webhooks.module';
 import { SentryModule } from '@sentry/nestjs/setup';
+import { ProxiesModule } from './modules/proxies/proxies.module';
 
 
 @Module({
@@ -154,6 +155,7 @@ import { SentryModule } from '@sentry/nestjs/setup';
     ReconnectionModule,
     UploadsModule,
     OrderWebhooksModule,
+    ProxiesModule,
   ],
   controllers: [AppController],
   providers: [

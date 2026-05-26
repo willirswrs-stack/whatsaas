@@ -39,11 +39,48 @@ export default function ProxiesPage() {
     const fetchProxies = async () => {
         try {
             setLoading(true);
-            const res = await api.get('/instances/proxies');
-            setProxyList(res.data || []);
+            // Fetch manual proxies
+            const resManual = await api.get('/instances/proxies');
+            
+            // Fetch purchased proxies
+            let resPurchased = { data: [] };
+            try {
+                resPurchased = await api.get('/proxies');
+            } catch (err) {
+                console.warn('Endpoint /proxies ainda não respondeu, ignorando...', err);
+            }
+            
+            // Format purchased proxies to match manual proxy schema for the table
+            const formattedPurchased = resPurchased.data.map((p: any) => ({
+                id: p.id,
+                host: p.host,
+                port: p.port,
+                type: 'socks5',
+                country: 'Móvel / ISP',
+                city: p.provider,
+                latencyMs: 15,
+                status: p.status,
+                instances: p.assignedInstanceId ? [p.assignedInstanceId] : []
+            }));
+
+            setProxyList([...(resManual.data || []), ...formattedPurchased]);
         } catch (e) {
             console.error('Erro ao carregar proxies', e);
         } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleBuyProxy = async () => {
+        try {
+            setLoading(true);
+            const res = await api.post('/billing/checkout-proxy');
+            if (res.data && res.data.invoiceUrl) {
+                // Redireciona o usuário para pagar o Pix/Boleto no Asaas
+                window.location.href = res.data.invoiceUrl;
+            }
+        } catch (error) {
+            alert('Falha ao gerar cobrança do proxy.');
             setLoading(false);
         }
     };
@@ -113,13 +150,21 @@ export default function ProxiesPage() {
                         <p className="text-sm text-[var(--text-muted)]">Gerencie proxies SOCKS5 para proteção dos chips</p>
                     </div>
                 </div>
-                <button className="btn btn-success" onClick={() => setShowModal(true)}>
-                    <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                    </svg>
-                    Adicionar Proxy
-                </button>
+                <div className="flex gap-2">
+                    <button className="btn bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow-lg hover:shadow-indigo-500/30 transition-all border-none" onClick={handleBuyProxy}>
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <path d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                        </svg>
+                        Comprar Proxy (R$ 49,90)
+                    </button>
+                    <button className="btn btn-secondary" onClick={() => setShowModal(true)}>
+                        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Adicionar Manualmente
+                    </button>
+                </div>
             </div>
 
             {/* Stats */}
