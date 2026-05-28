@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ProxyEntity } from './entities/proxy.entity';
+import { ProxyProviderFactory } from './providers/proxy-provider.factory';
 
 @Injectable()
 export class ProxiesService {
@@ -9,7 +10,8 @@ export class ProxiesService {
 
     constructor(
         @InjectRepository(ProxyEntity)
-        private proxyRepo: Repository<ProxyEntity>
+        private proxyRepo: Repository<ProxyEntity>,
+        private proxyProviderFactory: ProxyProviderFactory
     ) {}
 
     async getProxies(tenantId: string): Promise<ProxyEntity[]> {
@@ -30,36 +32,34 @@ export class ProxiesService {
     }
 
     /**
-     * Bate na API da IPRoyal para comprar o Proxy Residencial Estático de 30 dias.
+     * Adquire ou aloca um Proxy ISP (Webshare ou IPRoyal) para a conta do cliente.
      */
     async buyProxyFromProvider(tenantId: string): Promise<ProxyEntity> {
-        this.logger.log(`Iniciando compra de Proxy ISP na IPRoyal para o tenant: ${tenantId}`);
+        this.logger.log(`[PROXIES SERVICE] Iniciando alocação automática de Proxy para tenant: ${tenantId}`);
 
-        // AQUI ENTRA A INTEGRAÇÃO REAL COM A API DA IPROYAL
-        // POST https://api.iproyal.com/v1/reseller/residential/buy
-        // Authorization: Bearer {IPROYAL_API_KEY}
+        // Obter o adaptador ativo da Factory (Webshare ou IPRoyal)
+        const provider = this.proxyProviderFactory.getProvider();
         
-        // MOCK/SIMULAÇÃO: Como ainda não injetamos o cartão na IPRoyal, 
-        // vamos simular uma resposta de sucesso da API.
+        // Buscar proxies atuais já alocados para este tenant para checar duplicidades no pool
+        const currentProxies = await this.getProxies(tenantId);
         
-        const mockHost = `isp-us-${Math.floor(Math.random() * 10000)}.iproyal.com`;
-        const mockPort = `${Math.floor(Math.random() * 10000 + 10000)}`;
-        const mockUser = `usr_${tenantId.substring(0,6)}`;
-        const mockPass = `pass_${Math.random().toString(36).substring(2, 10)}`;
+        // Chamar o provedor para obter credenciais do proxy alocado
+        const proxyData = await provider.buyOrAllocateProxy(tenantId, currentProxies);
 
+        // Criar o registro na tabela de proxies do WhatSaas
         const newProxy = this.proxyRepo.create({
             tenantId,
-            provider: 'iproyal_isp',
-            host: mockHost,
-            port: mockPort,
-            username: mockUser,
-            password: mockPass,
-            expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // +30 days
+            provider: proxyData.provider,
+            host: proxyData.host,
+            port: proxyData.port,
+            username: proxyData.username || '',
+            password: proxyData.password || '',
+            expirationDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 dias de validade
             status: 'active'
         });
 
         await this.proxyRepo.save(newProxy);
-        this.logger.log(`✅ Sucesso! Proxy ${newProxy.host}:${newProxy.port} comprado e ativado para a conta.`);
+        this.logger.log(`✅ [PROXIES SERVICE] Sucesso! Proxy ${newProxy.host}:${newProxy.port} (${newProxy.provider}) registrado para a conta.`);
         
         return newProxy;
     }

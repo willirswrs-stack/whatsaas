@@ -29,7 +29,7 @@ export class ProxyEntity {
     password: string;
 
     @Column({ nullable: true })
-    assignedInstanceId: string; // O ID do chip do Evolution/Waha
+    assignedInstanceId: string | null; // O ID do chip do Evolution/Waha
 
     @Column({ type: 'timestamp', nullable: true })
     expirationDate: Date;

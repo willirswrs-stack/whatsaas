@@ -8,6 +8,7 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 import { Instance, Proxy } from './entities/instance.entity';
 import { WhatsAppProviderFactory, ProviderType } from '../whatsapp';
 import { InstanceStatus } from '../../common/enums/instance-status.enum';
+import { ProxiesService } from '../proxies/proxies.service';
 
 @Injectable()
 export class InstancesService {
@@ -19,6 +20,7 @@ export class InstancesService {
         @InjectRepository(Proxy)
         private proxyRepo: Repository<Proxy>,
         private providerFactory: WhatsAppProviderFactory,
+        private proxiesService: ProxiesService,
     ) { }
 
     async findAll(tenantId: string) {
@@ -85,12 +87,36 @@ export class InstancesService {
             const providerResult = await provider.createInstance(data.instanceName, data.config);
 
             const isOfficial = !!data.config?.token || !!data.config?.accessToken;
+            let allocatedProxyId = data.proxyId;
+
+            // Se for canal não oficial e não tiver proxy especificado, alocar automaticamente!
+            if (!isOfficial && !allocatedProxyId) {
+                this.logger.log(`[PROXY AUTO-ALLOC] Buscando proxy livre no pool para o tenant ${tenantId}`);
+                
+                // 1. Tentar encontrar um proxy já existente e não associado a nenhuma instância
+                const unassignedProxy = await this.proxyRepo
+                    .createQueryBuilder('proxy')
+                    .leftJoin('proxy.instances', 'instance')
+                    .where('proxy.tenantId = :tenantId', { tenantId })
+                    .andWhere('instance.id IS NULL')
+                    .getOne();
+
+                if (unassignedProxy) {
+                    this.logger.log(`[PROXY AUTO-ALLOC] Reutilizando proxy livre existente: ${unassignedProxy.host}:${unassignedProxy.port}`);
+                    allocatedProxyId = unassignedProxy.id;
+                } else {
+                    this.logger.log(`[PROXY AUTO-ALLOC] Nenhum proxy livre encontrado. Provisionando um novo proxy ISP da IPRoyal...`);
+                    // 2. Chamar o serviço para comprar/criar um novo proxy
+                    const newProxy = await this.proxiesService.buyProxyFromProvider(tenantId);
+                    allocatedProxyId = newProxy.id;
+                }
+            }
 
             // Save to database
             const instance = this.instanceRepo.create({
                 tenantId,
                 instanceName: data.instanceName,
-                proxyId: data.proxyId,
+                proxyId: allocatedProxyId,
                 provider: providerType,
                 status: isOfficial ? InstanceStatus.CONNECTING : InstanceStatus.CREATED,
                 channelType: isOfficial ? 'official' : 'unofficial',
@@ -109,6 +135,13 @@ export class InstancesService {
             });
 
             await this.instanceRepo.save(instance);
+
+            // Sincronizar o assignedInstanceId no proxy para a exibição no painel
+            if (allocatedProxyId) {
+                await this.proxyRepo.update(allocatedProxyId, {
+                    assignedInstanceId: instance.id
+                } as any);
+            }
 
             // Get QR code (only if not official, but getQrCode handles logic)
             // If official, getQrCode might return empty or null
@@ -263,6 +296,13 @@ export class InstancesService {
         } catch (e) {
             this.logger.warn(`Failed to delete from provider: ${e.message}`);
             // Continue with DB deletion
+        }
+
+        // Se tinha proxy alocado, limpar o assignedInstanceId do proxy antes de remover a instância
+        if (instance.proxyId) {
+            await this.proxyRepo.update(instance.proxyId, {
+                assignedInstanceId: null
+            } as any);
         }
 
         await this.instanceRepo.remove(instance);
