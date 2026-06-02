@@ -7,6 +7,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { AiService } from './ai.service';
 import { ElevenLabsService } from './elevenlabs.service';
 import { TenantGuard } from '../auth/guards/tenant.guard';
+import { CurrentTenant } from '../auth/decorators/current-tenant.decorator';
 
 class SpinDto {
     @IsString()
@@ -93,14 +94,17 @@ export class AiController {
 
     @Post('preview')
     @ApiOperation({ summary: 'Generate real-time audio preview for a voice' })
-    async preview(@Body() dto: PreviewVoiceDto) {
+    async preview(
+        @Body() dto: PreviewVoiceDto,
+        @CurrentTenant() tenantId: string
+    ) {
         const sampleText = 'Olá! Esta é uma amostra da minha voz para o aquecimento automático.';
         
         let buffer: Buffer;
         // Se for um ID de voz longo (estilo ElevenLabs), tenta ElevenLabs primeiro
-        if (dto.voice.length > 15 && this.elevenLabs.hasKey()) {
+        if (dto.voice.length > 15 && await this.elevenLabs.hasKey(tenantId)) {
             try {
-                buffer = await this.elevenLabs.synthesizeSpeech(sampleText, dto.voice);
+                buffer = await this.elevenLabs.synthesizeSpeech(sampleText, dto.voice, tenantId);
             } catch (e) {
                 // Fallback pro openai caso falhe
                 buffer = await this.aiService.synthesizeSpeech(sampleText, 'alloy', dto.speed || 1.0, dto.model || 'tts-1-hd');
@@ -126,14 +130,16 @@ export class AiController {
     @ApiOperation({ summary: 'Clones a custom voice using ElevenLabs' })
     async cloneVoice(
         @Body('name') name: string,
-        @UploadedFile() file: any
+        @UploadedFile() file: any,
+        @CurrentTenant() tenantId: string
     ) {
         if (!file) throw new Error('Arquivo de áudio não enviado.');
         
         const voiceId = await this.elevenLabs.cloneVoice(
             name || `Voz_${Date.now()}`,
             file.buffer,
-            file.originalname || 'sample.mp3'
+            file.originalname || 'sample.mp3',
+            tenantId
         );
 
         return {

@@ -1,16 +1,17 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, UpdateDateColumn, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
 import { Tenant } from '../../tenants/entities/tenant.entity';
+import { Instance } from '../../instances/entities/instance.entity';
 
 @Entity('proxies')
 export class ProxyEntity {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column()
+    @Column({ name: 'tenant_id' })
     tenantId: string;
 
     @ManyToOne(() => Tenant, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'tenantId' })
+    @JoinColumn({ name: 'tenant_id' })
     tenant: Tenant;
 
     @Column({ default: 'iproyal' })
@@ -28,18 +29,21 @@ export class ProxyEntity {
     @Column()
     password: string;
 
-    @Column({ nullable: true })
+    @Column({ name: 'assignedInstanceId', type: 'uuid', nullable: true })
     assignedInstanceId: string | null; // O ID do chip do Evolution/Waha
 
-    @Column({ type: 'timestamp', nullable: true })
+    @Column({ name: 'expirationDate', type: 'timestamp', nullable: true })
     expirationDate: Date;
 
     @Column({ default: 'active' }) // active, expired, suspended
     status: string;
 
-    @CreateDateColumn()
+    @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;
 
-    @UpdateDateColumn()
+    @UpdateDateColumn({ name: 'updatedAt' })
     updatedAt: Date;
+
+    @OneToMany(() => Instance, (instance) => instance.proxy)
+    instances: Instance[];
 }

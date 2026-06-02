@@ -6,7 +6,7 @@ import { Repository } from 'typeorm';
 
 import { Instance } from '../instances/entities/instance.entity';
 import { Campaign, CampaignContact, MessageVariation } from '../campaigns/entities/campaign.entity';
-import { Proxy } from '../instances/entities/instance.entity';
+import { ProxyEntity } from '../proxies/entities/proxy.entity';
 import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
 import { DISPATCH_QUEUE } from '../../config/bull.config';
 
@@ -20,6 +20,7 @@ import { ActivePreventionService } from '../anti-ban/active-prevention.service';
 
 import { FlowsService } from '../flows/flows.service';
 import { EventsGateway } from '../events/events.gateway';
+import { InboxService } from '../inbox/inbox.service';
 
 import { MetaTemplatesService } from '../meta-templates/meta-templates.service';
 import { MetaGraphApiService } from '../meta-templates/meta-graph-api.service';
@@ -81,6 +82,7 @@ export class DispatcherProcessor extends WorkerHost {
         private metaTemplatesService: MetaTemplatesService,
         private metaGraphApiService: MetaGraphApiService,
         private activePrevention: ActivePreventionService,
+        private inboxService: InboxService,
     ) {
         super();
         this.logger.log('✅ DispatcherProcessor INSTANTIATED');
@@ -283,6 +285,22 @@ export class DispatcherProcessor extends WorkerHost {
                     
                     const messageId = result?.messages?.[0]?.id;
                     this.logger.log(`✅ Template enviado via WABA para ${recipientPhone} (ID: ${messageId})`);
+
+                    if (messageId) {
+                        await this.inboxService.saveMessage({
+                            tenantId,
+                            remoteJid: `${recipientPhone}@s.whatsapp.net`,
+                            remotePhone: recipientPhone,
+                            remoteName: contact.name,
+                            direction: 'outbound',
+                            type: 'text', // Pode ser template/imagem na v2, mas 'text' é fallback
+                            content: `[Template Meta Enviado: ${templateName}]`,
+                            status: 'sent',
+                            wamid: messageId,
+                            campaignId,
+                            contactId: contact.id,
+                        }).catch(err => this.logger.error(`Failed to save WABA message to inbox: ${err.message}`));
+                    }
 
                     const updateResult = await this.campaignContactRepo.update(
                         { id: campaignContactId, status: 'queued' }, // Only update if still queued
@@ -489,6 +507,24 @@ export class DispatcherProcessor extends WorkerHost {
                 messageId = result?.messageId;
                 console.log(`📡 [DISPATCHER-DEBUG] Provider response for ${contact.phone}:`, JSON.stringify(result));
                 this.logger.log(`✅ Mensagem enviada via ${instance.provider} para ${contact.phone} (ID: ${messageId})`);
+
+                if (messageId) {
+                    await this.inboxService.saveMessage({
+                        tenantId,
+                        instanceId: instance.id,
+                        instanceName: instance.instanceName,
+                        remoteJid: `${contact.phone}@s.whatsapp.net`,
+                        remotePhone: contact.phone,
+                        remoteName: contact.name,
+                        direction: 'outbound',
+                        type: 'text',
+                        content: finalContent,
+                        status: 'sent',
+                        wamid: messageId,
+                        campaignId,
+                        contactId: contact.id,
+                    }).catch(err => this.logger.error(`Failed to save outbound message to inbox: ${err.message}`));
+                }
 
                 // 📊 Record analytics - SUCCESS
                 this.analytics.recordSent(

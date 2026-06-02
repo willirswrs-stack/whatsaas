@@ -15,8 +15,9 @@ export default function SettingsPage() {
         anthropicKey: '',
         geminiKey: '',
         groqKey: '',
+        elevenLabsKey: '',
     });
-    const [showKeys, setShowKeys] = useState({ openai: false, anthropic: false, gemini: false, groq: false });
+    const [showKeys, setShowKeys] = useState({ openai: false, anthropic: false, gemini: false, groq: false, elevenLabs: false });
 
     const tabs = [
         { id: 'general', label: 'Geral', icon: '⚙️' },
@@ -53,6 +54,7 @@ export default function SettingsPage() {
                     anthropicKey: data.anthropicKey || '',
                     geminiKey: data.geminiKey || '',
                     groqKey: data.groqKey || '',
+                    elevenLabsKey: data.elevenLabsKey || '',
                 });
             }
         } catch (err) {
@@ -463,6 +465,47 @@ export default function SettingsPage() {
                                 </div>
                                 <p className="text-xs text-[var(--text-muted)] mt-2">
                                     Obtenha sua chave em <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" className="text-[var(--primary)] hover:underline">console.groq.com</a>
+                                </p>
+                            </div>
+
+                            {/* ElevenLabs */}
+                            <div className="p-4 border border-[var(--border-subtle)] rounded-lg">
+                                <div className="flex items-center gap-3 mb-4">
+                                    <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                        <span className="text-white text-lg">🎙️</span>
+                                    </div>
+                                    <div className="flex-1">
+                                        <h3 className="font-medium text-white">ElevenLabs</h3>
+                                        <p className="text-xs text-[var(--text-muted)]">Vozes AI Ultra-Realistas e Clonagem</p>
+                                    </div>
+                                    {apiKeys.elevenLabsKey && !apiKeys.elevenLabsKey.includes('*') ? (
+                                        <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full">✓ Configurado</span>
+                                    ) : apiKeys.elevenLabsKey.includes('*') ? (
+                                        <span className="text-xs px-2 py-1 bg-green-500/20 text-green-400 rounded-full">✓ Salvo</span>
+                                    ) : (
+                                        <span className="text-xs px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded-full">⚠ Não configurado</span>
+                                    )}
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="relative flex-1">
+                                        <input
+                                            type={showKeys.elevenLabs ? 'text' : 'password'}
+                                            className="input w-full pr-10"
+                                            placeholder="sk_..."
+                                            value={apiKeys.elevenLabsKey}
+                                            onChange={(e) => setApiKeys({ ...apiKeys, elevenLabsKey: e.target.value })}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-white"
+                                            onClick={() => setShowKeys({ ...showKeys, elevenLabs: !showKeys.elevenLabs })}
+                                        >
+                                            {showKeys.elevenLabs ? '🙈' : '👁️'}
+                                        </button>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-[var(--text-muted)] mt-2">
+                                    Obtenha sua chave em <a href="https://elevenlabs.io/app/api-keys" target="_blank" rel="noopener noreferrer" className="text-[var(--primary)] hover:underline">elevenlabs.io</a>
                                 </p>
                             </div>
 

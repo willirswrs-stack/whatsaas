@@ -25,6 +25,10 @@ export default function ChipsPage() {
     const [configInstanceId, setConfigInstanceId] = useState<string | null>(null);
     const [proxies, setProxies] = useState<{ id: string; host: string }[]>([]);
     const [selectedProxyId, setSelectedProxyId] = useState<string>('');
+    const [connectionMethod, setConnectionMethod] = useState<'qr' | 'pairing'>('qr');
+    const [pairingPhone, setPairingPhone] = useState('');
+    const [pairingCode, setPairingCode] = useState('');
+    const [isGeneratingPairingCode, setIsGeneratingPairingCode] = useState(false);
     const [selectedVoice, setSelectedVoice] = useState<string>('alloy');
     const [selectedVoiceSpeed, setSelectedVoiceSpeed] = useState<number>(1.0);
     const [selectedVoiceModel, setSelectedVoiceModel] = useState<'tts-1' | 'tts-1-hd'>('tts-1-hd');
@@ -50,10 +54,10 @@ export default function ChipsPage() {
         };
     }, []);
 
-    // Polling de status após criar instância com QR Code
+    // Polling de status após criar instância com QR Code ou Pairing Code
     useEffect(() => {
-        if (qrCode && createdInstanceId) {
-            setConnectionStatus('Aguardando escaneamento do QR Code...');
+        if ((qrCode || pairingCode) && createdInstanceId) {
+            setConnectionStatus(pairingCode ? '🔑 Aguardando inserção do código no celular...' : 'Aguardando escaneamento do QR Code...');
 
             const pollStatus = async () => {
                 try {
@@ -71,13 +75,16 @@ export default function ChipsPage() {
                         // Atualizar lista e fechar modal após 2s
                         setTimeout(() => {
                             setQrCode('');
+                            setPairingCode('');
+                            setPairingPhone('');
+                            setConnectionMethod('qr');
                             setShowModal(false);
                             setCreatedInstanceId(null);
                             setConnectionStatus('');
                             loadInstances();
                         }, 2000);
                     } else if (providerStatus.status === 'scan_qr') {
-                        setConnectionStatus('📱 Escaneie o QR Code com seu WhatsApp...');
+                        setConnectionStatus(pairingCode ? '🔑 Digite o código de pareamento no seu WhatsApp...' : '📱 Escaneie o QR Code com seu WhatsApp...');
                     }
                 } catch (err) {
                     console.warn('Polling error:', err);
@@ -96,7 +103,7 @@ export default function ChipsPage() {
                 }
             };
         }
-    }, [qrCode, createdInstanceId]);
+    }, [qrCode, pairingCode, createdInstanceId]);
 
     const loadInstances = async () => {
         try {
@@ -220,6 +227,11 @@ export default function ChipsPage() {
     const fetchQrCode = async (instanceId: string) => {
         try {
             setError('');
+            setCreatedInstanceId(instanceId);
+            setPairingCode('');
+            setPairingPhone('');
+            setConnectionMethod('qr');
+            
             const result = await instancesService.getQrCode(instanceId);
             if (result.qrCode) {
                 setQrCode(result.qrCode);
@@ -229,6 +241,31 @@ export default function ChipsPage() {
             }
         } catch (err) {
             setError(getErrorMessage(err));
+        }
+    };
+
+    const generatePairingCode = async () => {
+        if (!createdInstanceId || !pairingPhone.trim()) return;
+
+        try {
+            setIsGeneratingPairingCode(true);
+            setError('');
+            setConnectionStatus('Gerando código de pareamento...');
+            
+            const result = await instancesService.getPairingCode(createdInstanceId, pairingPhone);
+            if (result.pairingCode) {
+                setPairingCode(result.pairingCode);
+                if (result.phone) {
+                    setPairingPhone(result.phone);
+                }
+                setConnectionStatus('Código gerado com sucesso!');
+            } else {
+                setError('Erro ao obter código de pareamento.');
+            }
+        } catch (err) {
+            setError(getErrorMessage(err));
+        } finally {
+            setIsGeneratingPairingCode(false);
         }
     };
 
@@ -549,36 +586,264 @@ export default function ChipsPage() {
                 </div>
             </div>
 
-            {/* Modal para criar instância */}
+            {/* Modal para criar/conectar instância */}
             {showModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="glass-card p-6 w-full max-w-md">
-                        <h2 className="text-xl font-bold mb-4">Nova Instância WhatsApp</h2>
+                    <div className="glass-card p-6 w-full max-w-md border border-white/10 shadow-2xl relative bg-[#0d0f14]/95">
+                        {/* Botão de Fechar no canto superior direito */}
+                        <button
+                            className="absolute top-4 right-4 text-[var(--text-muted)] hover:text-white transition-colors"
+                            onClick={() => {
+                                setShowModal(false);
+                                setQrCode('');
+                                setPairingCode('');
+                                setPairingPhone('');
+                                setCreatedInstanceId(null);
+                                setConnectionStatus('');
+                                loadInstances();
+                            }}
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
 
-                        {qrCode ? (
-                            <div className="text-center">
-                                <p className="mb-4 text-[var(--text-secondary)]">Escaneie o QR Code com seu WhatsApp:</p>
-                                <div className="bg-white p-4 rounded-lg inline-block mb-4">
-                                    <img src={qrCode} alt="QR Code" className="w-48 h-48" />
-                                </div>
-                                <div className="flex items-center justify-center gap-2 text-sm">
-                                    {connectionStatus.includes('✅') ? (
-                                        <span className="text-green-400">{connectionStatus}</span>
-                                    ) : (
-                                        <>
-                                            <div className="w-4 h-4 border-2 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
-                                            <span className="text-[var(--text-muted)]">{connectionStatus || 'Aguardando conexão...'}</span>
-                                        </>
-                                    )}
-                                </div>
+                        {error && (
+                            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-xs flex items-center gap-2">
+                                <span>⚠️</span>
+                                <span className="flex-1">{error}</span>
+                                <button className="underline font-semibold" onClick={() => setError('')}>Fechar</button>
                             </div>
-                        ) : (
+                        )}
+
+                        {createdInstanceId ? (
+                            // Fase de Conexão (já criada ou carregando para pareamento)
                             <>
+                                <h2 className="text-xl font-bold mb-1">Conectar WhatsApp</h2>
+                                <p className="text-xs text-[var(--text-muted)] mb-4">
+                                    Escolha o método de conexão de sua preferência.
+                                </p>
+
+                                {/* Tabs do Método de Conexão */}
+                                <div className="flex gap-2 p-1 bg-[#161922] rounded-lg mb-6 border border-white/5">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setConnectionMethod('qr');
+                                            setError('');
+                                        }}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-xs font-semibold transition-all ${
+                                            connectionMethod === 'qr'
+                                                ? 'bg-[var(--accent-primary)] text-white shadow'
+                                                : 'text-[var(--text-secondary)] hover:text-white hover:bg-white/5'
+                                        }`}
+                                    >
+                                        <span>📱</span>
+                                        QR Code
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setConnectionMethod('pairing');
+                                            setError('');
+                                        }}
+                                        className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-xs font-semibold transition-all ${
+                                            connectionMethod === 'pairing'
+                                                ? 'bg-[var(--accent-primary)] text-white shadow'
+                                                : 'text-[var(--text-secondary)] hover:text-white hover:bg-white/5'
+                                        }`}
+                                    >
+                                        <span>🔑</span>
+                                        Código de Pareamento
+                                    </button>
+                                </div>
+
+                                {/* Conteúdo de cada Tab */}
+                                {connectionMethod === 'qr' ? (
+                                    // Aba QR Code
+                                    <div className="text-center">
+                                        <p className="mb-4 text-[var(--text-secondary)] text-sm">
+                                            Abra o WhatsApp, vá em Aparelhos Conectados e escaneie o código abaixo:
+                                        </p>
+                                        
+                                        {qrCode ? (
+                                            <div className="bg-white p-4 rounded-xl inline-block mb-4 shadow-inner ring-4 ring-white/5">
+                                                <img src={qrCode} alt="QR Code" className="w-48 h-48 mx-auto" />
+                                            </div>
+                                        ) : (
+                                            <div className="w-48 h-48 mx-auto bg-white/5 rounded-xl border border-dashed border-white/10 flex items-center justify-center mb-4">
+                                                <div className="w-8 h-8 border-3 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-center gap-2 text-sm mt-2">
+                                            {connectionStatus.includes('✅') ? (
+                                                <span className="text-green-400 font-medium flex items-center gap-1.5 animate-pulse">
+                                                    {connectionStatus}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[var(--text-muted)] flex items-center gap-2">
+                                                    <span className="relative flex h-2.5 w-2.5">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent-primary)] opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--accent-primary)]"></span>
+                                                    </span>
+                                                    {connectionStatus || 'Aguardando leitura do QR Code...'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    // Aba Pairing Code
+                                    <div>
+                                        {!pairingCode ? (
+                                            // Formulário para gerar código
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium mb-1 text-[var(--text-secondary)]">
+                                                        Número com DDI (Ex: 55 para Brasil) + DDD + Número
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        className="input w-full bg-[#161922] border-white/10 hover:border-white/20 text-white placeholder-gray-500 font-mono text-sm tracking-wider"
+                                                        placeholder="Ex: 5511999999999"
+                                                        value={pairingPhone}
+                                                        onChange={(e) => setPairingPhone(e.target.value.replace(/\D/g, ''))}
+                                                    />
+                                                    <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                                                        Insira apenas números. O número deve conter o código do país (ex: 55 para o Brasil), DDD e o celular.
+                                                    </p>
+                                                </div>
+
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-primary w-full py-2.5 text-sm font-semibold flex items-center justify-center gap-2"
+                                                    onClick={generatePairingCode}
+                                                    disabled={isGeneratingPairingCode || !pairingPhone.trim()}
+                                                >
+                                                    {isGeneratingPairingCode ? (
+                                                        <>
+                                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                                            Gerando Código...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <span>🔑</span>
+                                                            Gerar Código de Pareamento
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            // Código de pareamento gerado com sucesso
+                                            <div className="text-center space-y-4">
+                                                <p className="text-sm text-[var(--text-secondary)]">
+                                                    Seu código de pareamento foi gerado:
+                                                </p>
+
+                                                {/* Display do Código */}
+                                                <div className="relative group bg-[#161922] p-4 rounded-xl border border-white/10 flex items-center justify-center gap-3">
+                                                    <span className="text-3xl font-extrabold tracking-widest text-[var(--accent-primary)] font-mono animate-pulse">
+                                                        {pairingCode}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[var(--text-secondary)] hover:text-white transition-colors"
+                                                        onClick={() => {
+                                                            navigator.clipboard.writeText(pairingCode);
+                                                            setConnectionStatus('📋 Código copiado!');
+                                                            setTimeout(() => setConnectionStatus(''), 2000);
+                                                        }}
+                                                        title="Copiar código"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+
+                                                {/* Instruções de Pareamento */}
+                                                <div className="text-left bg-[#161922]/50 p-4 rounded-lg border border-white/5 text-xs space-y-2.5 text-[var(--text-secondary)]">
+                                                    <span className="font-bold text-white block mb-1">Como conectar:</span>
+                                                    <div className="flex gap-2.5">
+                                                        <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">1</span>
+                                                        <span>Abra o <strong>WhatsApp</strong> no celular que deseja conectar.</span>
+                                                    </div>
+                                                    <div className="flex gap-2.5">
+                                                        <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">2</span>
+                                                        <span>Vá em <strong>Aparelhos conectados</strong> no menu.</span>
+                                                    </div>
+                                                    <div className="flex gap-2.5">
+                                                        <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">3</span>
+                                                        <span>Toque em <strong>Conectar aparelho</strong> e depois em <strong>Conectar com número de telefone</strong>.</span>
+                                                    </div>
+                                                    <div className="flex gap-2.5">
+                                                        <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">4</span>
+                                                        <span>Digite o código <strong>{pairingCode}</strong> exibido acima.</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Botão de resetar/voltar para gerar com outro número */}
+                                                <div className="pt-2">
+                                                    <button
+                                                        type="button"
+                                                        className="text-xs text-[var(--accent-primary)] hover:underline flex items-center gap-1 mx-auto"
+                                                        onClick={() => {
+                                                            setPairingCode('');
+                                                            setConnectionStatus('');
+                                                        }}
+                                                    >
+                                                        <span>🔄</span> Usar outro número de telefone
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div className="flex items-center justify-center gap-2 text-sm mt-4">
+                                            {connectionStatus.includes('✅') ? (
+                                                <span className="text-green-400 font-medium flex items-center gap-1.5 animate-pulse">
+                                                    {connectionStatus}
+                                                </span>
+                                            ) : (
+                                                <span className="text-[var(--text-muted)] flex items-center gap-2">
+                                                    <span className="relative flex h-2.5 w-2.5">
+                                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent-primary)] opacity-75"></span>
+                                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[var(--accent-primary)]"></span>
+                                                    </span>
+                                                    {connectionStatus || 'Aguardando pareamento com o celular...'}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="mt-6 pt-4 border-t border-white/5 flex gap-3">
+                                    <button
+                                        type="button"
+                                        className="btn btn-secondary w-full py-2 text-xs font-semibold hover:bg-white/10"
+                                        onClick={() => {
+                                            setShowModal(false);
+                                            setQrCode('');
+                                            setPairingCode('');
+                                            setPairingPhone('');
+                                            setCreatedInstanceId(null);
+                                            setConnectionStatus('');
+                                            loadInstances();
+                                        }}
+                                    >
+                                        Fechar e Concluir
+                                    </button>
+                                </div>
+                            </>
+                        ) : (
+                            // Fase de Criação (Instance Form)
+                            <>
+                                <h2 className="text-xl font-bold mb-4">Nova Instância WhatsApp</h2>
+                                
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">Nome da Instância</label>
                                     <input
                                         type="text"
-                                        className="input w-full"
+                                        className="input w-full bg-[#161922] border-white/10 hover:border-white/20 text-white placeholder-gray-500"
                                         placeholder="Ex: Chip Principal"
                                         value={newInstanceName}
                                         onChange={(e) => setNewInstanceName(e.target.value)}
@@ -588,23 +853,24 @@ export default function ChipsPage() {
                                 <div className="mb-4">
                                     <label className="block text-sm font-medium mb-2">Provedor WhatsApp</label>
                                     <select
-                                        className="input w-full"
+                                        className="input w-full bg-[#161922] border-white/10 text-white"
                                         value={selectedProvider}
                                         onChange={(e) => setSelectedProvider(e.target.value as ProviderType)}
                                     >
                                         <option value="evolution">🟢 Evolution API (Recomendado)</option>
                                         <option value="waha">🔵 WAHA (Alternativo)</option>
                                     </select>
-                                    <p className="text-xs text-[var(--text-muted)] mt-1">
+                                    <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
                                         {selectedProvider === 'evolution'
-                                            ? 'Evolution API - Estável, multi-sessão, API REST nativa'
-                                            : 'WAHA - Alternativa leve (suporta múltiplas sessões)'
+                                            ? 'Evolution API - Recomendado. Suporta conexão via QR Code e também por código de pareamento por número.'
+                                            : 'WAHA - Provedor leve. Suporta somente conexão via escaneamento de QR Code.'
                                         }
                                     </p>
                                 </div>
 
-                                <div className="flex gap-3">
+                                <div className="flex gap-3 pt-2">
                                     <button
+                                        type="button"
                                         className="btn btn-secondary flex-1"
                                         onClick={() => {
                                             setShowModal(false);
@@ -616,29 +882,15 @@ export default function ChipsPage() {
                                         Cancelar
                                     </button>
                                     <button
+                                        type="button"
                                         className="btn btn-primary flex-1"
                                         onClick={createInstance}
                                         disabled={isCreating || !newInstanceName.trim()}
                                     >
-                                        {isCreating ? 'Criando...' : 'Criar e Conectar'}
+                                        {isCreating ? 'Criando...' : 'Criar Instância'}
                                     </button>
                                 </div>
                             </>
-                        )}
-
-                        {qrCode && (
-                            <button
-                                className="btn btn-secondary w-full mt-4"
-                                onClick={() => {
-                                    setShowModal(false);
-                                    setQrCode('');
-                                    setCreatedInstanceId(null);
-                                    setConnectionStatus('');
-                                    loadInstances();
-                                }}
-                            >
-                                Fechar
-                            </button>
                         )}
                     </div>
                 </div>

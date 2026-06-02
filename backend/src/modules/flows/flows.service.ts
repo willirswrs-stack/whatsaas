@@ -15,6 +15,7 @@ import { FLOW_QUEUE } from '../../config/bull.config';
 import { MetaGraphApiService } from '../meta-templates/meta-graph-api.service';
 import { ActivePreventionService } from '../anti-ban/active-prevention.service';
 import { HumanBehaviorService } from '../anti-ban/human-behavior.service';
+import { InboxService } from '../inbox/inbox.service';
 
 @Injectable()
 export class FlowsService implements OnModuleInit {
@@ -37,6 +38,7 @@ export class FlowsService implements OnModuleInit {
         private metaGraphApiService: MetaGraphApiService,
         private activePrevention: ActivePreventionService,
         private humanBehavior: HumanBehaviorService,
+        private inboxService: InboxService,
     ) { }
 
     // ============ FLOWS ============
@@ -444,6 +446,7 @@ export class FlowsService implements OnModuleInit {
             console.error(`[Flow] Flow not found for execution ${executionId}`);
             return;
         }
+        const tenantId = flow.tenantId;
 
         // 2. Find Next Node via Edge (using improved logic)
         const currentNodeId = execution.currentNodeId;
@@ -538,6 +541,20 @@ export class FlowsService implements OnModuleInit {
                     const messageId = res?.messageId;
                     if (messageId) {
                         await this.updateCampaignContactMessageId(execution, messageId);
+                        await this.inboxService.saveMessage({
+                            tenantId,
+                            instanceId: instance.id,
+                            instanceName: instance.instanceName,
+                            remoteJid: `${contact.phone}@s.whatsapp.net`,
+                            remotePhone: contact.phone,
+                            remoteName: contact.name,
+                            direction: 'outbound',
+                            type: 'text',
+                            content: responseContent,
+                            status: 'sent',
+                            wamid: messageId,
+                            contactId: contact.id,
+                        }).catch(err => console.error(`[Flow] Error saving AI message to inbox:`, err.message));
                     }
 
                     execution.logs.push({
@@ -570,6 +587,20 @@ export class FlowsService implements OnModuleInit {
                     const messageId = res?.messageId;
                     if (messageId) {
                         await this.updateCampaignContactMessageId(execution, messageId);
+                        await this.inboxService.saveMessage({
+                            tenantId,
+                            instanceId: instance.id,
+                            instanceName: instance.instanceName,
+                            remoteJid: `${contact.phone}@s.whatsapp.net`,
+                            remotePhone: contact.phone,
+                            remoteName: contact.name,
+                            direction: 'outbound',
+                            type: 'text',
+                            content: content,
+                            status: 'sent',
+                            wamid: messageId,
+                            contactId: contact.id,
+                        }).catch(err => console.error(`[Flow] Error saving text message to inbox:`, err.message));
                     }
 
                     execution.logs.push({
@@ -609,6 +640,21 @@ export class FlowsService implements OnModuleInit {
                             const messageId = res?.messageId;
                             if (messageId) {
                                 await this.updateCampaignContactMessageId(execution, messageId);
+                                await this.inboxService.saveMessage({
+                                    tenantId,
+                                    instanceId: instance.id,
+                                    instanceName: instance.instanceName,
+                                    remoteJid: `${contact.phone}@s.whatsapp.net`,
+                                    remotePhone: contact.phone,
+                                    remoteName: contact.name,
+                                    direction: 'outbound',
+                                    type: mediaType === 'sticker' ? 'sticker' : (mediaType === 'image' || mediaType === 'video' || mediaType === 'audio' || mediaType === 'document' ? mediaType : 'text'),
+                                    content: caption || `[Media: ${mediaType}]`,
+                                    mediaUrl: mediaUrl,
+                                    status: 'sent',
+                                    wamid: messageId,
+                                    contactId: contact.id,
+                                }).catch(err => console.error(`[Flow] Error saving media message to inbox:`, err.message));
                             }
 
                             execution.logs.push({
@@ -652,7 +698,23 @@ export class FlowsService implements OnModuleInit {
                     const fullMessage = caption ? `${caption}\n${url}` : url;
 
                     if (url) {
-                        await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+                        const res = await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+                        if (res?.messageId) {
+                            await this.inboxService.saveMessage({
+                                tenantId,
+                                instanceId: instance.id,
+                                instanceName: instance.instanceName,
+                                remoteJid: `${contact.phone}@s.whatsapp.net`,
+                                remotePhone: contact.phone,
+                                remoteName: contact.name,
+                                direction: 'outbound',
+                                type: 'text',
+                                content: fullMessage,
+                                status: 'sent',
+                                wamid: res.messageId,
+                                contactId: contact.id,
+                            }).catch(err => console.error(`[Flow] Error saving link message to inbox:`, err.message));
+                        }
                         execution.logs.push({
                             nodeId: nextNode.id,
                             action: 'link_sent',
@@ -678,6 +740,9 @@ export class FlowsService implements OnModuleInit {
                     await this.activePrevention.applyPrevention(instance.id);
 
                     // Try sending real interactive buttons if supported by provider (e.g. Evolution API)
+                    let finalMessageId: string | undefined;
+                    let finalContent = message;
+
                     try {
                         // Evolution Cloud specific (if supported)
                         if ((instance.provider as string) === 'evolution_cloud' && (provider as any).sendButtons) {
@@ -688,27 +753,42 @@ export class FlowsService implements OnModuleInit {
                                     label: b.label || b.text || b
                                 }))
                             });
-                            const messageId = res?.messageId;
-                            if (messageId) {
-                                await this.updateCampaignContactMessageId(execution, messageId);
-                            }
+                            finalMessageId = res?.messageId;
                         } else {
                             // Fallback: Send as text with numbered list
-                            let fullMessage = message;
                             if (buttons.length > 0) {
                                 const buttonList = buttons.map((b: any, i: number) => `${i + 1}. ${b.label || b.text || b}`).join('\n');
-                                fullMessage = `${message}\n\n${buttonList}`;
+                                finalContent = `${message}\n\n${buttonList}`;
                             }
-                            await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+                            const res = await provider.sendText(instance.instanceName, contact.phone, finalContent);
+                            finalMessageId = res?.messageId;
                         }
                     } catch (btnErr) {
                         console.error(`[Flow] Error sending buttons at node ${nextNode.id}, falling back to text:`, btnErr.message);
-                        let fullMessage = message;
                         if (buttons.length > 0) {
                             const buttonList = buttons.map((b: any, i: number) => `${i + 1}. ${b.label || b.text || b}`).join('\n');
-                            fullMessage = `${message}\n\n${buttonList}`;
+                            finalContent = `${message}\n\n${buttonList}`;
                         }
-                        await provider.sendText(instance.instanceName, contact.phone, fullMessage);
+                        const res = await provider.sendText(instance.instanceName, contact.phone, finalContent);
+                        finalMessageId = res?.messageId;
+                    }
+
+                    if (finalMessageId) {
+                        await this.updateCampaignContactMessageId(execution, finalMessageId);
+                        await this.inboxService.saveMessage({
+                            tenantId,
+                            instanceId: instance.id,
+                            instanceName: instance.instanceName,
+                            remoteJid: `${contact.phone}@s.whatsapp.net`,
+                            remotePhone: contact.phone,
+                            remoteName: contact.name,
+                            direction: 'outbound',
+                            type: 'text',
+                            content: finalContent,
+                            status: 'sent',
+                            wamid: finalMessageId,
+                            contactId: contact.id,
+                        }).catch(err => console.error(`[Flow] Error saving buttons message to inbox:`, err.message));
                     }
 
                     execution.logs.push({
@@ -763,7 +843,23 @@ export class FlowsService implements OnModuleInit {
                     const questionText = nodeData?.config?.question || nodeData?.config?.message || 'Qual sua resposta?';
                     const saveTo = nodeData?.config?.saveTo || 'lastAnswer';
 
-                    await provider.sendText(instance.instanceName, contact.phone, questionText);
+                    const res = await provider.sendText(instance.instanceName, contact.phone, questionText);
+                    if (res?.messageId) {
+                        await this.inboxService.saveMessage({
+                            tenantId,
+                            instanceId: instance.id,
+                            instanceName: instance.instanceName,
+                            remoteJid: `${contact.phone}@s.whatsapp.net`,
+                            remotePhone: contact.phone,
+                            remoteName: contact.name,
+                            direction: 'outbound',
+                            type: 'text',
+                            content: questionText,
+                            status: 'sent',
+                            wamid: res.messageId,
+                            contactId: contact.id,
+                        }).catch(err => console.error(`[Flow] Error saving question to inbox:`, err.message));
+                    }
 
                     execution.status = 'waiting_response';
                     execution.variables = {

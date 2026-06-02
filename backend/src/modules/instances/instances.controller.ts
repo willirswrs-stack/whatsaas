@@ -58,29 +58,7 @@ export class InstancesController {
         };
     }
 
-    // Proxies - DEVE ficar antes das rotas com :id para evitar conflito
-    @Get('proxies')
-    @ApiOperation({ summary: 'List all proxies' })
-    async findAllProxies(@CurrentTenant() tenantId: string) {
-        return this.instancesService.findAllProxies(tenantId);
-    }
 
-    @Post('proxies')
-    @ApiOperation({ summary: 'Create a new proxy' })
-    async createProxy(
-        @Body() data: { host: string; port: number; type?: string; username?: string; password?: string },
-        @CurrentTenant() tenantId: string,
-    ) {
-        return this.instancesService.createProxy(tenantId, data);
-    }
-
-    @Post('proxies/test')
-    @ApiOperation({ summary: 'Test a proxy connection validity' })
-    async testProxy(
-        @Body() data: { host: string; port: number; type: string; username?: string; password?: string },
-    ) {
-        return this.instancesService.testProxy(data);
-    }
 
     // Rotas com parâmetros dinâmicos - devem ficar por último
     @Patch(':id')
@@ -167,6 +145,17 @@ export class InstancesController {
     ) {
         const qrCode = await this.instancesService.getQrCode(id, tenantId);
         return { qrCode };
+    }
+
+    @Post(':id/pairing-code')
+    @ApiOperation({ summary: 'Get phone pairing code for instance' })
+    async getPairingCode(
+        @Param('id') id: string,
+        @Body() body: { phoneNumber: string },
+        @CurrentTenant() tenantId: string,
+    ) {
+        const result = await this.instancesService.getPairingCode(id, tenantId, body.phoneNumber);
+        return { pairingCode: result.pairingCode, phone: result.phone };
     }
 
     @Delete(':id')

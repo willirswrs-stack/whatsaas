@@ -5,6 +5,7 @@ import { useEffect, useState, useRef } from 'react';
 import { io, Socket } from 'socket.io-client';
 import { Header } from '@/components/Header';
 import { warmupService, WarmupStats } from '@/lib/warmup';
+import { instancesService } from '@/lib/instances';
 import api from '@/lib/api';
 
 const rampStages = [
@@ -143,6 +144,14 @@ export default function WarmupPage() {
     const [isLive, setIsLive] = useState(false);
     const [selectedChips, setSelectedChips] = useState<string[]>([]);
     const [liveLoading, setLiveLoading] = useState(false);
+
+    // Modal Config States
+    const [configInstanceId, setConfigInstanceId] = useState<string | null>(null);
+    const [selectedVoice, setSelectedVoice] = useState<string>('alloy');
+    const [selectedVoiceSpeed, setSelectedVoiceSpeed] = useState<number>(1.0);
+    const [selectedVoiceModel, setSelectedVoiceModel] = useState<'tts-1' | 'tts-1-hd'>('tts-1-hd');
+    const [isPlayingPreview, setIsPlayingPreview] = useState(false);
+
     const chatEndRef = useRef<HTMLDivElement>(null);
     const bottomPlaceholderRef = useRef<HTMLDivElement>(null);
     const socketRef = useRef<Socket | null>(null);
@@ -421,7 +430,7 @@ export default function WarmupPage() {
                         {safeStats.instances.length > 0 ? (
                             <table className="table w-full">
                                 <thead>
-                                    <tr><th className="w-8" /><th>Número</th><th>Dia</th><th>Limite</th><th>Status</th><th>Saúde</th></tr>
+                                    <tr><th className="w-8" /><th>Número</th><th>Dia</th><th>Limite</th><th>Status</th><th>Saúde</th><th>Ações</th></tr>
                                 </thead>
                                 <tbody>
                                     {safeStats.instances.map((chip, index) => {
@@ -455,6 +464,14 @@ export default function WarmupPage() {
                                                 <td>{chip.dailyLimit}</td>
                                                 <td>{chip.sent} env</td>
                                                 <td><span className={chip.health >= 80 ? 'text-green-500' : 'text-yellow-500'}>{chip.health}%</span></td>
+                                                <td>
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); openConfig(chip); }}
+                                                        className="px-2 py-1 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-xs flex items-center gap-1 transition-colors"
+                                                    >
+                                                        ⚙️ Voz
+                                                    </button>
+                                                </td>
                                             </tr>
                                         );
                                     })}
@@ -540,6 +557,104 @@ export default function WarmupPage() {
                         {/* Scroll Anchors dynamically tracked by system hooks */}
                         <div ref={bottomPlaceholderRef} className="h-4 w-full" />
                         <div ref={chatEndRef} className="h-2 w-full" />
+                    </div>
+                </div>
+            )}
+
+            {/* Config Modal */}
+            {configInstanceId && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-[#1a1c24] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl shadow-black/50 overflow-hidden flex flex-col">
+                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <h3 className="font-bold text-white flex items-center gap-2">
+                                🎙️ Configurar Voz IA
+                            </h3>
+                            <button onClick={() => setConfigInstanceId(null)} className="text-gray-400 hover:text-white p-1">✕</button>
+                        </div>
+                        <div className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-400 mb-1">Voz (OpenAI ou ID ElevenLabs)</label>
+                                <select 
+                                    className="w-full bg-[#0f1115] border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                    value={['alloy','echo','fable','onyx','nova','shimmer'].includes(selectedVoice) ? selectedVoice : 'custom'}
+                                    onChange={(e) => {
+                                        if (e.target.value !== 'custom') {
+                                            setSelectedVoice(e.target.value);
+                                        } else {
+                                            setSelectedVoice('');
+                                        }
+                                    }}
+                                >
+                                    <optgroup label="OpenAI (Padrão)">
+                                        <option value="alloy">Alloy (Andrógino)</option>
+                                        <option value="echo">Echo (Masculino)</option>
+                                        <option value="fable">Fable (Masculino/Britânico)</option>
+                                        <option value="onyx">Onyx (Masculino Grave)</option>
+                                        <option value="nova">Nova (Feminino)</option>
+                                        <option value="shimmer">Shimmer (Feminino Claro)</option>
+                                    </optgroup>
+                                    <optgroup label="ElevenLabs (Customizado)">
+                                        <option value="custom">Inserir ID de Voz...</option>
+                                    </optgroup>
+                                </select>
+                                
+                                {(!['alloy','echo','fable','onyx','nova','shimmer'].includes(selectedVoice) || selectedVoice === '') && (
+                                    <div className="mt-2">
+                                        <input 
+                                            type="text" 
+                                            placeholder="Voice ID do ElevenLabs"
+                                            className="w-full bg-[#0f1115] border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                            value={selectedVoice}
+                                            onChange={(e) => setSelectedVoice(e.target.value)}
+                                        />
+                                        <p className="text-[10px] text-gray-500 mt-1">Insira o Voice ID de uma voz clonada no painel ElevenLabs.</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-400 mb-1">Velocidade: {selectedVoiceSpeed}x</label>
+                                    <input 
+                                        type="range" min="0.25" max="2.0" step="0.25" 
+                                        value={selectedVoiceSpeed} 
+                                        onChange={(e) => setSelectedVoiceSpeed(Number(e.target.value))}
+                                        className="w-full accent-indigo-500" 
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-400 mb-1">Qualidade do Áudio</label>
+                                    <select 
+                                        className="w-full bg-[#0f1115] border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                        value={selectedVoiceModel}
+                                        onChange={(e) => setSelectedVoiceModel(e.target.value as any)}
+                                    >
+                                        <option value="tts-1-hd">HD (Melhor qualidade)</option>
+                                        <option value="tts-1">Normal (Mais rápido)</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 border-t border-white/10 bg-white/5 flex justify-between gap-3 items-center">
+                            <button 
+                                onClick={playVoicePreview}
+                                disabled={isPlayingPreview || !selectedVoice}
+                                className="px-4 py-2 bg-[#202c33] text-[#53bdeb] text-sm font-medium rounded-lg border border-[#53bdeb]/30 hover:bg-[#53bdeb]/10 transition-colors flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {isPlayingPreview ? (
+                                    <><div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> Testando...</>
+                                ) : (
+                                    <>▶ Ouvir Amostra</>
+                                )}
+                            </button>
+                            <button 
+                                onClick={saveConfig}
+                                className="px-5 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-lg transition-colors"
+                            >
+                                Salvar Voz
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

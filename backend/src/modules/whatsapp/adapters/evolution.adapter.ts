@@ -139,6 +139,79 @@ export class EvolutionAdapter implements IWhatsAppProvider {
         return '';
     }
 
+    async getPairingCode(instanceName: string, phoneNumber: string): Promise<{ pairingCode: string; phone: string }> {
+        const maxRetries = 10;
+        const retryDelay = 2500;
+        const formatted = phoneNumber.replace(/\D/g, '');
+
+        let alternate: string | null = null;
+        if (formatted.startsWith('55') && formatted.length === 13) {
+            const ddd = formatted.substring(2, 4);
+            const eighthDigitStart = formatted.substring(5);
+            alternate = `55${ddd}${eighthDigitStart}`;
+        } else if (formatted.startsWith('55') && formatted.length === 12) {
+            const ddd = formatted.substring(2, 4);
+            const rest = formatted.substring(4);
+            alternate = `55${ddd}9${rest}`;
+        }
+
+        const phoneNumbersToTry = [formatted];
+        if (alternate) {
+            phoneNumbersToTry.push(alternate);
+        }
+
+        this.logger.log(`Generating pairing code for ${instanceName} using phone primary: ${formatted}${alternate ? `, alternate: ${alternate}` : ''}`);
+
+        const isValidPairingCode = (code: any): boolean => {
+            if (typeof code !== 'string') return false;
+            const clean = code.replace(/[^A-Za-z0-9]/g, '');
+            return clean.length === 8;
+        };
+
+        const extractPairingCode = (res: any): string | null => {
+            if (!res) return null;
+            const candidates = [
+                res.pairingCode,
+                res.code,
+                res.qrcode?.pairingCode,
+                res.qrcode?.code
+            ];
+            for (const cand of candidates) {
+                if (isValidPairingCode(cand)) {
+                    return cand.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+                }
+            }
+            return null;
+        };
+
+        for (let i = 0; i < maxRetries; i++) {
+            for (const phone of phoneNumbersToTry) {
+                try {
+                    this.logger.log(`Attempting to generate pairing code for ${instanceName} using phone ${phone} (attempt ${i + 1}/${maxRetries})`);
+                    const response = await this.request('GET', `/instance/connect/${instanceName}?number=${phone}`);
+                    
+                    this.logger.debug(`Pairing Code response for ${phone} (attempt ${i + 1}): ${JSON.stringify(response).substring(0, 100)}...`);
+
+                    const code = extractPairingCode(response);
+                    if (code) {
+                        this.logger.log(`Successfully generated pairing code for ${instanceName} using phone ${phone} on attempt ${i + 1}: ${code}`);
+                        return { pairingCode: code, phone };
+                    }
+                    
+                    this.logger.log(`Pairing code not ready yet for ${instanceName} with phone ${phone} on attempt ${i + 1}.`);
+                } catch (error: any) {
+                    this.logger.warn(`Pairing Code Fetch Error for phone ${phone} (${i + 1}/${maxRetries}): ${error.message}`);
+                }
+            }
+            
+            if (i < maxRetries - 1) {
+                await this.sleep(retryDelay);
+            }
+        }
+
+        throw new Error('Código de pareamento não gerado a tempo. Certifique-se de que o número de telefone está ativo no WhatsApp e tente novamente.');
+    }
+
     async getStatus(instanceName: string): Promise<InstanceStatus> {
         try {
             const response = await this.request('GET', `/instance/connectionState/${instanceName}`);
@@ -215,7 +288,11 @@ export class EvolutionAdapter implements IWhatsAppProvider {
             const response = await this.request('POST', `/message/sendWhatsAppAudio/${instanceName}`, {
                 number: this.formatPhone(to),
                 audio: media.url,
-                delay: 1000, // Pequena simulação nativa
+                options: {
+                    delay: 1000, // Pequena simulação nativa
+                    presence: 'recording',
+                    encoding: true, // Indica que o áudio enviado é uma string base64 pura
+                },
             });
 
             this.logger.log(`Sent WhatsApp Voice Note (PTT) to ${to} via Evolution API`);
@@ -252,14 +329,14 @@ export class EvolutionAdapter implements IWhatsAppProvider {
         durationMs: number,
     ): Promise<void> {
         try {
-            await this.request('POST', `/chat/presence/${instanceName}`, {
+            await this.request('POST', `/chat/presenceUpdate/${instanceName}`, {
                 number: this.formatPhone(to),
                 presence: presence === 'paused' ? 'paused' : presence,
             });
 
             if (presence !== 'paused' && durationMs > 0) {
                 await this.sleep(durationMs);
-                await this.request('POST', `/chat/presence/${instanceName}`, {
+                await this.request('POST', `/chat/presenceUpdate/${instanceName}`, {
                     number: this.formatPhone(to),
                     presence: 'paused',
                 });

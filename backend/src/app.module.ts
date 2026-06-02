@@ -40,6 +40,8 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { OrderWebhooksModule } from './modules/order-webhooks/order-webhooks.module';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { ProxiesModule } from './modules/proxies/proxies.module';
+import { InboxModule } from './modules/inbox/inbox.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 
 @Module({
@@ -132,6 +134,9 @@ import { ProxiesModule } from './modules/proxies/proxies.module';
       limit: 100,
     }]),
 
+    // Task Scheduling (Cron jobs)
+    ScheduleModule.forRoot(),
+
     // Application Modules
     HealthModule,
     BullBoardModule, // <-- Monitoramento de Filas
@@ -156,6 +161,7 @@ import { ProxiesModule } from './modules/proxies/proxies.module';
     UploadsModule,
     OrderWebhooksModule,
     ProxiesModule,
+    InboxModule,
   ],
   controllers: [AppController],
   providers: [

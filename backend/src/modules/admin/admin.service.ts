@@ -5,7 +5,8 @@ import * as os from 'os';
 import * as bcrypt from 'bcrypt';
 
 import { Tenant, User, SubscriptionPlan } from '../tenants/entities/tenant.entity';
-import { Instance, Proxy } from '../instances/entities/instance.entity';
+import { Instance } from '../instances/entities/instance.entity';
+import { ProxyEntity } from '../proxies/entities/proxy.entity';
 import { Campaign } from '../campaigns/entities/campaign.entity';
 
 @Injectable()
@@ -24,8 +25,8 @@ export class AdminService {
         private campaignRepo: Repository<Campaign>,
         @InjectRepository(SubscriptionPlan)
         private planRepo: Repository<SubscriptionPlan>,
-        @InjectRepository(Proxy)
-        private proxyRepo: Repository<Proxy>,
+        @InjectRepository(ProxyEntity)
+        private proxyRepo: Repository<ProxyEntity>,
     ) {}
 
     private globalFeatures = {

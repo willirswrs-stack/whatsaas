@@ -39,31 +39,21 @@ export default function ProxiesPage() {
     const fetchProxies = async () => {
         try {
             setLoading(true);
-            // Fetch manual proxies
-            const resManual = await api.get('/instances/proxies');
+            const res = await api.get('/proxies');
             
-            // Fetch purchased proxies
-            let resPurchased = { data: [] };
-            try {
-                resPurchased = await api.get('/proxies');
-            } catch (err) {
-                console.warn('Endpoint /proxies ainda não respondeu, ignorando...', err);
-            }
-            
-            // Format purchased proxies to match manual proxy schema for the table
-            const formattedPurchased = resPurchased.data.map((p: any) => ({
+            const formatted = res.data.map((p: any) => ({
                 id: p.id,
                 host: p.host,
                 port: p.port,
                 type: 'socks5',
                 country: 'Móvel / ISP',
-                city: p.provider,
-                latencyMs: 15,
-                status: p.status,
+                city: p.provider || 'Custom',
+                latencyMs: p.latencyMs || 15,
+                status: p.status || 'unknown',
                 instances: p.assignedInstanceId ? [p.assignedInstanceId] : []
             }));
 
-            setProxyList([...(resManual.data || []), ...formattedPurchased]);
+            setProxyList(formatted);
         } catch (e) {
             console.error('Erro ao carregar proxies', e);
         } finally {
@@ -77,9 +67,9 @@ export default function ProxiesPage() {
         setIsTesting(true);
         setTestResult(null);
         try {
-            const res = await api.post('/instances/proxies/test', {
+            const res = await api.post('/proxies/test', {
                 host: newProxy.host,
-                port: Number(newProxy.port),
+                port: newProxy.port,
                 type: newProxy.type,
                 username: newProxy.username,
                 password: newProxy.password
@@ -96,9 +86,9 @@ export default function ProxiesPage() {
     const handleAddProxy = async () => {
         if (!newProxy.host) return;
         try {
-            await api.post('/instances/proxies', {
+            await api.post('/proxies', {
                 host: newProxy.host,
-                port: Number(newProxy.port),
+                port: newProxy.port,
                 type: newProxy.type,
                 username: newProxy.username,
                 password: newProxy.password,
@@ -118,7 +108,7 @@ export default function ProxiesPage() {
     const handleDeleteProxy = async (id: string) => {
         if (!confirm('Tem certeza que deseja excluir este proxy?')) return;
         try {
-            await api.delete(`/instances/proxies/${id}`);
+            await api.delete(`/proxies/${id}`);
             fetchProxies();
         } catch (e) {
             alert('Falha ao excluir proxy.');

@@ -10,6 +10,7 @@ import { FlowExecution } from '../flows/entities/flow.entity';
 import { FlowsService } from '../flows/flows.service';
 import { Contact } from '../contacts/entities/contact.entity';
 import { GroupWarmupService } from '../anti-ban/group-warmup.service';
+import { InboxService } from '../inbox/inbox.service';
 
 import { SkipThrottle } from '@nestjs/throttler';
 
@@ -41,6 +42,8 @@ export class EvolutionWebhookController {
         private flowsService: FlowsService,
         @Inject(forwardRef(() => GroupWarmupService))
         private groupWarmupService: GroupWarmupService,
+        @Inject(forwardRef(() => InboxService))
+        private inboxService: InboxService,
     ) { }
 
     @Post('evolution')
@@ -228,6 +231,15 @@ export class EvolutionWebhookController {
 
                 // Extract phone number
                 const phone = remoteJid.replace('@s.whatsapp.net', '').replace('@g.us', '');
+                const isGroup = remoteJid.endsWith('@g.us');
+
+                // Detect message type
+                let messageType: 'text' | 'image' | 'video' | 'audio' | 'document' | 'sticker' | 'other' = 'text';
+                if (msg.message?.imageMessage) messageType = 'image';
+                else if (msg.message?.videoMessage) messageType = 'video';
+                else if (msg.message?.audioMessage) messageType = 'audio';
+                else if (msg.message?.documentMessage) messageType = 'document';
+                else if (msg.message?.stickerMessage) messageType = 'sticker';
 
                 // Get message content
                 const messageContent =
@@ -235,7 +247,13 @@ export class EvolutionWebhookController {
                     msg.message?.extendedTextMessage?.text ||
                     msg.message?.imageMessage?.caption ||
                     msg.message?.videoMessage?.caption ||
-                    '[Mídia]';
+                    msg.message?.documentMessage?.caption ||
+                    (messageType !== 'text' ? `[${messageType.charAt(0).toUpperCase() + messageType.slice(1)}]` : '[Mídia]');
+
+                const remoteName =
+                    msg.pushName ||
+                    msg.key?.participant?.split('@')[0] ||
+                    undefined;
 
                 this.logger.log(`📥 Incoming message from ${phone}: ${messageContent.substring(0, 50)}`);
 
@@ -243,8 +261,40 @@ export class EvolutionWebhookController {
                 const instance = await this.instanceRepo.findOne({ where: { instanceName } });
                 if (!instance) continue;
 
+                // 📦 PERSIST TO INBOX (both individual and group messages)
+                this.inboxService.saveMessage({
+                    tenantId: instance.tenantId,
+                    instanceId: instance.id,
+                    instanceName: instance.instanceName,
+                    remoteJid,
+                    remotePhone: phone,
+                    remoteName,
+                    wamid: msg.key?.id,
+                    direction: 'inbound',
+                    type: messageType,
+                    content: messageContent,
+                    status: 'received',
+                    isGroup,
+                    groupName: isGroup ? (msg.key?.remoteJid?.split('@')[0] || undefined) : undefined,
+                    rawPayload: msg,
+                }).catch(err => this.logger.error(`Failed to persist inbox message: ${err.message}`));
+
+                // 📡 Emit real-time event to tenant's WebSocket room
+                this.eventsGateway.emitToTenant(instance.tenantId, 'inbox.message', {
+                    remoteJid,
+                    remotePhone: phone,
+                    remoteName,
+                    instanceId: instance.id,
+                    instanceName: instance.instanceName,
+                    direction: 'inbound',
+                    type: messageType,
+                    content: messageContent,
+                    isGroup,
+                    timestamp: new Date().toISOString(),
+                });
+
                 // Intercept group messages for proactive, reactive warm-up interaction
-                if (remoteJid.endsWith('@g.us')) {
+                if (isGroup) {
                     this.groupWarmupService.handleGroupIncomingMessage(instanceName, remoteJid, messageContent).catch(err => {
                         this.logger.error(`Failed during reactive group warmup: ${err.message}`);
                     });

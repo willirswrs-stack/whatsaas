@@ -8,6 +8,7 @@ export interface LLMApiKeys {
     anthropicKey?: string;
     geminiKey?: string;
     groqKey?: string;
+    elevenLabsKey?: string;
 }
 
 @Injectable()
@@ -33,8 +34,9 @@ export class SettingsService {
             anthropicKey: settings.anthropicKey ? this.maskKey(settings.anthropicKey) : '',
             geminiKey: settings.geminiKey ? this.maskKey(settings.geminiKey) : '',
             groqKey: settings.groqKey ? this.maskKey(settings.groqKey) : '',
+            elevenLabsKey: settings.extraSettings?.elevenLabsKey ? this.maskKey(settings.extraSettings.elevenLabsKey) : '',
             extraSettings: settings.extraSettings,
-        };
+        } as Partial<TenantSettings> & { elevenLabsKey?: string };
     }
 
     async updateSettings(tenantId: string, data: {
@@ -42,6 +44,7 @@ export class SettingsService {
         anthropicKey?: string;
         geminiKey?: string;
         groqKey?: string;
+        elevenLabsKey?: string;
         extraSettings?: Record<string, any>;
     }): Promise<void> {
         let settings = await this.settingsRepo.findOne({ where: { tenantId } });
@@ -63,6 +66,15 @@ export class SettingsService {
         if (data.groqKey && !data.groqKey.includes('*')) {
             settings.groqKey = data.groqKey;
         }
+
+        // Tratar elevenLabsKey dentro de extraSettings
+        if (data.elevenLabsKey !== undefined) {
+            if (!settings.extraSettings) settings.extraSettings = {};
+            if (!data.elevenLabsKey.includes('*')) {
+                settings.extraSettings.elevenLabsKey = data.elevenLabsKey;
+            }
+        }
+
         if (data.extraSettings) {
             settings.extraSettings = { ...settings.extraSettings, ...data.extraSettings };
         }
@@ -102,6 +114,7 @@ export class SettingsService {
             anthropicKey: settings?.anthropicKey || undefined,
             geminiKey: settings?.geminiKey || undefined,
             groqKey: settings?.groqKey || undefined,
+            elevenLabsKey: settings?.extraSettings?.elevenLabsKey || undefined,
         };
     }
 

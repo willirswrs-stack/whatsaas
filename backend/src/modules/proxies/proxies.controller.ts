@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Param, Body, UseGuards, Request } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProxiesService } from './proxies.service';
 
@@ -17,5 +17,22 @@ export class ProxiesController {
     async assignProxy(@Request() req, @Body() body: { proxyId: string, instanceId: string | null }) {
         const tenantId = req.user.tenantId;
         return this.proxiesService.assignProxy(tenantId, body.proxyId, body.instanceId);
+    }
+
+    @Post()
+    async createProxy(@Request() req, @Body() data: any) {
+        const tenantId = req.user.tenantId;
+        return this.proxiesService.createProxy(tenantId, data);
+    }
+
+    @Delete(':id')
+    async deleteProxy(@Request() req, @Param('id') id: string) {
+        const tenantId = req.user.tenantId;
+        return this.proxiesService.deleteProxy(id, tenantId);
+    }
+
+    @Post('test')
+    async testProxy(@Body() data: any) {
+        return this.proxiesService.testProxy(data);
     }
 }

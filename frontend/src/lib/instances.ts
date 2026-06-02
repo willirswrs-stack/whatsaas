@@ -166,6 +166,15 @@ export const instancesService = {
         return response.data;
     },
 
+    async getPairingCode(id: string, phoneNumber: string): Promise<{ pairingCode: string; phone: string }> {
+        if (isDemoMode()) {
+            console.log('🎭 Demo Mode: Retornando Pairing Code mock');
+            return { pairingCode: 'A1B2-C3D4', phone: phoneNumber.replace(/\D/g, '') };
+        }
+        const response = await api.post<{ pairingCode: string; phone: string }>(`/instances/${id}/pairing-code`, { phoneNumber });
+        return response.data;
+    },
+
     async delete(id: string): Promise<void> {
         if (isDemoMode()) {
             console.log('🎭 Demo Mode: Deletando instância mock');
@@ -225,7 +234,7 @@ export const instancesService = {
                 { id: 'proxy-003', host: 'rj-proxy.example.com', port: 1080, type: 'socks5', status: 'inactive', latency: 120 },
             ];
         }
-        const response = await api.get<Proxy[]>('/instances/proxies');
+        const response = await api.get<Proxy[]>('/proxies');
         return response.data;
     },
 
@@ -233,7 +242,7 @@ export const instancesService = {
         if (isDemoMode()) {
             return { ...data, id: 'proxy-' + Date.now(), status: 'active', latency: Math.floor(Math.random() * 100) };
         }
-        const response = await api.post<Proxy>('/instances/proxies', data);
+        const response = await api.post<Proxy>('/proxies', data);
         return response.data;
     },
 

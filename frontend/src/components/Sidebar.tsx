@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 // Nav items with icon paths
 const navItems = [
     { href: '/', label: 'Dashboard', icon: '/icons/sidebar/dashboard.png' },
+    { href: '/inbox', label: 'Inbox', icon: '/icons/sidebar/contacts.png' },
     { href: '/campaigns', label: 'Campanhas', icon: '/icons/sidebar/campaigns.png' },
     { href: '/flows', label: 'Fluxos', icon: '/icons/sidebar/flows.png' },
     { href: '/chips', label: 'Chips', icon: '/icons/sidebar/chips.png' },

@@ -15,6 +15,7 @@ import { FLOW_QUEUE } from '../../config/bull.config';
 import { FlowExecutionProcessor } from './flow-execution.processor';
 import { MetaTemplatesModule } from '../meta-templates/meta-templates.module';
 import { AntiBanModule } from '../anti-ban/anti-ban.module';
+import { InboxModule } from '../inbox/inbox.module';
 
 @Module({
     imports: [
@@ -27,6 +28,7 @@ import { AntiBanModule } from '../anti-ban/anti-ban.module';
         AiModule,
         MetaTemplatesModule,
         forwardRef(() => AntiBanModule),
+        InboxModule,
     ],
     controllers: [FlowsController, FoldersController],
     providers: [FlowsService, FoldersService, FlowExecutionProcessor],

@@ -1,23 +1,37 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { SettingsService } from '../settings/settings.service';
 
 @Injectable()
 export class ElevenLabsService {
     private readonly logger = new Logger(ElevenLabsService.name);
     private readonly baseUrl = 'https://api.elevenlabs.io/v1';
-    private readonly apiKey: string;
+    private readonly defaultApiKey: string;
 
-    constructor(private configService: ConfigService) {
-        this.apiKey = this.configService.get('ELEVENLABS_API_KEY', '');
+    constructor(
+        private configService: ConfigService,
+        @Inject(forwardRef(() => SettingsService))
+        private settingsService: SettingsService,
+    ) {
+        this.defaultApiKey = this.configService.get('ELEVENLABS_API_KEY', '');
+    }
+
+    private async getApiKey(tenantId?: string): Promise<string> {
+        if (!tenantId) return this.defaultApiKey;
+        const keys = await this.settingsService.getAllLLMKeys(tenantId);
+        return keys?.elevenLabsKey && !keys.elevenLabsKey.includes('*') 
+            ? keys.elevenLabsKey 
+            : this.defaultApiKey;
     }
 
     /**
      * Creates an Instant Voice Clone by uploading samples
      */
-    async cloneVoice(name: string, audioBuffer: Buffer, filename: string): Promise<string> {
-        if (!this.apiKey || this.apiKey.length < 5) {
-            throw new Error('ELEVENLABS_API_KEY não configurada no .env do backend.');
+    async cloneVoice(name: string, audioBuffer: Buffer, filename: string, tenantId?: string): Promise<string> {
+        const apiKey = await this.getApiKey(tenantId);
+        if (!apiKey || apiKey.length < 5) {
+            throw new Error('Chave da ElevenLabs não configurada (nem nas Integrações IA, nem no .env).');
         }
 
         try {
@@ -33,7 +47,7 @@ export class ElevenLabsService {
 
             const response = await axios.post(`${this.baseUrl}/voices/add`, form, {
                 headers: {
-                    'xi-api-key': this.apiKey,
+                    'xi-api-key': apiKey,
                     // Let Axios/FormData set headers automatically (multipart)
                 }
             });
@@ -50,8 +64,9 @@ export class ElevenLabsService {
     /**
      * Synthesize speech using ElevenLabs
      */
-    async synthesizeSpeech(text: string, voiceId: string, stability = 0.5, similarityBoost = 0.75): Promise<Buffer> {
-        if (!this.apiKey) throw new Error('ELEVENLABS_API_KEY missing');
+    async synthesizeSpeech(text: string, voiceId: string, tenantId?: string, stability = 0.5, similarityBoost = 0.75): Promise<Buffer> {
+        const apiKey = await this.getApiKey(tenantId);
+        if (!apiKey) throw new Error('Chave da ElevenLabs não configurada');
 
         try {
             this.logger.log(`[ElevenLabs] Gerando áudio para voz ${voiceId}`);
@@ -68,7 +83,7 @@ export class ElevenLabsService {
                 },
                 {
                     headers: {
-                        'xi-api-key': this.apiKey,
+                        'xi-api-key': apiKey,
                         'Content-Type': 'application/json',
                     },
                     responseType: 'arraybuffer'
@@ -82,7 +97,8 @@ export class ElevenLabsService {
         }
     }
 
-    hasKey(): boolean {
-        return !!this.apiKey && this.apiKey.length > 5;
+    async hasKey(tenantId?: string): Promise<boolean> {
+        const apiKey = await this.getApiKey(tenantId);
+        return !!apiKey && apiKey.length > 5;
     }
 }

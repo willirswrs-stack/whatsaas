@@ -124,6 +124,11 @@ export const campaignsService = {
         return response.data;
     },
 
+    async schedule(id: string, scheduledAt: string): Promise<Campaign> {
+        const response = await api.post<Campaign>(`/campaigns/${id}/schedule`, { scheduledAt });
+        return response.data;
+    },
+
     async delete(id: string): Promise<void> {
         await api.delete(`/campaigns/${id}`);
     },
@@ -145,7 +150,7 @@ export const campaignsService = {
     },
 
     async listTags(): Promise<Tag[]> {
-        const response = await api.get<Tag[]>('/contacts/tags');
+        const response = await api.get<Tag[]>('/contacts/tags/list');
         return response.data;
     },
 

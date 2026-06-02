@@ -26,6 +26,7 @@ export class SettingsController {
             anthropicKey?: string;
             geminiKey?: string;
             groqKey?: string;
+            elevenLabsKey?: string;
         },
     ) {
         await this.settingsService.updateSettings(tenantId, data);

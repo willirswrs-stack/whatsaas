@@ -13,7 +13,7 @@ async function check() {
     await client.connect();
 
     const res = await client.query(`
-        SELECT id, instance_name, status, provider, updated_at 
+        SELECT id, instance_name, phone, status, provider, updated_at 
         FROM instances
     `);
 

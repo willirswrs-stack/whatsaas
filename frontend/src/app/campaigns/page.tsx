@@ -63,6 +63,9 @@ export default function CampaignsPage() {
     const [isCreating, setIsCreating] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
+    const [scheduleModal, setScheduleModal] = useState<{ campaignId: string; campaignName: string } | null>(null);
+    const [scheduleDateTime, setScheduleDateTime] = useState('');
+    const [isScheduling, setIsScheduling] = useState(false);
     const [metaVariables, setMetaVariables] = useState<Record<string, string>>({});
     const [metaMediaUrl, setMetaMediaUrl] = useState<string>('');
     const [contactSearch, setContactSearch] = useState('');
@@ -348,6 +351,34 @@ export default function CampaignsPage() {
             const duplicated = await campaignsService.duplicate(id);
             setCampaigns([duplicated, ...campaigns]);
             setSuccessMessage('Campanha duplicada com sucesso!');
+        } catch (err) {
+            setError(getErrorMessage(err));
+        }
+    };
+
+    const scheduleCampaign = async () => {
+        if (!scheduleModal || !scheduleDateTime) return;
+        try {
+            setIsScheduling(true);
+            setError('');
+            const updated = await campaignsService.schedule(scheduleModal.campaignId, scheduleDateTime);
+            setCampaigns(campaigns.map(c => c.id === scheduleModal.campaignId ? updated : c));
+            setSuccessMessage(`Campanha agendada para ${new Date(scheduleDateTime).toLocaleString('pt-BR')}!`);
+            setScheduleModal(null);
+            setScheduleDateTime('');
+        } catch (err) {
+            setError(getErrorMessage(err));
+        } finally {
+            setIsScheduling(false);
+        }
+    };
+
+    const cancelSchedule = async (id: string) => {
+        try {
+            setError('');
+            await campaignsService.cancel(id);
+            setCampaigns(campaigns.map(c => c.id === id ? { ...c, status: 'draft' as const, scheduledAt: undefined } : c));
+            setSuccessMessage('Agendamento cancelado!');
         } catch (err) {
             setError(getErrorMessage(err));
         }
@@ -702,6 +733,28 @@ export default function CampaignsPage() {
                                                                 <circle cx="12" cy="12" r="10" />
                                                                 <line x1="15" y1="9" x2="9" y2="15" />
                                                                 <line x1="9" y1="9" x2="15" y2="15" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Schedule button - for draft campaigns */}
+                                                    {campaign.status === 'draft' && (
+                                                        <button
+                                                            className="p-2 rounded-lg hover:bg-amber-500/10 text-amber-400"
+                                                            title="Agendar campanha"
+                                                            onClick={() => {
+                                                                // Set default to tomorrow at 09:00
+                                                                const d = new Date();
+                                                                d.setDate(d.getDate() + 1);
+                                                                d.setHours(9, 0, 0, 0);
+                                                                const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                                                                setScheduleDateTime(iso);
+                                                                setScheduleModal({ campaignId: campaign.id, campaignName: campaign.name });
+                                                            }}
+                                                        >
+                                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                <circle cx="12" cy="12" r="10" />
+                                                                <polyline points="12 6 12 12 16 14" />
                                                             </svg>
                                                         </button>
                                                     )}
@@ -1444,6 +1497,67 @@ export default function CampaignsPage() {
                                 disabled={isDeleting}
                             >
                                 {isDeleting ? 'Excluindo...' : 'Excluir'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Modal de Agendamento ── */}
+            {scheduleModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                    <div className="glass-card p-6 w-full max-w-md">
+                        <div className="flex items-center gap-3 mb-6">
+                            <div className="w-12 h-12 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                <svg className="w-6 h-6 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <polyline points="12 6 12 12 16 14" />
+                                </svg>
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-[var(--text-primary)]">Agendar Campanha</h2>
+                                <p className="text-sm text-[var(--text-muted)] truncate max-w-xs">{scheduleModal.campaignName}</p>
+                            </div>
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="label mb-2 block">📅 Data e Hora do Disparo</label>
+                            <input
+                                type="datetime-local"
+                                className="input w-full"
+                                value={scheduleDateTime}
+                                min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                                onChange={(e) => setScheduleDateTime(e.target.value)}
+                                style={{ colorScheme: 'dark' }}
+                            />
+                            {scheduleDateTime && (
+                                <p className="text-xs text-amber-400 mt-2">
+                                    ⏰ A campanha será iniciada em: <strong>{new Date(scheduleDateTime).toLocaleString('pt-BR')}</strong>
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 mb-6">
+                            <p className="text-xs text-amber-300/80">
+                                💡 A campanha será colocada em fila e disparada automaticamente na data/hora selecionada. Você pode cancelar o agendamento antes do disparo.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3">
+                            <button
+                                className="btn btn-secondary flex-1"
+                                onClick={() => { setScheduleModal(null); setScheduleDateTime(''); }}
+                                disabled={isScheduling}
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                className="btn flex-1 text-white font-semibold"
+                                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+                                onClick={scheduleCampaign}
+                                disabled={!scheduleDateTime || isScheduling}
+                            >
+                                {isScheduling ? '⏳ Agendando...' : '📅 Confirmar Agendamento'}
                             </button>
                         </div>
                     </div>

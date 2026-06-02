@@ -325,6 +325,48 @@ export class CampaignsService {
         return this.findOne(id, tenantId);
     }
 
+    async schedule(id: string, tenantId: string, scheduledAtStr: string) {
+        const campaign = await this.findOne(id, tenantId);
+
+        const scheduledAt = new Date(scheduledAtStr);
+        if (isNaN(scheduledAt.getTime())) {
+            throw new BadRequestException('Data de agendamento inválida.');
+        }
+
+        const now = new Date();
+        if (scheduledAt <= now) {
+            throw new BadRequestException('A data de agendamento deve estar no futuro.');
+        }
+
+        // Verificar se tem contatos
+        const contactCount = await this.campaignContactRepo.count({
+            where: { campaignId: id },
+        });
+
+        if (contactCount === 0) {
+            throw new BadRequestException('Campanha não tem contatos. Adicione contatos antes de agendar.');
+        }
+
+        const delay = scheduledAt.getTime() - now.getTime();
+
+        // Enqueue the job with delay
+        await this.schedulerQueue.add(
+            'start-campaign',
+            { campaignId: id, tenantId },
+            { delay, jobId: `schedule-campaign-${id}` } // Remove previous if any
+        );
+
+        // Update campaign status
+        await this.campaignRepo.update(id, {
+            status: 'scheduled',
+            scheduledAt,
+        });
+
+        this.logger.log(`⏰ Campanha ${id} agendada para ${scheduledAt.toISOString()} (em ${Math.round(delay / 1000)}s)`);
+
+        return this.findOne(id, tenantId);
+    }
+
     async pause(id: string, tenantId: string) {
         await this.findOne(id, tenantId); // Verify ownership
         await this.dispatcherService.pauseCampaign(id);
@@ -533,49 +575,7 @@ export class CampaignsService {
             affected: result.affected,
         };
     }
-    async schedule(id: string, tenantId: string, scheduledAtStr: string) {
-        const campaign = await this.findOne(id, tenantId);
-        const scheduledAt = new Date(scheduledAtStr);
 
-        if (isNaN(scheduledAt.getTime())) {
-            throw new BadRequestException('Data inválida');
-        }
-
-        const now = Date.now();
-        if (scheduledAt.getTime() <= now) {
-            throw new BadRequestException('A data de agendamento deve ser futura');
-        }
-
-        // Delay in ms
-        const delay = scheduledAt.getTime() - now;
-        const jobId = `schedule-${id}`;
-
-        // Atualizar campanha
-        await this.campaignRepo.update(id, {
-            status: 'scheduled',
-            scheduledAt,
-        });
-
-        this.logger.log(`📅 Scheduling campaign ${id} for ${scheduledAt.toISOString()} (delay: ${delay}ms)`);
-
-        // Remover job anterior se existir
-        const oldJob = await this.schedulerQueue.getJob(jobId);
-        if (oldJob) {
-            await oldJob.remove();
-        }
-
-        await this.schedulerQueue.add(
-            'start-campaign',
-            { campaignId: id, tenantId },
-            {
-                jobId,
-                delay,
-                removeOnComplete: true,
-            }
-        );
-
-        return this.findOne(id, tenantId);
-    }
 
     /**
      * Calcula previsão de término de uma campanha baseado na saúde dos chips e configuração de disparo

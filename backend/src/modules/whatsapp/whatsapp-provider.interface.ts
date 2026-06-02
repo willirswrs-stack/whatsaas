@@ -39,6 +39,8 @@ export interface IWhatsAppProvider {
      */
     getQrCode(instanceName: string): Promise<string>;
 
+    getPairingCode?(instanceName: string, phoneNumber: string): Promise<{ pairingCode: string; phone: string }>;
+
     /**
      * Get instance connection status
      */

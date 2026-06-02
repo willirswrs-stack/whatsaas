@@ -1,7 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
-import { Instance, Proxy, WarmupSchedule } from './entities/instance.entity';
+import { Instance, WarmupSchedule } from './entities/instance.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { InstancesController } from './instances.controller';
 import { InstancesService } from './instances.service';
@@ -14,7 +14,7 @@ import { ProxiesModule } from '../proxies/proxies.module';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Instance, Proxy, WarmupSchedule, Tenant]),
+        TypeOrmModule.forFeature([Instance, WarmupSchedule, Tenant]),
         forwardRef(() => EvolutionModule),
         ProxiesModule,
     ],

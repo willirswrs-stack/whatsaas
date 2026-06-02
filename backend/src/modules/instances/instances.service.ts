@@ -5,7 +5,7 @@ import axios from 'axios';
 import { SocksProxyAgent } from 'socks-proxy-agent';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
-import { Instance, Proxy } from './entities/instance.entity';
+import { Instance } from './entities/instance.entity';
 import { WhatsAppProviderFactory, ProviderType } from '../whatsapp';
 import { InstanceStatus } from '../../common/enums/instance-status.enum';
 import { ProxiesService } from '../proxies/proxies.service';
@@ -17,8 +17,6 @@ export class InstancesService {
     constructor(
         @InjectRepository(Instance)
         private instanceRepo: Repository<Instance>,
-        @InjectRepository(Proxy)
-        private proxyRepo: Repository<Proxy>,
         private providerFactory: WhatsAppProviderFactory,
         private proxiesService: ProxiesService,
     ) { }
@@ -94,12 +92,7 @@ export class InstancesService {
                 this.logger.log(`[PROXY AUTO-ALLOC] Buscando proxy livre no pool para o tenant ${tenantId}`);
                 
                 // 1. Tentar encontrar um proxy já existente e não associado a nenhuma instância
-                const unassignedProxy = await this.proxyRepo
-                    .createQueryBuilder('proxy')
-                    .leftJoin('proxy.instances', 'instance')
-                    .where('proxy.tenantId = :tenantId', { tenantId })
-                    .andWhere('instance.id IS NULL')
-                    .getOne();
+                const unassignedProxy = await this.proxiesService.getUnassignedProxy(tenantId);
 
                 if (unassignedProxy) {
                     this.logger.log(`[PROXY AUTO-ALLOC] Reutilizando proxy livre existente: ${unassignedProxy.host}:${unassignedProxy.port}`);
@@ -138,9 +131,7 @@ export class InstancesService {
 
             // Sincronizar o assignedInstanceId no proxy para a exibição no painel
             if (allocatedProxyId) {
-                await this.proxyRepo.update(allocatedProxyId, {
-                    assignedInstanceId: instance.id
-                } as any);
+                await this.proxiesService.assignProxy(tenantId, allocatedProxyId, instance.id);
             }
 
             // Get QR code (only if not official, but getQrCode handles logic)
@@ -163,7 +154,78 @@ export class InstancesService {
     async getQrCode(id: string, tenantId: string) {
         const instance = await this.findOne(id, tenantId);
         const provider = this.providerFactory.getProvider((instance.provider as ProviderType) || 'evolution');
-        return provider.getQrCode(instance.instanceName);
+        try {
+            return await provider.getQrCode(instance.instanceName);
+        } catch (error: any) {
+            // Auto-healing: if the instance does not exist in the provider container, recreate it
+            if (
+                error.message?.includes('404') || 
+                error.message?.includes('not found') || 
+                error.message?.includes('400') || 
+                error.message?.includes('500')
+            ) {
+                this.logger.warn(`Instance '${instance.instanceName}' missing or errored in provider container. Re-creating...`);
+                const config = instance.channelType === 'official' ? instance.metaConfig : {};
+                try {
+                    await provider.createInstance(instance.instanceName, config);
+                } catch (createErr) {
+                    this.logger.error(`Auto-healing creation failed for ${instance.instanceName}: ${createErr.message}`);
+                }
+                // Try fetching the QR code again after creation
+                return await provider.getQrCode(instance.instanceName);
+            }
+            throw error;
+        }
+    }
+
+    async getPairingCode(id: string, tenantId: string, phoneNumber: string): Promise<{ pairingCode: string; phone: string }> {
+        const instance = await this.findOne(id, tenantId);
+        const provider = this.providerFactory.getProvider((instance.provider as ProviderType) || 'evolution');
+
+        if (provider.providerType !== 'evolution') {
+            throw new ConflictException('Pairing code connection is only supported by Evolution API provider');
+        }
+
+        const adapter = provider as any;
+        if (typeof adapter.getPairingCode !== 'function') {
+            throw new ConflictException('Pairing code connection is not supported by the active provider version');
+        }
+
+        const formattedPhone = phoneNumber.replace(/\D/g, '');
+
+        // 🔥 CRITICAL: Force a clean reset of the instance session in the container.
+        // If the instance has standard QR code generation already active (due to modal opening),
+        // Baileys locks in QR mode and connect?number=... always returns pairingCode: null.
+        // We delete and recreate it fresh to go directly into pairing code mode.
+        this.logger.log(`Forcing clean reset of instance '${instance.instanceName}' in container to prepare for pairing code...`);
+        try {
+            await provider.deleteInstance(instance.instanceName);
+            // Introduce a brief sleep to allow Evolution API to finish asynchronous deletion
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+        } catch (deleteErr: any) {
+            this.logger.warn(`Failed to delete instance '${instance.instanceName}' before pairing (normal if not present): ${deleteErr.message}`);
+        }
+
+        const config = instance.channelType === 'official' ? instance.metaConfig : {};
+        try {
+            await provider.createInstance(instance.instanceName, config);
+            // Introduce a brief sleep to allow Baileys to initialize inside the Evolution container cleanly
+            await new Promise((resolve) => setTimeout(resolve, 3000));
+        } catch (createErr: any) {
+            this.logger.error(`Recreation failed for '${instance.instanceName}' during pairing setup: ${createErr.message}`);
+        }
+
+        try {
+            const result = await adapter.getPairingCode(instance.instanceName, formattedPhone);
+            
+            // Save the phone number that actually worked to ensure it is recorded correctly
+            instance.phone = result.phone;
+            await this.instanceRepo.save(instance);
+            
+            return result;
+        } catch (error: any) {
+            throw error;
+        }
     }
 
     async getStatus(id: string, tenantId: string) {
@@ -300,9 +362,11 @@ export class InstancesService {
 
         // Se tinha proxy alocado, limpar o assignedInstanceId do proxy antes de remover a instância
         if (instance.proxyId) {
-            await this.proxyRepo.update(instance.proxyId, {
-                assignedInstanceId: null
-            } as any);
+            try {
+                await this.proxiesService.assignProxy(tenantId, instance.proxyId, null);
+            } catch (e) {
+                this.logger.warn(`Failed to unassign proxy: ${e.message}`);
+            }
         }
 
         await this.instanceRepo.remove(instance);
@@ -315,70 +379,5 @@ export class InstancesService {
         return this.providerFactory.getAvailableProviders();
     }
 
-    // Proxies
-    async findAllProxies(tenantId: string) {
-        return this.proxyRepo.find({
-            where: { tenantId },
-            order: { createdAt: 'DESC' },
-        });
-    }
 
-    async createProxy(tenantId: string, data: Partial<Proxy>) {
-        const proxy = this.proxyRepo.create({ ...data, tenantId });
-        return this.proxyRepo.save(proxy);
-    }
-
-    async deleteProxy(id: string, tenantId: string) {
-        const proxy = await this.proxyRepo.findOne({ where: { id, tenantId } });
-        if (!proxy) throw new NotFoundException('Proxy not found');
-        await this.proxyRepo.remove(proxy);
-        return { success: true };
-    }
-
-    async testProxy(data: {
-        host: string;
-        port: number;
-        type: string;
-        username?: string;
-        password?: string;
-    }) {
-        const startTime = Date.now();
-        const auth = data.username ? `${data.username}:${data.password}@` : '';
-        const proxyUrl = `${data.type}://${auth}${data.host}:${data.port}`;
-        
-        try {
-            this.logger.log(`[PROXY TEST] Inciando teste para: ${data.type}://${data.host}:${data.port}`);
-            let agent: any;
-            
-            if (data.type.includes('socks')) {
-                agent = new SocksProxyAgent(proxyUrl);
-            } else {
-                agent = new HttpsProxyAgent(proxyUrl);
-            }
-
-            // Tentamos bater na API de IP do Google/Ipify pra validar se o proxy navega externamente
-            const response = await axios.get('https://api.ipify.org?format=json', {
-                httpsAgent: agent,
-                httpAgent: agent,
-                timeout: 8000 // 8s limite de paciencia
-            });
-
-            const latency = Date.now() - startTime;
-            this.logger.log(`[PROXY TEST] ✅ Sucesso! IP retornado: ${response.data?.ip} | Latência: ${latency}ms`);
-            
-            return {
-                online: true,
-                latencyMs: latency,
-                ip: response.data?.ip
-            };
-        } catch (error: any) {
-            const latency = Date.now() - startTime;
-            this.logger.warn(`[PROXY TEST] ❌ Falha no teste: ${error.message}`);
-            return {
-                online: false,
-                latencyMs: latency,
-                error: error.message || 'Tempo limite excedido ou proxy recusou a conexão.'
-            };
-        }
-    }
 }

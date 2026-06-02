@@ -147,12 +147,18 @@ export class WahaAdapter implements IWhatsAppProvider {
         caption?: string;
         filename?: string;
     }): Promise<SendMessageResult> {
+        let fileUrl = media.url;
+        // Detect if media.url is a raw base64 string (i.e. doesn't start with http or data:)
+        if (media.type === 'audio' && !media.url.startsWith('http') && !media.url.startsWith('data:')) {
+            fileUrl = `data:audio/mpeg;base64,${media.url}`;
+        }
+
         // WAHA uses sendFile endpoint for media
         const response = await this.request<WahaSendTextResponse>('POST', `/api/default/sendFile`, {
             chatId: this.formatJid(to),
             file: {
                 mimetype: media.type === 'video' ? 'video/mp4' : media.type === 'audio' ? 'audio/mpeg' : media.type === 'image' ? 'image/jpeg' : 'application/pdf',
-                url: media.url,
+                url: fileUrl,
                 filename: media.filename || `file.${media.type === 'video' ? 'mp4' : media.type === 'audio' ? 'mp3' : media.type === 'image' ? 'jpg' : 'pdf'}`,
             },
             caption: media.caption || '',

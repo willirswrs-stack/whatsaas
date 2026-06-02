@@ -529,10 +529,10 @@ export class WarmupService {
                     
                     let buffer: Buffer;
                     // Se o ID for grande, assume-se ElevenLabs clonada
-                    if (voice.length > 15 && this.elevenLabs.hasKey()) {
+                    if (voice.length > 15 && await this.elevenLabs.hasKey(tenantId)) {
                         try {
                             this.logger.log(`[LIVE] Utilizando ElevenLabs para clonagem de voz`);
-                            buffer = await this.elevenLabs.synthesizeSpeech(msg.content, voice);
+                            buffer = await this.elevenLabs.synthesizeSpeech(msg.content, voice, tenantId);
                         } catch (e) {
                             this.logger.warn(`ElevenLabs falhou, fallback para OpenAI: ${e.message}`);
                             buffer = await this.aiService.synthesizeSpeech(msg.content, 'alloy', speed, model);

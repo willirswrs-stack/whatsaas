@@ -10,56 +10,7 @@ import {
     Index,
 } from 'typeorm';
 
-@Entity('proxies')
-export class Proxy {
-    @PrimaryGeneratedColumn('uuid')
-    id: string;
-
-    @Column({ name: 'tenant_id', nullable: true })
-    tenantId: string;
-
-    @Column()
-    host: string;
-
-    @Column()
-    port: number;
-
-    @Column({ default: 'socks5' })
-    type: string; // 'socks5', 'http', 'https'
-
-    @Column({ nullable: true })
-    username: string;
-
-    @Column({ nullable: true })
-    password: string;
-
-    @Column({ nullable: true, length: 2 })
-    country: string;
-
-    @Column({ nullable: true })
-    city: string;
-
-    @Column({ name: 'latency_ms', nullable: true })
-    latencyMs: number;
-
-    @Column({ default: 'unknown' })
-    status: string; // 'online', 'offline', 'slow'
-
-    @Column({ name: 'last_check', nullable: true })
-    lastCheck: Date;
-
-    @CreateDateColumn({ name: 'created_at' })
-    createdAt: Date;
-
-    @OneToMany(() => Instance, (instance) => instance.proxy)
-    instances: Instance[];
-
-    // Helper method to get proxy URL
-    getProxyUrl(): string {
-        const auth = this.username ? `${this.username}:${this.password}@` : '';
-        return `${this.type}://${auth}${this.host}:${this.port}`;
-    }
-}
+import { ProxyEntity } from '../../proxies/entities/proxy.entity';
 
 @Entity('instances')
 @Index(['tenantId', 'status'])
@@ -99,9 +50,9 @@ export class Instance {
     @Column({ name: 'proxy_id', nullable: true })
     proxyId: string;
 
-    @ManyToOne(() => Proxy, (proxy) => proxy.instances, { onDelete: 'SET NULL' })
+    @ManyToOne(() => ProxyEntity, (proxy) => proxy.instances, { onDelete: 'SET NULL' })
     @JoinColumn({ name: 'proxy_id' })
-    proxy: Proxy;
+    proxy: ProxyEntity;
 
     @Column('jsonb', { name: 'meta_config', default: {} })
     metaConfig: Record<string, any>;

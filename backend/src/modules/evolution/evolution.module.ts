@@ -12,6 +12,7 @@ import { Contact } from '../contacts/entities/contact.entity';
 import { EventsModule } from '../events/events.module';
 import { FlowsModule } from '../flows/flows.module';
 import { AntiBanModule } from '../anti-ban/anti-ban.module';
+import { InboxModule } from '../inbox/inbox.module';
 
 @Module({
     imports: [
@@ -20,6 +21,7 @@ import { AntiBanModule } from '../anti-ban/anti-ban.module';
         EventsModule,
         forwardRef(() => FlowsModule),
         forwardRef(() => AntiBanModule),
+        forwardRef(() => InboxModule),
     ],
     controllers: [EvolutionWebhookController],
     providers: [EvolutionApiService],

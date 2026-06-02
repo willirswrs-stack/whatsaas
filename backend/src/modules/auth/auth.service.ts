@@ -112,10 +112,17 @@ export class AuthService {
         });
 
         // Create tenant
-        const slug = dto.companyName
+        const baseSlug = dto.companyName
             .toLowerCase()
             .replace(/[^a-z0-9]/g, '-')
             .replace(/-+/g, '-');
+
+        let slug = baseSlug;
+        let counter = 1;
+        while (await this.tenantRepo.findOne({ where: { slug } })) {
+            slug = `${baseSlug}-${counter}`;
+            counter++;
+        }
 
         const tenant = this.tenantRepo.create({
             name: dto.companyName,

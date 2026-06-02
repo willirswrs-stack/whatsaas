@@ -4,6 +4,7 @@ export class AddCategoryToFlow1777855363085 implements MigrationInterface {
     name = 'AddCategoryToFlow1777855363085'
 
     public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`TRUNCATE TABLE "webhook_event_types" CASCADE`);
         await queryRunner.query(`ALTER TABLE "flows" ADD "category" character varying(100)`);
         await queryRunner.query(`ALTER TABLE "webhook_event_types" DROP CONSTRAINT "webhook_event_types_code_key"`);
         await queryRunner.query(`ALTER TABLE "webhook_event_types" DROP COLUMN "code"`);
@@ -31,6 +32,7 @@ export class AddCategoryToFlow1777855363085 implements MigrationInterface {
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`TRUNCATE TABLE "webhook_event_types" CASCADE`);
         await queryRunner.query(`DROP INDEX "public"."IDX_068a0facfee46f1386b649ef0e"`);
         await queryRunner.query(`ALTER TABLE "instances" ALTER COLUMN "lifecycle_stage" DROP NOT NULL`);
         await queryRunner.query(`ALTER TABLE "campaign_contacts" ALTER COLUMN "updated_at" SET DEFAULT CURRENT_TIMESTAMP`);
