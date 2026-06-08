@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Header } from '@/components/Header';
+import { useLlm } from '@/contexts/LlmContext';
+import { useSuperAdmin } from '@/hooks/useSuperAdmin';
 
 const sampleVariations = [
     "Olá {{nome}}! 🎉 Temos uma oferta especial pra você! Aproveite 30% OFF em toda loja. Não perca!",
@@ -13,10 +15,11 @@ const sampleVariations = [
 ];
 
 export default function AISpinnerPage() {
+    const { llmConfig, isLoading: llmLoading, providerLabel, modelLabel } = useLlm();
+    const { isSuperAdmin } = useSuperAdmin();
     const [originalMessage, setOriginalMessage] = useState(
         "Olá {{nome}}! Temos uma oferta especial para você! Aproveite 30% de desconto em toda a loja. Não perca essa oportunidade!"
     );
-    const [provider, setProvider] = useState('openai');
     const [variations, setVariations] = useState(6);
     const [creativity, setCreativity] = useState(0.7);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -89,29 +92,35 @@ export default function AISpinnerPage() {
                         </h3>
 
                         <div className="space-y-6">
-                            {/* Provider */}
+                            {/* Provider Info (Read-only) */}
                             <div>
                                 <label className="block text-sm text-[var(--text-secondary)] mb-2">
-                                    Provedor LLM
+                                    Modelo de IA Utilizado
                                 </label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {[
-                                        { id: 'openai', label: 'OpenAI', icon: '🧠' },
-                                        { id: 'anthropic', label: 'Anthropic', icon: '🤖' },
-                                        { id: 'llama', label: 'Llama', icon: '🦙' },
-                                    ].map((p) => (
-                                        <button
-                                            key={p.id}
-                                            onClick={() => setProvider(p.id)}
-                                            className={`p-3 rounded-lg border text-sm font-medium transition-all ${provider === p.id
-                                                ? 'border-[var(--accent-primary)] bg-[rgba(139,92,246,0.15)] text-[var(--accent-primary)]'
-                                                : 'border-[var(--border-color)] text-[var(--text-secondary)] hover:bg-[var(--bg-glass)]'
-                                                }`}
+                                <div className="p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-lg">🧠</div>
+                                        <div>
+                                            <p className="text-sm font-semibold text-white">
+                                                {llmLoading ? 'Carregando...' : providerLabel}
+                                            </p>
+                                            <p className="text-xs text-[var(--text-muted)]">
+                                                {llmLoading ? 'Obtendo modelo...' : modelLabel}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {isSuperAdmin ? (
+                                        <a
+                                            href="/admin/ai-agent"
+                                            className="text-xs px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors border border-indigo-500/30"
                                         >
-                                            <span className="text-lg mr-2">{p.icon}</span>
-                                            {p.label}
-                                        </button>
-                                    ))}
+                                            ⚙️ Configurar
+                                        </a>
+                                    ) : (
+                                        <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">
+                                            🔒 Definido pelo admin
+                                        </span>
+                                    )}
                                 </div>
                             </div>
 

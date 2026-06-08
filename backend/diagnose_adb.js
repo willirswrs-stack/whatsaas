@@ -1,5 +1,10 @@
 const adb = require('@devicefarmer/adbkit');
-const client = adb.createClient();
+const path = require('path');
+const fs = require('fs');
+const localAdbPath = path.join(__dirname, 'bin', 'platform-tools', 'adb.exe');
+const client = fs.existsSync(localAdbPath) 
+    ? adb.Adb.createClient({ bin: localAdbPath })
+    : adb.Adb.createClient();
 
 async function testAdb() {
     console.log('🔍 Buscando dispositivos Android conectados...');

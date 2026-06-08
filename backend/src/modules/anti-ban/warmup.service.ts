@@ -26,23 +26,7 @@ import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Define the Warmup Schedule
-export const WARMUP_SCHEDULE = [
-    { day: 1, limit: 50, interval: 120, maxPartners: 1 },  // Dia 1: Apenas 1 parceiro (círculo íntimo)
-    { day: 2, limit: 100, interval: 90, maxPartners: 2 },  
-    { day: 3, limit: 150, interval: 60, maxPartners: 2 },
-    { day: 4, limit: 250, interval: 45, maxPartners: 3 },
-    { day: 5, limit: 400, interval: 35, maxPartners: 4 },
-    { day: 6, limit: 600, interval: 30, maxPartners: 5 },
-    { day: 7, limit: 800, interval: 25, maxPartners: 6 },
-    { day: 8, limit: 1000, interval: 20, maxPartners: 8 },
-    { day: 9, limit: 1300, interval: 15, maxPartners: 10 },
-    { day: 10, limit: 1600, interval: 12, maxPartners: 12 },
-    { day: 11, limit: 2000, interval: 10, maxPartners: 15 },
-    { day: 12, limit: 2500, interval: 8, maxPartners: 20 },
-    { day: 13, limit: 2800, interval: 6, maxPartners: 25 },
-    { day: 14, limit: 3000, interval: 5, maxPartners: 30 }, // Dia 14: Alta diversidade social
-];
+// Dynamic limits calculation inside the service based on warmupProfile
 
 // Max limit for mature chips
 export const MATURE_LIMIT = 5000;
@@ -141,16 +125,14 @@ export class WarmupService {
             }
         }
 
-        // Trigger warmup sessions for eligible tenants — create ALL pair combinations
+        // Trigger warmup sessions globally — cross-tenant + seed chips
         let sessionsTriggered = 0;
-        for (const tenantId of tenantIds) {
-            try {
-                const sessionResults = await this.createAllPairSessions(tenantId);
-                sessionsTriggered += sessionResults.sessionsCreated;
-                this.logger.log(`💬 ${sessionResults.sessionsCreated} Warmup Sessions triggered for tenant ${tenantId}`);
-            } catch (err) {
-                this.logger.error(`Failed to trigger sessions for tenant ${tenantId}: ${err.message}`);
-            }
+        try {
+            const sessionResults = await this.createGlobalWarmupSessions();
+            sessionsTriggered = sessionResults.sessionsCreated;
+            this.logger.log(`💬 ${sessionsTriggered} Global Warmup Sessions triggered`);
+        } catch (err) {
+            this.logger.error(`Failed to trigger global sessions: ${err.message}`);
         }
 
         this.logger.log(`✅ Warmup Routine Finished: ${advancedCount} advanced, ${completedCount} completed, ${sessionsTriggered} sessions created.`);
@@ -172,7 +154,7 @@ export class WarmupService {
 
         // Increment day
         const nextDay = instance.warmupDay + 1;
-        const schedule = this.getScheduleForDay(nextDay);
+        const schedule = this.getScheduleForInstance(instance, nextDay);
 
         if (!schedule) {
             // Reached end of schedule -> Graduate
@@ -204,61 +186,96 @@ export class WarmupService {
     }
 
     /**
-     * Creates a warmup session (conversation) between two instances
+     * Cria sessões de warmup globalmente.
+     * Isola instâncias do mesmo tenant (Cliente A não fala com Cliente A).
+     * Usa o Trust Ratio para priorizar o SeedPool caso a rede de clientes seja pequena.
      */
-    /**
-     * Cria sessões de warmup para pares selecionados de instâncias.
-     * Diferente do All Pairs, aqui limitamos a diversidade de contatos individualmente,
-     * simulando um crescimento de rede social orgânico.
-     */
-    async createAllPairSessions(tenantId: string) {
-        const instances = await this.instancesService.findAll(tenantId);
-        const candidates = instances.filter(i =>
+    async createGlobalWarmupSessions() {
+        // Buscar todas as instâncias habilitadas globalmente
+        const allInstances = await this.instanceRepo.find({
+            where: { warmupEnabled: true }
+        });
+
+        const candidates = allInstances.filter(i =>
             (i.status === InstanceStatus.CONNECTED || i.status === 'connected' as any) &&
-            i.warmupEnabled &&
             i.phone
         );
 
         if (candidates.length < 2) {
-            this.logger.warn(`Not enough candidates for warmup (Found ${candidates.length}, need ≥2)`);
+            this.logger.warn(`Not enough candidates for global warmup (Found ${candidates.length}, need ≥2)`);
             return { sessionsCreated: 0, reason: 'min_instances' };
         }
 
-        this.logger.log(`🔄 Gerando rede de conversação dinâmica para ${candidates.length} instâncias...`);
+        const clientChips = candidates.filter(i => !i.isSystemSeed);
+        const seedChips = candidates.filter(i => i.isSystemSeed);
 
-        const pairKeys = new Set<string>(); // Para evitar duplicatas A-B e B-A
-        const selectedPairs: [any, any][] = [];
+        this.logger.log(`🔄 Gerando rede de conversação global: ${clientChips.length} Clientes, ${seedChips.length} Sementes`);
 
-        for (const chip of candidates) {
-            // 1. Determina o limite de parceiros deste chip hoje
-            const schedule = this.getScheduleForDay(chip.warmupDay || 1);
-            const maxPartners = (schedule as any)?.maxPartners || 1;
-            
-            // 2. Seleciona parceiros aleatórios para este chip
-            const possiblePartners = candidates.filter(c => c.id !== chip.id);
-            const shuffledPartners = possiblePartners.sort(() => 0.5 - Math.random());
-            const chipsToTalkWith = shuffledPartners.slice(0, Math.min(maxPartners, possiblePartners.length));
+        const pairKeys = new Set<string>();
+        const selectedPairs: [Instance, Instance][] = [];
 
-            for (const partner of chipsToTalkWith) {
-                const key = [chip.id, partner.id].sort().join(':');
-                if (!pairKeys.has(key)) {
-                    pairKeys.add(key);
-                    selectedPairs.push([chip, partner]);
+        // Trust Ratio: Alta dependência das sementes quando a base é pequena
+        const seedProbability = clientChips.length < 50 ? 0.8 : 0.15;
+
+        for (const chip of clientChips) {
+            const schedule = this.getScheduleForInstance(chip, chip.warmupDay || 1);
+            const maxPartners = schedule ? schedule.maxPartners : 1;
+
+            let partnersSelected = 0;
+            let attempts = 0;
+
+            // Possíveis parceiros para este chip
+            // Restrição de Tenant: Um chip de cliente NUNCA fala com outro chip do mesmo tenant
+            const possibleClients = clientChips.filter(c => c.id !== chip.id && c.tenantId !== chip.tenantId);
+            const possibleSeeds = seedChips.filter(c => c.id !== chip.id);
+
+            // Embaralha para aleatoriedade
+            const shuffledClients = possibleClients.sort(() => 0.5 - Math.random());
+            const shuffledSeeds = possibleSeeds.sort(() => 0.5 - Math.random());
+
+            while (partnersSelected < maxPartners && attempts < maxPartners * 10) {
+                attempts++;
+                let partner: Instance | null = null;
+
+                const useSeed = Math.random() < seedProbability;
+
+                if (useSeed && shuffledSeeds.length > 0) {
+                    partner = shuffledSeeds.shift() as Instance;
+                } else if (shuffledClients.length > 0) {
+                    partner = shuffledClients.shift() as Instance;
+                } else if (shuffledSeeds.length > 0) {
+                    // Fallback
+                    partner = shuffledSeeds.shift() as Instance;
+                }
+
+                if (partner) {
+                    const key = [chip.id, partner.id].sort().join(':');
+                    if (!pairKeys.has(key)) {
+                        pairKeys.add(key);
+                        selectedPairs.push([chip, partner]);
+                        partnersSelected++;
+                    } else {
+                        // Devolver para a lista para não perder o partner se houver rejeição de chave
+                        if (partner.isSystemSeed) shuffledSeeds.push(partner);
+                        else shuffledClients.push(partner);
+                    }
+                } else {
+                    break;
                 }
             }
         }
 
-        this.logger.log(`🔗 Gerados ${selectedPairs.length} pares únicos (Dentre ${candidates.length} candidatos)`);
+        this.logger.log(`🔗 Gerados ${selectedPairs.length} pares únicos globalmente`);
 
         let sessionsCreated = 0;
         let baseDelay = 0;
 
         for (const [instA, instB] of selectedPairs) {
             try {
-                const result = await this.createWarmupSession(tenantId, instA, instB, baseDelay);
+                // Use the tenantId of instA for the context (or default to 'system' if somehow missing)
+                const result = await this.createWarmupSession(instA.tenantId || 'system', instA, instB, baseDelay);
                 if (result.success) {
                     sessionsCreated++;
-                    // Escalona as sessões para não começarem todas exatamente ao mesmo tempo
                     baseDelay += (Math.floor(Math.random() * 120000) + 60000); // 1-3 min gap
                 }
             } catch (err) {
@@ -610,10 +627,22 @@ export class WarmupService {
     }
 
     /**
-     * Get metadata for a specific warmup day
+     * Get dynamic metadata for a specific warmup day based on profile
      */
-    getScheduleForDay(day: number) {
-        return WARMUP_SCHEDULE.find(s => s.day === day);
+    getScheduleForInstance(instance: Instance, day: number) {
+        const profile = instance.warmupProfile || 'cold_outbound';
+        let maxDays = 14;
+        if (profile === 'cold_outbound') maxDays = 60;
+        else if (profile === 'warm_outbound' || profile === 'groups') maxDays = 30;
+        
+        if (day > maxDays) return null; // Graduates
+
+        const progress = (day - 1) / Math.max(1, maxDays - 1);
+        const limit = Math.floor(50 + progress * (3000 - 50));
+        const interval = Math.max(5, Math.floor(120 - progress * (120 - 5)));
+        const maxPartners = Math.floor(1 + Math.pow(progress, 1.5) * (30 - 1));
+
+        return { day, limit, interval, maxPartners, maxDays };
     }
 
     /**
@@ -622,6 +651,17 @@ export class WarmupService {
     async getStats(tenantId: string) {
         const instances = await this.instancesService.findAll(tenantId);
         const warmupInstances = instances.filter(i => i.warmupEnabled);
+
+        // Self-healing: se alguma instância conectada estiver sem telefone no banco,
+        // dispara a sincronização de status em background para recuperá-lo da Evolution/WAHA.
+        for (const inst of instances) {
+            if (inst.status === 'connected' && !inst.phone) {
+                this.logger.log(`[SELF-HEALING] Instância conectada "${inst.instanceName}" está sem telefone no banco. Sincronizando em background...`);
+                this.instancesService.getStatus(inst.id, tenantId).catch(e => {
+                    this.logger.warn(`Self-healing status sync falhou para ${inst.instanceName}: ${e.message}`);
+                });
+            }
+        }
 
         const total = warmupInstances.length;
         const totalMessagesSent = warmupInstances.reduce((acc, curr) => acc + curr.dailySent, 0);
@@ -651,9 +691,13 @@ export class WarmupService {
     /**
      * Calculate current progress percentage
      */
-    getWarmupProgress(day: number): number {
-        const totalDays = WARMUP_SCHEDULE.length;
-        if (day >= totalDays) return 100;
-        return Math.round((day / totalDays) * 100);
+    getWarmupProgress(instance: Instance): number {
+        const profile = instance.warmupProfile || 'cold_outbound';
+        let maxDays = 14;
+        if (profile === 'cold_outbound') maxDays = 60;
+        else if (profile === 'warm_outbound' || profile === 'groups') maxDays = 30;
+
+        if (instance.warmupDay >= maxDays) return 100;
+        return Math.round((instance.warmupDay / maxDays) * 100);
     }
 }

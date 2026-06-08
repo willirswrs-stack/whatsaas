@@ -41,7 +41,7 @@ export interface DispatchResult {
 }
 
 @Processor(DISPATCH_QUEUE, {
-    lockDuration: 120000, // 2 minutes to allow for long Human Behavior delays
+    lockDuration: 1800000, // 30 minutes to allow for long custom delays or warmup delays
     concurrency: 5 // Optional: limit concurrency to prevent overloading
 })
 @Injectable()
@@ -50,6 +50,9 @@ export class DispatcherProcessor extends WorkerHost {
 
     // Round-Robin state per tenant
     private instanceIndex = new Map<string, number>();
+
+    // Tracking do último tempo de envio planejado por instância para evitar paralelismo no mesmo número
+    private lastInstanceSendTime = new Map<string, number>();
 
     // Track warmup alerts already sent (instanceId -> timestamp) to avoid spamming the user
     private warmupAlertSent = new Map<string, number>();
@@ -440,13 +443,37 @@ export class DispatcherProcessor extends WorkerHost {
                 `transforms=[${brokenMessage.transformationsApplied.join(', ')}]`
             );
 
-            // 6. Calcular delays com warmup consideration
+            // Calcular delays com warmup consideration
             const warmupDay = instance.warmupDay || 14; // Se não tem warmup, assume maduro
             const warmupDelays = this.delayGenerator.calculateWarmupDelay(
                 warmupDay,
                 campaign?.minDelayMs ? campaign.minDelayMs / 1000 : 30,
                 campaign?.maxDelayMs ? campaign.maxDelayMs / 1000 : 90,
             );
+
+            // Enforçar espaçamento sequencial entre mensagens para a mesma instância (evita concorrência e paralelismo no mesmo número)
+            const now = Date.now();
+            const lastPlannedTime = this.lastInstanceSendTime.get(instance.id) || 0;
+            
+            // Gerar delay base usando warmup ou delay da campanha
+            const baseDelaySeconds = this.delayGenerator.generateGaussianDelay(
+                warmupDelays.minSeconds,
+                warmupDelays.maxSeconds
+            );
+            const baseDelayMs = Math.round(baseDelaySeconds * 1000);
+            
+            // O próximo slot de envio deve ser pelo menos (último planejado + delay)
+            const plannedTime = Math.max(now, lastPlannedTime + baseDelayMs);
+            this.lastInstanceSendTime.set(instance.id, plannedTime);
+            
+            const spacingDelayMs = plannedTime - now;
+            if (spacingDelayMs > 0) {
+                this.logger.log(
+                    `⏳ Spacing Delay: Instância ${instance.instanceName} ativa. ` +
+                    `Aguardando ${(spacingDelayMs / 1000).toFixed(1)}s antes de iniciar a simulação de digitação.`
+                );
+                await new Promise(resolve => setTimeout(resolve, spacingDelayMs));
+            }
 
             // 7. Simular Comportamento Humano (HBS)
             this.logger.log(`⏳ Simulando comportamento humano para ${contact.phone}...`);
@@ -460,9 +487,9 @@ export class DispatcherProcessor extends WorkerHost {
                         avgCharsPerWord: 5,
                     },
                     delays: {
-                        minSeconds: warmupDelays.minSeconds,
-                        maxSeconds: warmupDelays.maxSeconds,
-                        jitterPercent: 15,
+                        minSeconds: 0,
+                        maxSeconds: 0,
+                        jitterPercent: 0,
                     },
                 },
                 {
@@ -486,7 +513,7 @@ export class DispatcherProcessor extends WorkerHost {
 
             this.logger.log(
                 `⏱️ HBS Timing: typing=${timing.typingDurationMs}ms, ` +
-                `delay=${timing.delayBeforeSendMs}ms, total=${timing.totalWaitMs}ms, ` +
+                `delay=${spacingDelayMs}ms, total=${spacingDelayMs + timing.typingDurationMs}ms, ` +
                 `wpm=${timing.wpmUsed}`
             );
 
@@ -560,9 +587,9 @@ export class DispatcherProcessor extends WorkerHost {
                 contentHash: brokenMessage.contentHash,
                 timingMetadata: {
                     typingDurationMs: timing.typingDurationMs,
-                    delayBeforeSendMs: timing.delayBeforeSendMs,
-                    jitterAppliedMs: timing.jitterAppliedMs,
-                    totalWaitMs: timing.totalWaitMs,
+                    delayBeforeSendMs: spacingDelayMs,
+                    jitterAppliedMs: 0,
+                    totalWaitMs: spacingDelayMs + timing.typingDurationMs,
                     wpmUsed: timing.wpmUsed,
                     warmupDay,
                     stackUsed: instance.provider,
@@ -1121,26 +1148,50 @@ export class DispatcherProcessor extends WorkerHost {
     }
 
     @OnWorkerEvent('completed')
-    onCompleted(job: Job<DispatchJobData, DispatchResult>) {
+    async onCompleted(job: Job<DispatchJobData, DispatchResult>) {
         this.logger.debug(`Job ${job.id} completed`);
-        const { tenantId, campaignId } = job.data;
+        const { tenantId, campaignId, campaignContactId } = job.data;
+
+        let contactDetails: any = null;
+        try {
+            contactDetails = await this.campaignContactRepo.findOne({
+                where: { id: campaignContactId },
+                relations: ['contact'],
+            });
+        } catch (err) {
+            this.logger.error(`Erro ao buscar contato da campanha para WebSocket: ${err.message}`);
+        }
+
         if (this.eventsGateway) {
             this.eventsGateway.emitToTenant(tenantId, 'dispatch.completed', {
                 campaignId,
                 success: job.returnvalue?.success ?? false,
-                result: job.returnvalue
+                result: job.returnvalue,
+                contact: contactDetails,
             });
         }
     }
 
     @OnWorkerEvent('failed')
-    onFailed(job: Job<DispatchJobData>, error: Error) {
+    async onFailed(job: Job<DispatchJobData>, error: Error) {
         this.logger.error(`Job ${job.id} failed: ${error.message}`);
-        const { tenantId, campaignId } = job.data;
+        const { tenantId, campaignId, campaignContactId } = job.data;
+
+        let contactDetails: any = null;
+        try {
+            contactDetails = await this.campaignContactRepo.findOne({
+                where: { id: campaignContactId },
+                relations: ['contact'],
+            });
+        } catch (err) {
+            this.logger.error(`Erro ao buscar contato da campanha para WebSocket: ${err.message}`);
+        }
+
         if (this.eventsGateway) {
             this.eventsGateway.emitToTenant(tenantId, 'dispatch.failed', {
                 campaignId,
-                error: error.message
+                error: error.message,
+                contact: contactDetails,
             });
         }
     }

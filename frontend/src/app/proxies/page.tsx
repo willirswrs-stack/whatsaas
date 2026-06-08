@@ -499,6 +499,7 @@ export default function ProxiesPage() {
                                         placeholder="••••••••"
                                         value={newProxy.password}
                                         onChange={(e) => setNewProxy({ ...newProxy, password: e.target.value })}
+                                        autoComplete="new-password"
                                     />
                                 </div>
                             </div>

@@ -94,8 +94,8 @@ import { ScheduleModule } from '@nestjs/schedule';
           password: configService.get<string>('DATABASE_PASSWORD'),
           database: configService.get<string>('DATABASE_NAME'),
           autoLoadEntities: true,
-          // Sync False em produção/dev consistente
-          synchronize: false,
+          // Sync automático apenas em dev (cria tabelas no banco vazio)
+          synchronize: configService.get<string>('NODE_ENV') !== 'production',
           logging: configService.get<string>('NODE_ENV') === 'development',
         };
       },

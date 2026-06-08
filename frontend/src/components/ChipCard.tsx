@@ -8,6 +8,7 @@ interface ChipCardProps {
     status: 'active' | 'warmup' | 'cooldown' | 'banned' | 'connecting' | 'connected' | 'disconnected' | string;
     warmupDay?: number;
     warmupEnabled?: boolean;
+    isSystemSeed?: boolean;
     dailyLimit: number;
     dailySent: number;
     proxy?: string;
@@ -63,6 +64,7 @@ export function ChipCard({
     status,
     warmupDay,
     warmupEnabled = false,
+    isSystemSeed = false,
     dailyLimit,
     dailySent,
     proxy,
@@ -167,7 +169,14 @@ export function ChipCard({
         <div className="chip-card flex flex-col gap-3">
             {/* Header: phone + status */}
             <div className="chip-header">
-                <span className="chip-phone">{phone || 'Sem número'}</span>
+                <div className="flex flex-col gap-1">
+                    <span className="chip-phone">{phone || 'Sem número'}</span>
+                    {isSystemSeed && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 font-medium self-start">
+                            🌱 Semente do Sistema
+                        </span>
+                    )}
+                </div>
                 <div className="flex flex-col items-end gap-1">
                     <span className={`badge badge-${status}`}>
                         <span className="w-2 h-2 rounded-full bg-current"></span>

@@ -3,6 +3,7 @@
 import { usePathname } from 'next/navigation';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ThemeProvider } from '@/contexts/ThemeContext';
+import { LlmProvider } from '@/contexts/LlmContext';
 import { Sidebar } from './Sidebar';
 import { ProtectedRoute } from './ProtectedRoute';
 
@@ -21,18 +22,20 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
     return (
         <ThemeProvider>
             <AuthProvider>
-                {isPublicRoute ? (
-                    // Rotas públicas (login) - sem sidebar
-                    <>{children}</>
-                ) : (
-                    // Rotas protegidas - com sidebar
-                    <ProtectedRoute>
-                        <Sidebar />
-                        <main className="main-content">{children}</main>
-                        <OnboardingAssistant />
-                        <SupportWidget />
-                    </ProtectedRoute>
-                )}
+                <LlmProvider>
+                    {isPublicRoute ? (
+                        // Rotas públicas (login) - sem sidebar
+                        <>{children}</>
+                    ) : (
+                        // Rotas protegidas - com sidebar
+                        <ProtectedRoute>
+                            <Sidebar />
+                            <main className="main-content">{children}</main>
+                            <OnboardingAssistant />
+                            <SupportWidget />
+                        </ProtectedRoute>
+                    )}
+                </LlmProvider>
             </AuthProvider>
         </ThemeProvider>
     );

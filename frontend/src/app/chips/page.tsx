@@ -6,8 +6,12 @@ import { ChipCard } from '@/components/ChipCard';
 import { instancesService, Instance, ProviderType } from '@/lib/instances';
 import { getErrorMessage } from '@/lib/auth';
 import api from '@/lib/api';
+import { useSuperAdmin } from '@/hooks/useSuperAdmin';
+import { useLlm } from '@/contexts/LlmContext';
 
 export default function ChipsPage() {
+    const { isSuperAdmin } = useSuperAdmin();
+    const { llmConfig } = useLlm();
     const [instances, setInstances] = useState<Instance[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -17,6 +21,7 @@ export default function ChipsPage() {
     const [qrCode, setQrCode] = useState('');
     const [newInstanceName, setNewInstanceName] = useState('');
     const [selectedProvider, setSelectedProvider] = useState<ProviderType>('evolution');
+    const [selectedWarmupProfile, setSelectedWarmupProfile] = useState<'inbound' | 'warm_outbound' | 'cold_outbound' | 'groups'>('cold_outbound');
     const [isCreating, setIsCreating] = useState(false);
     const [createdInstanceId, setCreatedInstanceId] = useState<string | null>(null);
     const [connectionStatus, setConnectionStatus] = useState('');
@@ -35,6 +40,7 @@ export default function ChipsPage() {
     const [customVoiceName, setCustomVoiceName] = useState<string>('');
     const [isPlayingPreview, setIsPlayingPreview] = useState(false);
     const [isCloningVoice, setIsCloningVoice] = useState(false);
+    const [isSystemSeed, setIsSystemSeed] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const pollingRef = useRef<NodeJS.Timeout | null>(null);
     const autoRefreshRef = useRef<NodeJS.Timeout | null>(null);
@@ -167,7 +173,8 @@ export default function ChipsPage() {
             // Backend retorna { instance, qrCode } diretamente
             const result = await instancesService.create({
                 name: newInstanceName,
-                provider: selectedProvider
+                provider: selectedProvider,
+                warmupProfile: selectedWarmupProfile
             });
             setInstances([...instances, result.instance]);
 
@@ -287,6 +294,8 @@ export default function ChipsPage() {
         
         setSelectedVoiceSpeed(Number(instance?.metaConfig?.voiceSpeed) || 1.0);
         setSelectedVoiceModel((instance?.metaConfig?.voiceModel as any) === 'tts-1' ? 'tts-1' : 'tts-1-hd');
+        setIsSystemSeed(!!instance?.isSystemSeed);
+        setSelectedWarmupProfile(instance?.warmupProfile || 'cold_outbound');
     };
 
     const saveConfig = async () => {
@@ -296,6 +305,8 @@ export default function ChipsPage() {
             
             await instancesService.update(configInstanceId, {
                 proxyId: selectedProxyId || null,
+                isSystemSeed: isSystemSeed,
+                warmupProfile: selectedWarmupProfile,
                 metaConfig: { 
                     voiceProfile: finalVoice || 'alloy',
                     voiceSpeed: selectedVoiceSpeed,
@@ -515,6 +526,7 @@ export default function ChipsPage() {
                                 instanceId={instance.id}
                                 warmupDay={instance.warmupDay}
                                 warmupEnabled={instance.warmupEnabled ?? true}
+                                isSystemSeed={instance.isSystemSeed}
                                 proxy={instance.proxy?.host || 'Sem proxy'}
                                 metaConfig={instance.metaConfig}
                                 onQrCode={fetchQrCode}
@@ -868,6 +880,41 @@ export default function ChipsPage() {
                                     </p>
                                 </div>
 
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium mb-2">Perfil de Aquecimento</label>
+                                    {isSuperAdmin ? (
+                                        <select
+                                            className="input w-full bg-[#161922] border-white/10 text-white"
+                                            value={selectedWarmupProfile}
+                                            onChange={(e) => setSelectedWarmupProfile(e.target.value as any)}
+                                        >
+                                            <option value="cold_outbound">Prospecção Fria (Risco Alto)</option>
+                                            <option value="warm_outbound">Prospecção Quente (Risco Médio)</option>
+                                            <option value="groups">Aquecimento em Grupos</option>
+                                            <option value="inbound">Receptivo (Risco Baixo)</option>
+                                        </select>
+                                    ) : (
+                                        <select
+                                            className="input w-full bg-[#161922] border-white/10 text-white"
+                                            value={selectedWarmupProfile}
+                                            onChange={(e) => setSelectedWarmupProfile(e.target.value as any)}
+                                        >
+                                            <option value="cold_outbound">Prospecção Fria (Risco Alto)</option>
+                                            <option value="warm_outbound">Prospecção Quente (Risco Médio)</option>
+                                            <option value="groups">Aquecimento em Grupos</option>
+                                            <option value="inbound">Receptivo (Risco Baixo)</option>
+                                        </select>
+                                    )}
+                                    <p className="text-xs text-[var(--text-muted)] mt-1.5 leading-relaxed">
+                                        O tempo mínimo de aquecimento será configurado de acordo com o nicho para maior proteção do chip.
+                                    </p>
+                                    {!isSuperAdmin && (
+                                        <p className="text-[10px] text-orange-400 mt-1 flex items-center gap-1">
+                                            🔒 Duração definida pelo administrador
+                                        </p>
+                                    )}
+                                </div>
+
                                 <div className="flex gap-3 pt-2">
                                     <button
                                         type="button"
@@ -973,6 +1020,57 @@ export default function ChipsPage() {
                             <p className="text-xs text-[var(--text-muted)] mt-1">
                                 Use um proxy para proteger a instância e evitar bloqueios
                             </p>
+                        </div>
+
+                        {/* System Seed Toggle */}
+                        <div className="mb-6 flex flex-col gap-2 p-3 bg-white/5 border border-white/10 rounded-lg">
+                            <div className="flex items-center justify-between">
+                                <label className="text-sm font-medium text-green-400 flex items-center gap-2">
+                                    🌱 Chip Semente do Sistema
+                                </label>
+                                <button
+                                    type="button"
+                                    onClick={() => setIsSystemSeed(!isSystemSeed)}
+                                    className={`relative w-10 h-5 rounded-full transition-colors focus:outline-none ${isSystemSeed ? 'bg-green-500' : 'bg-gray-700'}`}
+                                >
+                                    <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${isSystemSeed ? 'translate-x-5' : 'translate-x-0'}`} />
+                                </button>
+                            </div>
+                            <p className="text-xs text-gray-400 leading-relaxed">
+                                Se ativado, este chip ajudará a aquecer outros clientes. Ele fará conversas ativas com contas novas.
+                            </p>
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="block text-sm font-medium mb-2">Perfil de Aquecimento (Atual: {instances.find(i => i.id === configInstanceId)?.warmupDay || 0} dias)</label>
+                            {isSuperAdmin ? (
+                                <select
+                                    className="input w-full bg-[#161922] border-white/10 text-white"
+                                    value={selectedWarmupProfile}
+                                    onChange={(e) => setSelectedWarmupProfile(e.target.value as any)}
+                                >
+                                    <option value="cold_outbound">Prospecção Fria (Risco Alto)</option>
+                                    <option value="warm_outbound">Prospecção Quente (Risco Médio)</option>
+                                    <option value="groups">Aquecimento em Grupos</option>
+                                    <option value="inbound">Receptivo (Risco Baixo)</option>
+                                </select>
+                            ) : (
+                                <>
+                                    <select
+                                        className="input w-full bg-[#161922] border-white/10 text-white"
+                                        value={selectedWarmupProfile}
+                                        onChange={(e) => setSelectedWarmupProfile(e.target.value as any)}
+                                    >
+                                        <option value="cold_outbound">Prospecção Fria (Risco Alto)</option>
+                                        <option value="warm_outbound">Prospecção Quente (Risco Médio)</option>
+                                        <option value="groups">Aquecimento em Grupos</option>
+                                        <option value="inbound">Receptivo (Risco Baixo)</option>
+                                    </select>
+                                    <p className="text-[10px] text-orange-400 mt-1.5 flex items-center gap-1">
+                                        🔒 Duração definida pelo administrador — para alterar, acesse Config. Globais SA
+                                    </p>
+                                </>
+                            )}
                         </div>
 
                         <div className="mb-6 bg-white/5 border border-white/10 rounded-2xl p-5 relative overflow-hidden">

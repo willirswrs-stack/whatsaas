@@ -464,6 +464,7 @@ export default function TemplatesMetaPage() {
                                     placeholder="Token de acesso permanente"
                                     value={newAccount.accessToken}
                                     onChange={(e) => setNewAccount({ ...newAccount, accessToken: e.target.value })}
+                                    autoComplete="new-password"
                                 />
                                 <p className="text-xs text-[var(--text-muted)] mt-1">
                                     🔒 O token será armazenado de forma criptografada

@@ -154,7 +154,7 @@ export default function InboxPage() {
   const [wsConnected, setWsConnected] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const searchTimeout = useRef<NodeJS.Timeout>();
+  const searchTimeout = useRef<NodeJS.Timeout | undefined>(undefined);
 
   // Socket.io instance
   const [socket, setSocket] = useState<any>(null);

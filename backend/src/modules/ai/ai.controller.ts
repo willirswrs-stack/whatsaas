@@ -51,6 +51,15 @@ class PreviewVoiceDto {
     model?: string;
 }
 
+class SupportChatDto {
+    @IsString()
+    message: string;
+
+    @IsOptional()
+    @IsArray()
+    history?: { role: 'user' | 'assistant'; content: string }[];
+}
+
 @ApiTags('ai')
 @ApiBearerAuth()
 @Controller('ai')
@@ -146,6 +155,24 @@ export class AiController {
             success: true,
             voiceId,
             message: 'Voz clonada com sucesso via ElevenLabs!'
+        };
+    }
+
+    @Post('support-chat')
+    @ApiOperation({ summary: 'Interactive AI support agent' })
+    async supportChat(
+        @Body() dto: SupportChatDto,
+        @CurrentTenant() tenantId: string
+    ) {
+        const response = await this.aiService.generateSupportChatResponse(
+            tenantId,
+            dto.message,
+            dto.history || []
+        );
+
+        return {
+            success: true,
+            response
         };
     }
 }

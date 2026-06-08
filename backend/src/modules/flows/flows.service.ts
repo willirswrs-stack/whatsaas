@@ -54,14 +54,16 @@ export class FlowsService implements OnModuleInit {
         try {
             const delayedExecutions = await this.executionRepository
                 .createQueryBuilder('execution')
-                .where("execution.status = 'running'")
+                // FIX: Include 'delayed' status — delay node sets status='delayed', not 'running'
+                .where("execution.status IN ('running', 'delayed')")
                 .andWhere('execution.nextActionAt <= :now', { now: new Date() })
                 .getMany();
 
             if (delayedExecutions.length > 0) {
                 console.log(`[Flow] Recovering ${delayedExecutions.length} delayed executions`);
                 delayedExecutions.forEach(exec => {
-                    this.processExecution(exec.id).catch(err => console.error(`Error recovering execution ${exec.id}:`, err));
+                    // FIX: Call resumeExecution (resets status + nextActionAt) instead of processExecution
+                    this.resumeExecution(exec.id).catch(err => console.error(`Error recovering execution ${exec.id}:`, err));
                 });
             }
         } catch (error) {
@@ -424,19 +426,15 @@ export class FlowsService implements OnModuleInit {
             return;
         }
 
-        // Check if we need to wait for a scheduled delay (crash recovery case)
+        // FIX: If there's still a pending delay, skip this call — BullMQ will resume it at the right time.
+        // Previously this used an inline setTimeout which would block the Node.js event loop for hours.
         if (execution.nextActionAt) {
-            const now = Date.now();
-            const targetTime = execution.nextActionAt.getTime();
-            const remaining = targetTime - now;
-
+            const remaining = execution.nextActionAt.getTime() - Date.now();
             if (remaining > 500) {
-                console.log(`[Flow] ⏳ Execution ${executionId.slice(0, 8)} has pending delay. Waiting ${Math.ceil(remaining / 1000)}s...`);
-                // Wait the remaining time using Promise-based sleep
-                await new Promise<void>(resolve => setTimeout(resolve, remaining));
+                console.log(`[Flow] ⏳ Execution ${executionId.slice(0, 8)} still delayed for ${Math.ceil(remaining / 1000)}s — skipping (BullMQ will resume)`);
+                return; // BullMQ job will call resumeExecution() when the time comes
             }
-
-            // Clear the delay marker
+            // Delay has elapsed — clear the marker and proceed
             execution.nextActionAt = null;
             await this.executionRepository.save(execution);
         }
@@ -954,7 +952,8 @@ export class FlowsService implements OnModuleInit {
                     if (condNextNode) {
                         execution.currentNodeId = condNextNode.id;
                         await this.executionRepository.save(execution);
-                        this.processExecution(executionId);
+                        // FIX: Added missing await — prevents silent race conditions and unhandled rejections
+                        await this.processExecution(executionId);
                     }
                 } else {
                     console.log(`[Flow] No edge for condition result '${handleId}' at node ${nextNode.id}. Ending.`);
@@ -1006,7 +1005,8 @@ export class FlowsService implements OnModuleInit {
                     if (mcNextNode) {
                         execution.currentNodeId = mcNextNode.id;
                         await this.executionRepository.save(execution);
-                        this.processExecution(executionId);
+                        // FIX: Added missing await — prevents silent race conditions
+                        await this.processExecution(executionId);
                     }
                 } else {
                     execution.status = 'completed';
@@ -1439,7 +1439,8 @@ export class FlowsService implements OnModuleInit {
                     if (rNextNode) {
                         execution.currentNodeId = rNextNode.id;
                         await this.executionRepository.save(execution);
-                        this.processExecution(executionId);
+                        // FIX: Added missing await — prevents silent race conditions
+                        await this.processExecution(executionId);
                     }
                 } else {
                     execution.status = 'completed';
@@ -1738,6 +1739,20 @@ export class FlowsService implements OnModuleInit {
             });
 
             if (hasMatch) {
+                // FIX: Check for existing active execution to prevent duplicate triggers
+                // when a contact sends multiple messages rapidly
+                const existingExecution = await this.executionRepository
+                    .createQueryBuilder('exec')
+                    .where('exec.flowId = :flowId', { flowId: flow.id })
+                    .andWhere('exec.contactId = :contactId', { contactId })
+                    .andWhere("exec.status IN ('running', 'waiting_response', 'delayed')")
+                    .getOne();
+
+                if (existingExecution) {
+                    console.log(`[Flow] Trigger skipped for flow "${flow.name}" — contact already has active execution ${existingExecution.id.slice(0, 8)} (status: ${existingExecution.status})`);
+                    continue;
+                }
+
                 console.log(`[Flow] Trigger matched for flow "${flow.name}" with message: "${message}"`);
                 // Start execution
                 return this.startExecution(tenantId, {

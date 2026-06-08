@@ -11,6 +11,7 @@ import { FlowsService } from '../flows/flows.service';
 import { Contact } from '../contacts/entities/contact.entity';
 import { GroupWarmupService } from '../anti-ban/group-warmup.service';
 import { InboxService } from '../inbox/inbox.service';
+import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
 
 import { SkipThrottle } from '@nestjs/throttler';
 
@@ -44,6 +45,7 @@ export class EvolutionWebhookController {
         private groupWarmupService: GroupWarmupService,
         @Inject(forwardRef(() => InboxService))
         private inboxService: InboxService,
+        private providerFactory: WhatsAppProviderFactory,
     ) { }
 
     @Post('evolution')
@@ -112,6 +114,25 @@ export class EvolutionWebhookController {
 
         if (data.me?.id) {
             updateData.phone = data.me.id.replace('@s.whatsapp.net', '');
+        }
+
+        // 🔥 FALLBACK: Se o status for CONNECTED, mas não temos o telefone vindo no payload,
+        // ou se o banco de dados tem o telefone nulo, tentamos buscar diretamente da API do Provedor.
+        if (status === InstanceStatus.CONNECTED && !updateData.phone) {
+            try {
+                const existingInstance = await this.instanceRepo.findOne({ where: { instanceName } });
+                if (existingInstance && !existingInstance.phone) {
+                    this.logger.log(`Phone number missing for connected instance ${instanceName} in DB/webhook. Querying provider...`);
+                    const provider = this.providerFactory.getProvider((existingInstance.provider as any) || 'evolution');
+                    const providerStatus = await provider.getStatus(instanceName);
+                    if (providerStatus?.phoneNumber) {
+                        updateData.phone = providerStatus.phoneNumber.replace('@s.whatsapp.net', '');
+                        this.logger.log(`Phone number successfully recovered from provider: ${updateData.phone}`);
+                    }
+                }
+            } catch (err) {
+                this.logger.warn(`Failed to recover phone number from provider for ${instanceName}: ${err.message}`);
+            }
         }
 
         await this.instanceRepo.update({ instanceName }, updateData);

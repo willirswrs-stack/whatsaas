@@ -676,7 +676,26 @@ export default function ContactsPage() {
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium mb-2">Tags</label>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="block text-sm font-medium">Tags</label>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, tagIds: tags.map(t => t.id) })}
+                                            className="text-xs text-[var(--primary)] hover:underline"
+                                        >
+                                            Selecionar Todas
+                                        </button>
+                                        <span className="text-xs text-[var(--text-muted)]">|</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFormData({ ...formData, tagIds: [] })}
+                                            className="text-xs text-[var(--text-muted)] hover:underline"
+                                        >
+                                            Limpar
+                                        </button>
+                                    </div>
+                                </div>
                                 <div className="flex flex-wrap gap-2">
                                     {tags.map(tag => (
                                         <button
@@ -844,7 +863,26 @@ export default function ContactsPage() {
             {showBulkTagModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="glass-card w-full max-w-md p-6 m-4 animate-fadeIn">
-                        <h2 className="text-xl font-bold mb-4">Adicionar Tags</h2>
+                        <div className="flex justify-between items-center mb-3">
+                            <h2 className="text-xl font-bold">Adicionar Tags</h2>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setBulkSelectedTags(tags.map(t => t.id))}
+                                    className="text-xs text-[var(--primary)] hover:underline"
+                                >
+                                    Selecionar Todas
+                                </button>
+                                <span className="text-xs text-[var(--text-muted)]">|</span>
+                                <button
+                                    type="button"
+                                    onClick={() => setBulkSelectedTags([])}
+                                    className="text-xs text-[var(--text-muted)] hover:underline"
+                                >
+                                    Limpar
+                                </button>
+                            </div>
+                        </div>
                         <p className="text-sm text-[var(--text-secondary)] mb-4">
                             Selecione as tags para adicionar aos {selectedContacts.size} contatos selecionados:
                         </p>

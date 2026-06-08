@@ -3,10 +3,15 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components';
 import { authService } from '@/lib/auth';
+import api from '@/lib/api';
 import { useTheme } from '@/contexts/ThemeContext';
+import { useLlm } from '@/contexts/LlmContext';
+import { useSuperAdmin } from '@/hooks/useSuperAdmin';
 
 export default function SettingsPage() {
     const { theme, setTheme } = useTheme();
+    const { llmConfig, providerLabel, modelLabel } = useLlm();
+    const { isSuperAdmin } = useSuperAdmin();
     const [activeTab, setActiveTab] = useState('general');
     const [isSaving, setIsSaving] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
@@ -22,7 +27,6 @@ export default function SettingsPage() {
     const tabs = [
         { id: 'general', label: 'Geral', icon: '⚙️' },
         { id: 'account', label: 'Conta', icon: '👤' },
-        { id: 'integrations', label: 'Integrações IA', icon: '🤖' },
         { id: 'billing', label: 'Faturamento', icon: '💳' },
         { id: 'api', label: 'API & Webhooks', icon: '🔌' },
         { id: 'team', label: 'Equipe', icon: '👥' },
@@ -43,20 +47,15 @@ export default function SettingsPage() {
 
     const loadSettings = async () => {
         try {
-            const token = authService.getAccessToken();
-            const res = await fetch('/api/v1/settings', {
-                headers: { 'Authorization': `Bearer ${token}` }
+            const res = await api.get('/settings');
+            const data = res.data;
+            setApiKeys({
+                openaiKey: data.openaiKey || '',
+                anthropicKey: data.anthropicKey || '',
+                geminiKey: data.geminiKey || '',
+                groqKey: data.groqKey || '',
+                elevenLabsKey: data.elevenLabsKey || '',
             });
-            if (res.ok) {
-                const data = await res.json();
-                setApiKeys({
-                    openaiKey: data.openaiKey || '',
-                    anthropicKey: data.anthropicKey || '',
-                    geminiKey: data.geminiKey || '',
-                    groqKey: data.groqKey || '',
-                    elevenLabsKey: data.elevenLabsKey || '',
-                });
-            }
         } catch (err) {
             console.error('Erro ao carregar configurações:', err);
         }
@@ -65,18 +64,8 @@ export default function SettingsPage() {
     const saveApiKeys = async () => {
         setIsSaving(true);
         try {
-            const token = authService.getAccessToken();
-            const res = await fetch('/api/v1/settings', {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(apiKeys)
-            });
-            if (res.ok) {
-                setSuccessMsg('Configurações salvas com sucesso!');
-            }
+            await api.put('/settings', apiKeys);
+            setSuccessMsg('Configurações salvas com sucesso!');
         } catch (err) {
             console.error('Erro ao salvar:', err);
         } finally {
@@ -126,6 +115,26 @@ export default function SettingsPage() {
                     {activeTab === 'general' && (
                         <div className="glass p-6 rounded-xl space-y-6">
                             <h2 className="text-xl font-semibold text-white">Configurações Gerais</h2>
+
+                            {/* LLM Status Card */}
+                            <div className="flex items-center justify-between p-4 bg-indigo-500/10 border border-indigo-500/20 rounded-xl">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-lg">🧠</div>
+                                    <div>
+                                        <p className="text-sm font-semibold text-white">IA Ativa na Plataforma</p>
+                                        <p className="text-xs text-[var(--text-muted)]">
+                                            {providerLabel} — <span className="text-indigo-300 font-medium">{modelLabel}</span>
+                                        </p>
+                                    </div>
+                                </div>
+                                {isSuperAdmin ? (
+                                    <a href="/admin/ai-agent" className="text-xs px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors border border-indigo-500/30">
+                                        ⚙️ Configurar
+                                    </a>
+                                ) : (
+                                    <span className="text-xs text-[var(--text-muted)] flex items-center gap-1">🔒 Definido pelo admin</span>
+                                )}
+                            </div>
 
                             <div className="space-y-4">
                                 <div>
@@ -330,6 +339,7 @@ export default function SettingsPage() {
                                             placeholder="sk-proj-..."
                                             value={apiKeys.openaiKey}
                                             onChange={(e) => setApiKeys({ ...apiKeys, openaiKey: e.target.value })}
+                                            autoComplete="new-password"
                                         />
                                         <button
                                             type="button"
@@ -371,6 +381,7 @@ export default function SettingsPage() {
                                             placeholder="sk-ant-..."
                                             value={apiKeys.anthropicKey}
                                             onChange={(e) => setApiKeys({ ...apiKeys, anthropicKey: e.target.value })}
+                                            autoComplete="new-password"
                                         />
                                         <button
                                             type="button"
@@ -412,6 +423,7 @@ export default function SettingsPage() {
                                             placeholder="AIza..."
                                             value={apiKeys.geminiKey}
                                             onChange={(e) => setApiKeys({ ...apiKeys, geminiKey: e.target.value })}
+                                            autoComplete="new-password"
                                         />
                                         <button
                                             type="button"
@@ -453,6 +465,7 @@ export default function SettingsPage() {
                                             placeholder="gsk_..."
                                             value={apiKeys.groqKey}
                                             onChange={(e) => setApiKeys({ ...apiKeys, groqKey: e.target.value })}
+                                            autoComplete="new-password"
                                         />
                                         <button
                                             type="button"
@@ -494,6 +507,7 @@ export default function SettingsPage() {
                                             placeholder="sk_..."
                                             value={apiKeys.elevenLabsKey}
                                             onChange={(e) => setApiKeys({ ...apiKeys, elevenLabsKey: e.target.value })}
+                                            autoComplete="new-password"
                                         />
                                         <button
                                             type="button"
@@ -593,6 +607,7 @@ export default function SettingsPage() {
                                         className="input flex-1"
                                         defaultValue="sk_live_xxxxxxxxxxxxxxxxxxxxx"
                                         readOnly
+                                        autoComplete="new-password"
                                     />
                                     <button className="btn btn-secondary">Copiar</button>
                                     <button className="btn btn-secondary text-red-400">Regenerar</button>

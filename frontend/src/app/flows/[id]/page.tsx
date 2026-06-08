@@ -671,7 +671,7 @@ function StartNode({ data, selected, id }: CustomNodeProps) {
                     isOpen={showHoursModal} 
                     onClose={() => setShowHoursModal(false)} 
                     config={businessHours}
-                    onSave={(newHours) => {
+                    onSave={(newHours: any) => {
                         updateConfig({ businessHours: newHours });
                         setShowHoursModal(false);
                     }}
@@ -683,7 +683,7 @@ function StartNode({ data, selected, id }: CustomNodeProps) {
                     isOpen={showTriggerModal} 
                     onClose={() => setShowTriggerModal(false)} 
                     triggers={triggers}
-                    onSave={(newTriggers) => {
+                    onSave={(newTriggers: any) => {
                         updateConfig({ triggers: newTriggers });
                         setShowTriggerModal(false);
                     }}
@@ -2295,6 +2295,7 @@ function AINodeBase({ data, selected, id, title, icon, color, tokenPlaceholder, 
                         value={token}
                         onChange={(e) => setToken(e.target.value)}
                         onClick={(e) => e.stopPropagation()}
+                        autoComplete="new-password"
                     />
                     <a
                         href={helpLink}
@@ -2491,6 +2492,7 @@ function CustomLLMNode({ data, selected, id }: CustomNodeProps) {
                             value={apiKey}
                             onChange={(e) => setApiKey(e.target.value)}
                             onClick={(e) => e.stopPropagation()}
+                            autoComplete="new-password"
                         />
                     </div>
 
@@ -4360,8 +4362,8 @@ function FlowEditorContent() {
         const loadExtraData = async () => {
             try {
                 const [instancesData, flowsData] = await Promise.all([
-                    instancesService.getInstances(),
-                    flowsApi.listFlows()
+                    instancesService.list(),
+                    flowsApi.getFlows()
                 ]);
                 setInstances(instancesData);
                 setAllFlows(flowsData.filter((f: any) => f.id !== flowId));

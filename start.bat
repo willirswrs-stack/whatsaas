@@ -3,8 +3,11 @@ title WhatSaas - Iniciando...
 color 0A
 setlocal
 
+set PROJECT_DIR=%~dp0
 set BACKEND_DIR=%~dp0backend
 set FRONTEND_DIR=%~dp0frontend
+set COMPOSE_FILE=%~dp0backend\docker-compose.yml
+set ENV_FILE=%~dp0backend\.env
 
 echo.
 echo  ==========================================================
@@ -18,23 +21,28 @@ docker info >nul 2>&1
 if %ERRORLEVEL% neq 0 (
     echo.
     echo  ERRO: Docker Desktop nao esta rodando!
-    echo  Por favor, inicie o Docker Desktop e tente novamente.
-    echo.
-    pause
-    exit /b 1
+    echo  Iniciando Docker Desktop...
+    start "" "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+    echo  Aguardando Docker iniciar (30s)...
+    timeout /t 30 /nobreak >nul
+    docker info >nul 2>&1
+    if %ERRORLEVEL% neq 0 (
+        echo  ERRO: Docker ainda nao respondeu. Inicie manualmente e tente novamente.
+        pause
+        exit /b 1
+    )
 )
 echo  OK - Docker esta rodando
 
-:: ── 2. Matar processos Node antigos (evita conflito de porta) ─
+:: ── 2. Limpeza de processos Node antigos ─────────────────────
 echo.
 echo [2/5] Limpando processos Node anteriores...
 taskkill /F /IM node.exe /T >nul 2>&1
 echo  OK - Processos anteriores finalizados
 
-:: ── 3. Subir containers (so os que nao estao rodando) ────────
+:: ── 3. Subir containers Docker ────────────────────────────────
 echo.
 echo [3/5] Verificando/Iniciando containers Docker...
-cd /d "%BACKEND_DIR%"
 
 :: Checar se postgres ja esta rodando
 docker inspect -f "{{.State.Running}}" wathsaas-postgres >nul 2>&1
@@ -42,17 +50,23 @@ if %ERRORLEVEL% equ 0 (
     echo  OK - Containers ja estao rodando, pulando...
 ) else (
     echo  Iniciando containers...
-    start /b docker-compose up -d postgres redis evolution waha
+    docker compose -f "%COMPOSE_FILE%" --env-file "%ENV_FILE%" up -d postgres redis evolution waha
+    if %ERRORLEVEL% neq 0 (
+        echo  ERRO: Falha ao iniciar containers Docker!
+        echo  Verifique: docker compose -f backend\docker-compose.yml --env-file backend\.env up -d
+        pause
+        exit /b 1
+    )
     echo  OK - Containers iniciando em background
 )
 
-:: ── 4. Aguardar PostgreSQL estar pronto (max 30s) ────────────
+:: ── 4. Aguardar PostgreSQL estar pronto (max 45s) ────────────
 echo.
 echo [4/5] Aguardando banco de dados ficar pronto...
 set /a TRIES=0
 :waitdb
 set /a TRIES+=1
-if %TRIES% gtr 15 (
+if %TRIES% gtr 22 (
     echo  AVISO: Timeout aguardando DB, iniciando assim mesmo...
     goto startapp
 )
@@ -68,8 +82,8 @@ echo  OK - Banco de dados pronto
 echo.
 echo [5/5] Iniciando Backend e Frontend...
 
-start "WhatSaas - Backend" cmd /k "title WhatSaas Backend (porta 3333) && cd /d %BACKEND_DIR% && npm run start:dev"
-start "WhatSaas - Frontend" cmd /k "title WhatSaas Frontend (porta 3000) && cd /d %FRONTEND_DIR% && npm run dev"
+start "WhatSaas Backend (porta 3333)" cmd /k "title WhatSaas Backend && cd /d %BACKEND_DIR% && npm run start:dev"
+start "WhatSaas Frontend (porta 3000)" cmd /k "title WhatSaas Frontend && cd /d %FRONTEND_DIR% && npm run dev"
 
 :: ── Aguardar backend responder (max 60s) ─────────────────────
 echo.
@@ -97,10 +111,12 @@ echo  ==========================================================
 echo.
 echo    WHATSAAS INICIADO COM SUCESSO!
 echo.
-echo    Frontend:  http://localhost:3000
-echo    Backend:   http://localhost:3333
-echo    API Docs:  http://localhost:3333/docs
+echo    Frontend:   http://localhost:3000
+echo    Backend:    http://localhost:3333
+echo    API Docs:   http://localhost:3333/docs
 echo    Bull Board: http://localhost:3333/bull-board
+echo    Evolution:  http://localhost:8081
+echo    WAHA:       http://localhost:8080
 echo.
 echo  ==========================================================
 echo.

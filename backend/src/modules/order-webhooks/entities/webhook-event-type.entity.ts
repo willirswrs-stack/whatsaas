@@ -12,10 +12,10 @@ export class WebhookEventType {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ unique: true })
+    @Column({ length: 50, unique: true })
     code: string;
 
-    @Column()
+    @Column({ length: 100 })
     label: string;
 
     @Column({ nullable: true })

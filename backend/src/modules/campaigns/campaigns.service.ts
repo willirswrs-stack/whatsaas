@@ -21,6 +21,7 @@ import { AiService } from '../ai/ai.service';
 import { DispatcherService } from '../dispatcher/dispatcher.service';
 import { SettingsService } from '../settings/settings.service';
 import { SCHEDULER_QUEUE } from '../../config/bull.config';
+import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
 
 @Injectable()
 export class CampaignsService {
@@ -45,6 +46,7 @@ export class CampaignsService {
         @Inject(forwardRef(() => SettingsService))
         private settingsService: SettingsService,
         private readonly contactsService: ContactsService,
+        private whatsAppFactory: WhatsAppProviderFactory,
     ) { }
 
     async findAll(tenantId: string, query?: PaginationQueryDto) {
@@ -237,14 +239,42 @@ export class CampaignsService {
             }
         }
 
-        // Verificar se pelo menos uma instância está conectada
+        // Verificar se pelo menos uma instância está conectada (com validação real no provedor)
         const instanceIds = campaign.instanceIds?.length > 0 ? campaign.instanceIds : (campaign.instanceId ? [campaign.instanceId] : []);
         if (instanceIds.length > 0) {
-            const connectedCount = await this.campaignRepo.manager.getRepository(Instance).count({
-                where: { id: In(instanceIds), status: InstanceStatus.CONNECTED },
+            let connectedCount = 0;
+            const instances = await this.campaignRepo.manager.getRepository(Instance).find({
+                where: { id: In(instanceIds) }
             });
+
+            for (const instance of instances) {
+                try {
+                    const provider = this.whatsAppFactory.getProvider(instance.provider as any);
+                    const status = await provider.getStatus(instance.instanceName);
+                    
+                    const mappedStatus = status.status as unknown as InstanceStatus;
+                    if (instance.status !== mappedStatus) {
+                        instance.status = mappedStatus;
+                        if (mappedStatus === InstanceStatus.CONNECTED) {
+                            instance.connectedAt = new Date();
+                        }
+                        await this.campaignRepo.manager.getRepository(Instance).save(instance);
+                    }
+                    
+                    if (mappedStatus === InstanceStatus.CONNECTED) {
+                        connectedCount++;
+                    }
+                } catch (err) {
+                    this.logger.warn(`Falha ao obter status real da instância ${instance.instanceName}: ${err.message}`);
+                    // Fallback para o status atual no banco
+                    if (instance.status === InstanceStatus.CONNECTED) {
+                        connectedCount++;
+                    }
+                }
+            }
+
             if (connectedCount === 0) {
-                this.logger.warn(`⚠️ Nenhuma das ${instanceIds.length} instâncias está conectada! A campanha pode encontrar falhas.`);
+                throw new BadRequestException('Nenhum chip/número configurado para esta campanha está conectado. Por favor, conecte o chip antes de iniciar o disparo.');
             } else {
                 this.logger.log(`✅ ${connectedCount}/${instanceIds.length} instâncias conectadas para campanha ${id}`);
             }

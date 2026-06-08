@@ -12,6 +12,8 @@ export interface Instance {
     status: 'connecting' | 'connected' | 'disconnected' | 'banned';
     warmupDay: number;     // Backend field name
     warmupEnabled?: boolean; // Whether warmup is active
+    isSystemSeed?: boolean; // Whether it is a system seed chip
+    warmupProfile?: 'inbound' | 'warm_outbound' | 'cold_outbound' | 'groups';
     warmupProgress?: number; // Alias for compatibility
     dailyLimit: number;
     dailySent: number;     // Backend field name
@@ -31,6 +33,7 @@ export interface CreateInstanceDto {
     name: string;
     proxyId?: string;
     provider?: ProviderType;
+    warmupProfile?: 'inbound' | 'warm_outbound' | 'cold_outbound' | 'groups';
 }
 
 export interface Proxy {
@@ -144,7 +147,8 @@ export const instancesService = {
         const response = await api.post<any>('/instances', {
             instanceName: sanitizedName,
             proxyId: data.proxyId,
-            provider: data.provider || 'evolution'  // Evolution como padrão
+            provider: data.provider || 'evolution',  // Evolution como padrão
+            warmupProfile: data.warmupProfile || 'cold_outbound'
         });
         return response.data;
     },

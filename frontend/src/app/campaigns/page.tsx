@@ -9,6 +9,16 @@ import { getErrorMessage } from '@/lib/auth';
 import { connectSocket } from '@/lib/socket';
 import { metaTemplatesService, WabaAccount, MetaTemplate } from '@/lib/meta-templates';
 import api from '@/lib/api';
+import { 
+    ResponsiveContainer, 
+    AreaChart, 
+    Area, 
+    XAxis, 
+    YAxis, 
+    CartesianGrid, 
+    Tooltip, 
+    Legend 
+} from 'recharts';
 
 const statusConfig: Record<string, { color: string; label: string; bg: string }> = {
     running: { color: 'var(--accent-success)', label: 'Em execução', bg: 'rgba(34, 197, 94, 0.15)' },
@@ -73,6 +83,51 @@ export default function CampaignsPage() {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const mediaInputRef = useRef<HTMLInputElement>(null);
 
+    const [showMonitoringModal, setShowMonitoringModal] = useState(false);
+    const [activeMonitoringCampaignId, setActiveMonitoringCampaignId] = useState<string | null>(null);
+    const [monitoringCampaignName, setMonitoringCampaignName] = useState('');
+    const [monitoringContacts, setMonitoringContacts] = useState<any[]>([]);
+    const [isMonitoringLoading, setIsMonitoringLoading] = useState(false);
+    const activeMonitoringCampaignIdRef = useRef<string | null>(null);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+    }, []);
+
+    useEffect(() => {
+        activeMonitoringCampaignIdRef.current = activeMonitoringCampaignId;
+    }, [activeMonitoringCampaignId]);
+
+    useEffect(() => {
+        if (!activeMonitoringCampaignId) {
+            setMonitoringContacts([]);
+            return;
+        }
+
+        const fetchInitialContacts = async () => {
+            setIsMonitoringLoading(true);
+            try {
+                const res = await campaignsService.getContacts(activeMonitoringCampaignId, {
+                    limit: 300,
+                });
+                const processed = (res.data || []).filter((cc: any) => 
+                    cc.status === 'sent' || 
+                    cc.status === 'failed' || 
+                    cc.status === 'delivered' || 
+                    cc.status === 'read'
+                );
+                setMonitoringContacts(processed);
+            } catch (err) {
+                console.error('Erro ao carregar contatos de monitoramento:', err);
+            } finally {
+                setIsMonitoringLoading(false);
+            }
+        };
+
+        fetchInitialContacts();
+    }, [activeMonitoringCampaignId]);
+
     // Filtrar contatos por nome ou telefone
     const filteredContacts = contacts.filter(contact => {
         const tagMatch = !selectedTagId || contact.tags?.some(tag => tag.id === selectedTagId);
@@ -99,12 +154,18 @@ export default function CampaignsPage() {
                     return {
                         ...c,
                         sentCount: (c.sentCount || 0) + 1,
-                        // Assumindo running se receber update
                         status: c.status === 'scheduled' || c.status === 'draft' ? 'running' : c.status
                     };
                 }
                 return c;
             }));
+
+            if (payload.campaignId === activeMonitoringCampaignIdRef.current && payload.contact) {
+                setMonitoringContacts(prev => {
+                    if (prev.some(x => x.id === payload.contact.id)) return prev;
+                    return [...prev, payload.contact];
+                });
+            }
         };
 
         const handleDispatchFailed = (payload: any) => {
@@ -119,6 +180,13 @@ export default function CampaignsPage() {
                 }
                 return c;
             }));
+
+            if (payload.campaignId === activeMonitoringCampaignIdRef.current && payload.contact) {
+                setMonitoringContacts(prev => {
+                    if (prev.some(x => x.id === payload.contact.id)) return prev;
+                    return [...prev, payload.contact];
+                });
+            }
         };
 
         const handleCampaignStats = (payload: any) => {
@@ -240,7 +308,8 @@ export default function CampaignsPage() {
                         metaTemplateId: newCampaign.metaTemplateId,
                         wabaAccountId: selectedWabaAccountId || undefined,
                         metaVariables,
-                        metaMediaUrl
+                        metaMediaUrl,
+                        metaTemplateCategory: metaTemplates.find(t => `${t.name}|${t.language}` === newCampaign.metaTemplateId)?.category || 'MARKETING'
                     } : {})
                 }
             });
@@ -439,10 +508,16 @@ export default function CampaignsPage() {
     };
 
     const selectAllContacts = () => {
-        setNewCampaign(prev => ({
-            ...prev,
-            contactIds: prev.contactIds.length === contacts.length ? [] : contacts.map(c => c.id)
-        }));
+        const allFilteredSelected = filteredContacts.every(c => newCampaign.contactIds.includes(c.id));
+        setNewCampaign(prev => {
+            const otherIds = prev.contactIds.filter(id => !filteredContacts.some(fc => fc.id === id));
+            return {
+                ...prev,
+                contactIds: allFilteredSelected 
+                    ? otherIds 
+                    : [...otherIds, ...filteredContacts.map(fc => fc.id)]
+            };
+        });
     };
 
     // Filtrar campanhas
@@ -460,6 +535,34 @@ export default function CampaignsPage() {
         completed: campaigns.filter(c => c.status === 'completed').length,
         draft: campaigns.filter(c => c.status === 'draft').length,
     };
+
+    // Calcular os dados do gráfico de monitoramento em tempo real
+    const chartData = [...monitoringContacts]
+        .sort((a, b) => {
+            const timeA = new Date(a.sentAt || a.failedAt || a.updatedAt).getTime();
+            const timeB = new Date(b.sentAt || b.failedAt || b.updatedAt).getTime();
+            return timeA - timeB;
+        })
+        .map((cc, index, sortedArr) => {
+            let elapsedSec = 0;
+            if (index > 0) {
+                const prevTime = new Date(sortedArr[index - 1].sentAt || sortedArr[index - 1].failedAt || sortedArr[index - 1].updatedAt).getTime();
+                const currTime = new Date(cc.sentAt || cc.failedAt || cc.updatedAt).getTime();
+                elapsedSec = Math.max(0, Math.round((currTime - prevTime) / 1000));
+            }
+            
+            const antiBanDelayMs = cc.timingMetadata?.totalWaitMs || cc.timingMetadata?.delayBeforeSendMs || 0;
+            const antiBanSec = Math.round(antiBanDelayMs / 1000);
+
+            return {
+                name: cc.contact?.name || cc.contact?.phone || `Envio ${index + 1}`,
+                phone: cc.contact?.phone || '',
+                'Intervalo Real (s)': elapsedSec,
+                'Delay Anti-Ban (s)': antiBanSec,
+                status: cc.status,
+                timeLabel: new Date(cc.sentAt || cc.failedAt || cc.updatedAt).toLocaleTimeString('pt-BR'),
+            };
+        });
 
     return (
         <div className="animate-fadeIn">
@@ -608,7 +711,17 @@ export default function CampaignsPage() {
                                     const readRate = delivered > 0 ? ((read / delivered) * 100).toFixed(1) : '0';
                                     
                                     const isMeta = !!campaign.settings?.metaTemplateId;
-                                    const estimatedCost = isMeta ? (sent * 0.0633) : 0;
+                                    const metaCategory = campaign.settings?.metaTemplateCategory || 'MARKETING';
+                                    const pricingRates: Record<string, number> = {
+                                        MARKETING: Number(process.env.NEXT_PUBLIC_META_RATE_MARKETING) || 0.35,
+                                        UTILITY: Number(process.env.NEXT_PUBLIC_META_RATE_UTILITY) || 0.20,
+                                        AUTHENTICATION: Number(process.env.NEXT_PUBLIC_META_RATE_AUTHENTICATION) || 0.17,
+                                    };
+                                    const rate = pricingRates[metaCategory] || 0.35;
+                                    const taxRate = Number(process.env.NEXT_PUBLIC_META_TAX_RATE) || 0.1215;
+                                    const subtotalCost = isMeta ? (sent * rate) : 0;
+                                    const estimatedTaxes = subtotalCost * taxRate;
+                                    const estimatedCostWithTaxes = subtotalCost + estimatedTaxes;
 
                                     return (
                                         <tr key={campaign.id}>
@@ -686,8 +799,11 @@ export default function CampaignsPage() {
                                             </td>
                                             <td className="text-center">
                                                 {isMeta ? (
-                                                    <span className="font-mono text-sm px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--accent)] border border-[var(--border)]" title="Estimativa: Meta marketing message">
-                                                        {estimatedCost.toLocaleString('en-US', { style: 'currency', currency: 'USD' })}
+                                                    <span 
+                                                        className="font-mono text-sm px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--accent)] border border-[var(--border)] cursor-help" 
+                                                        title={`Sem Impostos: R$ ${subtotalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} | Impostos (${(taxRate * 100).toFixed(0)}%): R$ ${estimatedTaxes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                                                    >
+                                                        R$ {estimatedCostWithTaxes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                     </span>
                                                 ) : (
                                                     <span className="text-[var(--text-muted)]">-</span>
@@ -695,12 +811,25 @@ export default function CampaignsPage() {
                                             </td>
                                             <td>
                                                 <div className="flex items-center gap-1">
-                                                    {/* Start button - for draft/paused */}
-                                                    {(campaign.status === 'draft' || campaign.status === 'paused') && (
+                                                    {/* Start button - for draft */}
+                                                    {campaign.status === 'draft' && (
                                                         <button
                                                             className="p-2 rounded-lg hover:bg-[var(--bg-glass)] text-[var(--accent-success)]"
                                                             title="Iniciar"
                                                             onClick={() => startCampaign(campaign.id)}
+                                                        >
+                                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                                                                <polygon points="5,3 19,12 5,21" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Resume button - for paused */}
+                                                    {campaign.status === 'paused' && (
+                                                        <button
+                                                            className="p-2 rounded-lg hover:bg-[var(--bg-glass)] text-[var(--accent-success)]"
+                                                            title="Retomar"
+                                                            onClick={() => resumeCampaign(campaign.id)}
                                                         >
                                                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                                                                 <polygon points="5,3 19,12 5,21" />
@@ -755,6 +884,24 @@ export default function CampaignsPage() {
                                                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                                 <circle cx="12" cy="12" r="10" />
                                                                 <polyline points="12 6 12 12 16 14" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Monitor/Track button - visible for running/completed/paused */}
+                                                    {['running', 'completed', 'paused'].includes(campaign.status) && (
+                                                        <button
+                                                            className="p-2 rounded-lg hover:bg-emerald-500/10 text-emerald-400"
+                                                            title="Acompanhar em Tempo Real"
+                                                            onClick={() => {
+                                                                setActiveMonitoringCampaignId(campaign.id);
+                                                                setMonitoringCampaignName(campaign.name);
+                                                                setShowMonitoringModal(true);
+                                                            }}
+                                                        >
+                                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                <path d="M3 3v18h18" />
+                                                                <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
                                                             </svg>
                                                         </button>
                                                     )}
@@ -890,8 +1037,240 @@ export default function CampaignsPage() {
                             )}
                         </div>
 
-                        <div className="mt-4 pt-4 border-t border-[var(--border-primary)] flex justify-end">
+                        <div className="mt-4 pt-4 border-t border-[var(--border-primary)] flex justify-end gap-2">
+                            {failureDetails.contacts.length > 0 && (
+                                <button 
+                                    className="btn btn-primary bg-red-600 hover:bg-red-700 text-white flex items-center gap-1"
+                                    onClick={async () => {
+                                        try {
+                                            setError('');
+                                            setSuccessMessage('');
+                                            await campaignsService.retryFailed(failureDetails.campaignId);
+                                            closeFailureDetails();
+                                            setSuccessMessage('Disparo retomado para os contatos com falha!');
+                                            // Refresh list
+                                            const res = await campaignsService.listPaginated(page, 10).catch(() => ({ data: [], meta: {} }));
+                                            setCampaigns(res.data || []);
+                                            if (res.meta) setMeta(res.meta);
+                                        } catch (err) {
+                                            setError(getErrorMessage(err));
+                                        }
+                                    }}
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.213 6H16" />
+                                    </svg>
+                                    Recuperar Falhas
+                                </button>
+                            )}
                             <button className="btn btn-secondary" onClick={closeFailureDetails}>
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Acompanhamento em Tempo Real */}
+            {showMonitoringModal && activeMonitoringCampaignId && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-md flex items-center justify-center z-50 p-4 animate-fadeIn">
+                    <div className="glass-card p-6 w-full max-w-5xl max-h-[90vh] flex flex-col shadow-2xl border border-[var(--border-primary)]">
+                        <div className="flex justify-between items-center mb-6 border-b border-[var(--border-primary)] pb-4">
+                            <div>
+                                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--primary)] mb-1 block">Acompanhamento em Tempo Real</span>
+                                <h2 className="text-2xl font-black text-[var(--text-primary)] flex items-center gap-2">
+                                    <span className="relative flex h-3 w-3">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--accent-success)] opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-3 w-3 bg-[var(--accent-success)]"></span>
+                                    </span>
+                                    {monitoringCampaignName}
+                                </h2>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setShowMonitoringModal(false);
+                                    setActiveMonitoringCampaignId(null);
+                                }} 
+                                className="text-[var(--text-muted)] hover:text-white transition-colors p-2 hover:bg-[var(--bg-glass)] rounded-lg"
+                            >
+                                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto space-y-6 pr-2">
+                            {isMonitoringLoading ? (
+                                <div className="flex flex-col items-center justify-center py-20 gap-4">
+                                    <div className="w-12 h-12 border-4 border-[var(--primary)] border-t-transparent rounded-full animate-spin" />
+                                    <p className="text-[var(--text-muted)] text-sm">Carregando dados de envio...</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Stats Grid */}
+                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                        <div className="stat-card p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)]">
+                                            <span className="stat-label text-xs block text-[var(--text-muted)] mb-1">Total Processados</span>
+                                            <span className="stat-value text-2xl font-bold text-[var(--text-primary)]">
+                                                {monitoringContacts.length}
+                                            </span>
+                                        </div>
+                                        <div className="stat-card p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)]">
+                                            <span className="stat-label text-xs block text-[var(--text-muted)] mb-1">Sucessos (Enviados)</span>
+                                            <span className="stat-value text-2xl font-bold text-[var(--accent-success)]">
+                                                {monitoringContacts.filter(c => c.status === 'sent' || c.status === 'delivered' || c.status === 'read').length}
+                                            </span>
+                                        </div>
+                                        <div className="stat-card p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)]">
+                                            <span className="stat-label text-xs block text-[var(--text-muted)] mb-1">Falhas</span>
+                                            <span className="stat-value text-2xl font-bold text-[var(--accent-danger)]">
+                                                {monitoringContacts.filter(c => c.status === 'failed').length}
+                                            </span>
+                                        </div>
+                                        <div className="stat-card p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)]">
+                                            <span className="stat-label text-xs block text-[var(--text-muted)] mb-1">Intervalo Médio (Real)</span>
+                                            <span className="stat-value text-2xl font-bold text-[var(--accent-info)]">
+                                                {chartData.length > 1
+                                                    ? `${Math.round(chartData.reduce((acc, curr) => acc + curr['Intervalo Real (s)'], 0) / (chartData.length - 1))}s`
+                                                    : '0s'}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Chart Container */}
+                                    <div className="glass-card p-5 rounded-xl border border-[var(--border-primary)] bg-[rgba(15,12,28,0.4)]">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">Gráfico de Frequência de Disparos</h3>
+                                            <span className="text-xs text-[var(--text-muted)]">Eixo X: Destinatários ordenados cronologicamente</span>
+                                        </div>
+                                        
+                                        {chartData.length === 0 ? (
+                                            <div className="h-60 flex items-center justify-center text-[var(--text-muted)] text-sm border border-dashed border-[var(--border)] rounded-lg">
+                                                Nenhuma mensagem enviada nesta campanha ainda.
+                                            </div>
+                                        ) : (
+                                            <div className="h-72 w-full">
+                                                {isMounted && (
+                                                    <ResponsiveContainer width="100%" height="100%">
+                                                        <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                                                            <defs>
+                                                                <linearGradient id="colorInterval" x1="0" y1="0" x2="0" y2="1">
+                                                                    <stop offset="5%" stopColor="var(--accent-success)" stopOpacity={0.25}/>
+                                                                    <stop offset="95%" stopColor="var(--accent-success)" stopOpacity={0}/>
+                                                                </linearGradient>
+                                                                <linearGradient id="colorAntiBan" x1="0" y1="0" x2="0" y2="1">
+                                                                    <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.25}/>
+                                                                    <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                                                                </linearGradient>
+                                                            </defs>
+                                                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.03)" />
+                                                            <XAxis 
+                                                                dataKey="timeLabel" 
+                                                                stroke="var(--text-muted)" 
+                                                                fontSize={10}
+                                                                tickLine={false}
+                                                            />
+                                                            <YAxis 
+                                                                stroke="var(--text-muted)" 
+                                                                fontSize={10}
+                                                                tickLine={false}
+                                                            />
+                                                            <Tooltip 
+                                                                contentStyle={{ 
+                                                                    backgroundColor: 'rgba(15, 12, 28, 0.95)', 
+                                                                    borderColor: 'rgba(255,255,255,0.1)',
+                                                                    borderRadius: '12px',
+                                                                    color: '#fff',
+                                                                    boxShadow: '0 10px 25px rgba(0,0,0,0.5)',
+                                                                    fontSize: '12px'
+                                                                }}
+                                                                labelFormatter={(label, items) => {
+                                                                    const item = items?.[0]?.payload;
+                                                                    return item ? `${item.name} (${item.phone}) às ${label}` : label;
+                                                                }}
+                                                            />
+                                                            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
+                                                            <Area 
+                                                                name="Intervalo Real entre Mensagens (s)"
+                                                                type="monotone" 
+                                                                dataKey="Intervalo Real (s)" 
+                                                                stroke="var(--accent-success)" 
+                                                                fillOpacity={1} 
+                                                                fill="url(#colorInterval)" 
+                                                                strokeWidth={2}
+                                                            />
+                                                            <Area 
+                                                                name="Delay Anti-Ban Configurado (s)"
+                                                                type="monotone" 
+                                                                dataKey="Delay Anti-Ban (s)" 
+                                                                stroke="var(--primary)" 
+                                                                fillOpacity={1} 
+                                                                fill="url(#colorAntiBan)" 
+                                                                strokeWidth={2}
+                                                            />
+                                                        </AreaChart>
+                                                    </ResponsiveContainer>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Feed de Logs */}
+                                    <div className="glass-card p-4 rounded-xl border border-[var(--border-primary)] bg-[rgba(10,8,22,0.6)] flex flex-col h-60">
+                                        <div className="flex justify-between items-center mb-3">
+                                            <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">Histórico de Disparos Recentes</h3>
+                                            <span className="text-[10px] bg-[var(--bg-glass)] text-[var(--primary)] font-mono px-2 py-0.5 rounded-full border border-[var(--border)]">Socket Ativo</span>
+                                        </div>
+                                        <div className="flex-1 overflow-y-auto space-y-2 pr-1 font-mono text-xs text-[var(--text-muted)]">
+                                            {[...monitoringContacts]
+                                                .sort((a, b) => new Date(b.sentAt || b.failedAt || b.updatedAt).getTime() - new Date(a.sentAt || a.failedAt || a.updatedAt).getTime())
+                                                .map((cc, idx) => {
+                                                    const isSuccess = cc.status === 'sent' || cc.status === 'delivered' || cc.status === 'read';
+                                                    const timestamp = new Date(cc.sentAt || cc.failedAt || cc.updatedAt).toLocaleTimeString('pt-BR');
+                                                    return (
+                                                        <div key={idx} className="flex justify-between items-center p-2 rounded hover:bg-[rgba(255,255,255,0.02)] border-b border-[rgba(255,255,255,0.03)] last:border-0">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className={isSuccess ? 'text-[var(--accent-success)]' : 'text-[var(--accent-danger)]'}>
+                                                                    {isSuccess ? '✔' : '✖'}
+                                                                </span>
+                                                                <span className="text-[var(--text-primary)] font-semibold">{cc.contact?.name || 'Contato s/ Nome'}</span>
+                                                                <span>({cc.contact?.phone})</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-4">
+                                                                {cc.timingMetadata?.totalWaitMs && (
+                                                                    <span className="text-[10px] text-[var(--text-muted)]">
+                                                                        anti-ban delay: {(cc.timingMetadata.totalWaitMs / 1000).toFixed(1)}s
+                                                                    </span>
+                                                                )}
+                                                                {cc.errorMessage && (
+                                                                    <span className="text-[var(--accent-danger)] max-w-xs truncate text-[10px]" title={cc.errorMessage}>
+                                                                        {cc.errorMessage}
+                                                                    </span>
+                                                                )}
+                                                                <span className="text-[var(--text-muted)]">{timestamp}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            {monitoringContacts.length === 0 && (
+                                                <div className="h-full flex items-center justify-center text-[var(--text-muted)]">
+                                                    Aguardando início do envio...
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        <div className="mt-6 pt-4 border-t border-[var(--border-primary)] flex justify-end gap-3">
+                            <button 
+                                className="btn btn-secondary" 
+                                onClick={() => {
+                                    setShowMonitoringModal(false);
+                                    setActiveMonitoringCampaignId(null);
+                                }}
+                            >
                                 Fechar
                             </button>
                         </div>
@@ -1162,6 +1541,76 @@ export default function CampaignsPage() {
                                             })()}
                                         </div>
                                     )}
+
+                                    {/* Orçamento Prévio do Disparo */}
+                                    {newCampaign.metaTemplateId && (
+                                        <div className="mt-4 p-4 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.05)]">
+                                            <h4 className="text-xs font-semibold uppercase tracking-wider text-[var(--primary)] mb-2 flex items-center gap-1.5">
+                                                💰 Orçamento Estimado
+                                            </h4>
+                                            {(() => {
+                                                const selOptName = newCampaign.metaTemplateId.split('|')[0];
+                                                const selTemplate = metaTemplates.find(t => t.name === selOptName);
+                                                const category = selTemplate?.category || 'MARKETING';
+                                                
+                                                // Meta Pricing for Brazil in BRL (Conversas de 24h)
+                                                const pricing: Record<string, { value: number, label: string }> = {
+                                                    MARKETING: { value: Number(process.env.NEXT_PUBLIC_META_RATE_MARKETING) || 0.35, label: 'Marketing' },
+                                                    UTILITY: { value: Number(process.env.NEXT_PUBLIC_META_RATE_UTILITY) || 0.20, label: 'Utilitário (Utility)' },
+                                                    AUTHENTICATION: { value: Number(process.env.NEXT_PUBLIC_META_RATE_AUTHENTICATION) || 0.17, label: 'Autenticação (Auth)' },
+                                                };
+                                                
+                                                const rate = pricing[category] || pricing.MARKETING;
+                                                const contactsCount = newCampaign.contactIds.length;
+                                                const subtotal = contactsCount * rate.value;
+                                                // 12.15% = PIS(0.65%) + COFINS(3%) + ISS(5%) + IR(1.5%) + CIDE(2%) + CBS/IBS(1%)
+                                                const taxRate = Number(process.env.NEXT_PUBLIC_META_TAX_RATE) || 0.1215;
+                                                const estimatedTaxes = subtotal * taxRate;
+                                                const totalCost = subtotal + estimatedTaxes;
+                                                
+                                                return (
+                                                    <div className="space-y-2 text-xs">
+                                                        <div className="flex justify-between">
+                                                            <span className="text-[var(--text-muted)]">Contatos Selecionados:</span>
+                                                            <span className="font-semibold text-white">{contactsCount}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-[var(--text-muted)]">Categoria do Template:</span>
+                                                            <span className="font-semibold text-white">{rate.label}</span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span className="text-[var(--text-muted)]">Custo Estimado por Envio:</span>
+                                                            <span className="font-semibold text-white">R$ {rate.value.toFixed(2)}</span>
+                                                        </div>
+                                                        <div className="border-t border-[rgba(255,255,255,0.05)] pt-2 flex justify-between">
+                                                            <span className="text-[var(--text-muted)]">Custo de Envio (Subtotal):</span>
+                                                            <span className="font-semibold text-white">
+                                                                R$ {subtotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="flex justify-between">
+                                                            <span 
+                                                                className="text-[var(--text-muted)] cursor-help"
+                                                                title="Estimativa de repasse tributário Meta Brasil: PIS + COFINS + ISS + IR Retido + CIDE + CBS/IBS. Consulte seu contador para sua alíquota exata."
+                                                            >
+                                                                Impostos Estimados ({(taxRate * 100).toFixed(2)}%)
+                                                                <span className="ml-1 text-[10px] text-[var(--text-muted)] opacity-60">ⓘ</span>:
+                                                            </span>
+                                                            <span className="font-semibold text-orange-400">
+                                                                R$ {estimatedTaxes.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                        <div className="border-t border-[rgba(255,255,255,0.05)] pt-2 flex justify-between text-sm">
+                                                            <span className="font-medium text-white">Custo Total Previsto (c/ impostos):</span>
+                                                            <span className="font-bold text-[var(--primary)]">
+                                                                R$ {totalCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
@@ -1329,7 +1778,7 @@ export default function CampaignsPage() {
                                             className="btn btn-ghost text-xs py-1 px-2"
                                             onClick={selectAllContacts}
                                         >
-                                            {newCampaign.contactIds.length === contacts.length ? 'Desmarcar todos' : 'Selecionar todos'}
+                                            {filteredContacts.length > 0 && filteredContacts.every(c => newCampaign.contactIds.includes(c.id)) ? 'Desmarcar todos' : 'Selecionar todos'}
                                         </button>
                                         <button
                                             type="button"
@@ -1413,6 +1862,28 @@ export default function CampaignsPage() {
                                 ) : (
                                     <div className="max-h-48 overflow-y-auto bg-[var(--bg-tertiary)] rounded-lg p-2">
                                         <div className="space-y-1">
+                                            {filteredContacts.length > 0 && (
+                                                <label className="flex items-center gap-3 p-2 rounded border-b border-[rgba(255,255,255,0.05)] hover:bg-[var(--bg-glass)] cursor-pointer font-semibold text-xs text-[var(--text-secondary)]">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={filteredContacts.length > 0 && filteredContacts.every(c => newCampaign.contactIds.includes(c.id))}
+                                                        onChange={(e) => {
+                                                            const checked = e.target.checked;
+                                                            setNewCampaign(prev => {
+                                                                const otherIds = prev.contactIds.filter(id => !filteredContacts.some(fc => fc.id === id));
+                                                                return {
+                                                                    ...prev,
+                                                                    contactIds: checked 
+                                                                        ? [...otherIds, ...filteredContacts.map(fc => fc.id)]
+                                                                        : otherIds
+                                                                };
+                                                            });
+                                                        }}
+                                                        className="w-4 h-4 rounded accent-[var(--primary)]"
+                                                    />
+                                                    <span>Selecionar Todos os Filtrados ({filteredContacts.length})</span>
+                                                </label>
+                                            )}
                                             {filteredContacts.length === 0 && contactSearch ? (
                                                 <p className="text-sm text-[var(--text-muted)] text-center py-4">
                                                     Nenhum contato encontrado para "{contactSearch}"

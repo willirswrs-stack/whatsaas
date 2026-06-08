@@ -32,6 +32,10 @@ class CreateInstanceDto {
 
     @IsOptional()
     config?: Record<string, any>;
+
+    @IsOptional()
+    @IsIn(['inbound', 'warm_outbound', 'cold_outbound', 'groups'])
+    warmupProfile?: string;
 }
 
 @ApiTags('instances')
@@ -65,7 +69,7 @@ export class InstancesController {
     @ApiOperation({ summary: 'Update instance configuration' })
     async update(
         @Param('id') id: string,
-        @Body() data: { proxyId?: string; warmupEnabled?: boolean; metaConfig?: Record<string, any> },
+        @Body() data: { proxyId?: string; warmupEnabled?: boolean; isSystemSeed?: boolean; warmupProfile?: string; metaConfig?: Record<string, any> },
         @CurrentTenant() tenantId: string,
     ) {
         return this.instancesService.update(id, tenantId, data as any);
@@ -126,6 +130,7 @@ export class InstancesController {
                 instanceName: { type: 'string', example: 'meu-whats' },
                 proxyId: { type: 'string', example: 'uuid', nullable: true },
                 provider: { type: 'string', enum: ['evolution', 'waha'], default: 'evolution' },
+                warmupProfile: { type: 'string', enum: ['inbound', 'warm_outbound', 'cold_outbound', 'groups'], default: 'cold_outbound' },
             },
             required: ['instanceName'],
         },

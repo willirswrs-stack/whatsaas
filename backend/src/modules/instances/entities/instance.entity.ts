@@ -66,6 +66,12 @@ export class Instance {
     @Column({ name: 'warmup_enabled', default: true })
     warmupEnabled: boolean;
 
+    @Column({ name: 'is_system_seed', default: false })
+    isSystemSeed: boolean;
+
+    @Column({ name: 'warmup_profile', default: 'cold_outbound' })
+    warmupProfile: string;
+
     @Column({ name: 'daily_limit', default: 10 })
     dailyLimit: number;
 

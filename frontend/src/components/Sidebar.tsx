@@ -7,7 +7,6 @@ import { useAuth } from '@/contexts/AuthContext';
 // Nav items with icon paths
 const navItems = [
     { href: '/', label: 'Dashboard', icon: '/icons/sidebar/dashboard.png' },
-    { href: '/inbox', label: 'Inbox', icon: '/icons/sidebar/contacts.png' },
     { href: '/campaigns', label: 'Campanhas', icon: '/icons/sidebar/campaigns.png' },
     { href: '/flows', label: 'Fluxos', icon: '/icons/sidebar/flows.png' },
     { href: '/chips', label: 'Chips', icon: '/icons/sidebar/chips.png' },
@@ -116,9 +115,9 @@ export function Sidebar() {
                             className={`nav-item ${pathname === '/admin/ai-agent' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
                         >
                             <div className="w-6 h-6 flex items-center justify-center bg-indigo-500/10 rounded-md group-hover:bg-indigo-500/20 text-indigo-400">
-                                🤖
+                                🧠
                             </div>
-                            <span className="text-sm font-medium">Configurar IA</span>
+                            <span className="text-sm font-medium">Config. Globais SA</span>
                         </Link>
                     </div>
                 )}

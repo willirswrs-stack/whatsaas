@@ -1,6 +1,6 @@
 import { Controller, Post, Get, Request, UseGuards, Body } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
-import { WarmupService, WARMUP_SCHEDULE } from './warmup.service';
+import { WarmupService } from './warmup.service';
 import { v4 as uuidv4 } from 'uuid';
 
 @Controller('warmup')
@@ -23,7 +23,17 @@ export class WarmupController {
 
     @Get('schedule')
     getSchedule() {
-        return WARMUP_SCHEDULE;
+        const schedule: { day: number; limit: number; interval: number; maxPartners: number }[] = [];
+        for (let day = 1; day <= 30; day++) {
+            const progress = (day - 1) / 59;
+            schedule.push({
+                day,
+                limit: Math.floor(50 + progress * (3000 - 50)),
+                interval: Math.max(5, Math.floor(120 - progress * (120 - 5))),
+                maxPartners: Math.floor(1 + Math.pow(progress, 1.5) * 29),
+            });
+        }
+        return schedule;
     }
 
     @Get('stats')

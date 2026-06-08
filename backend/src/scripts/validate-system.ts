@@ -47,7 +47,7 @@ async function run() {
         });
 
         if (login.status === 200 || login.status === 201) {
-            token = login.data.token;
+            token = login.data.accessToken || login.data.token;
             console.log('✅ Login Admin: OK');
         } else {
             console.error('❌ Login Admin Falhou:', login.status, login.data);

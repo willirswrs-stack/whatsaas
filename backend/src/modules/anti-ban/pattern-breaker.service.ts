@@ -33,9 +33,7 @@ export class PatternBreakerService {
         formal: [
             'Olá {{nome}},',
             'Prezado(a) {{nome}},',
-            'Bom dia, {{nome}}!',
-            'Boa tarde, {{nome}}!',
-            'Boa noite, {{nome}}!',
+            '{{saudacao_periodo}}, {{nome}}!',
         ],
         casual: [
             'Oi {{nome}}!',
@@ -86,12 +84,34 @@ export class PatternBreakerService {
         const transformations: string[] = [];
 
         let content = template;
+        let greeting = '';
 
-        // 1. Adicionar saudação variada
-        const greeting = this.selectGreeting(contactName, fullConfig.greetingStyle);
-        if (greeting) {
-            content = `${greeting}\n\n${content}`;
-            transformations.push(`greeting:${fullConfig.greetingStyle}`);
+        // 1. Normalizar / Substituir saudação (garantindo que comece com "Oi tudo bem {{nome}}!")
+        if (fullConfig.greetingStyle !== 'none') {
+            greeting = this.selectGreeting(contactName, fullConfig.greetingStyle);
+            const paragraphs = content.split('\n');
+            let firstParagraphIndex = -1;
+            for (let i = 0; i < paragraphs.length; i++) {
+                if (paragraphs[i].trim()) {
+                    firstParagraphIndex = i;
+                    break;
+                }
+            }
+
+            if (firstParagraphIndex !== -1) {
+                const firstParagraph = paragraphs[firstParagraphIndex];
+                if (this.hasExistingGreeting(firstParagraph)) {
+                    paragraphs[firstParagraphIndex] = 'Oi tudo bem {{nome}}!';
+                    content = paragraphs.join('\n');
+                    transformations.push('greeting:replaced');
+                } else {
+                    content = `Oi tudo bem {{nome}}!\n\n${content}`;
+                    transformations.push('greeting:prepended');
+                }
+            } else {
+                content = 'Oi tudo bem {{nome}}!';
+                transformations.push('greeting:fallback');
+            }
         }
 
         // 2. Substituir variáveis do contato
@@ -142,21 +162,61 @@ export class PatternBreakerService {
         if (style === 'none') {
             return '';
         }
+        return `Oi tudo bem ${name || 'Cliente'}!`;
+    }
 
-        let pool: string[];
+    private getPeriodGreeting(): string {
+        const hour = new Date().getHours();
+        if (hour >= 5 && hour < 12) return 'Bom dia';
+        if (hour >= 12 && hour < 18) return 'Boa tarde';
+        return 'Boa noite';
+    }
 
-        if (style === 'mixed' || style === 'random') {
-            // Misturar todos os estilos
-            const allStyles = ['formal', 'casual', 'direct'] as const;
-            const randomStyle = allStyles[Math.floor(Math.random() * allStyles.length)];
-            pool = this.GREETING_POOLS[randomStyle] || this.GREETING_POOLS.casual;
-        } else {
-            // Use type assertion or check if style key exists
-            pool = this.GREETING_POOLS[style as keyof typeof this.GREETING_POOLS] || this.GREETING_POOLS.casual;
+    private hasExistingGreeting(template: string): boolean {
+        const commonGreetings = [
+            'olá', 'ola', 'oi', 'oii', 'oiii', 'opa', 'fala', 'e aí', 'e aee', 
+            'eae', 'eai', 'oiee', 'hey', 'bom dia', 'boa tarde', 'boa noite', 
+            'prezado', 'prezada', 'ei', 'tudo bem', 'tudo bom', 'como vai', 
+            'saudações', 'saudacao'
+        ];
+
+        // Substituir as variáveis do nome por 'nome' para simplificar a validação
+        const normalized = template
+            .replace(/\{\{nome\}\}/gi, 'nome')
+            .replace(/\{\{primeiro_nome\}\}/gi, 'nome');
+
+        // Remove emojis, espaços, símbolos e pontuações do início
+        const cleaned = normalized.trim().toLowerCase()
+            .replace(/^[\s\p{Emoji}\p{Symbol}\p{Punctuation}]+/gu, '')
+            .trim();
+        
+        // 1. Verifica se inicia com alguma saudação comum
+        for (const greeting of commonGreetings) {
+            if (cleaned.startsWith(greeting)) {
+                return true;
+            }
         }
 
-        const template = pool[Math.floor(Math.random() * pool.length)];
-        return template.replace(/\{\{nome\}\}/gi, name || 'Cliente');
+        // 2. Verifica se inicia com o nome (ex: "{{nome}}, tudo bem?" -> "nome, tudo bem?")
+        if (cleaned.startsWith('nome')) {
+            const afterVariable = cleaned
+                .replace(/^nome/, '')
+                .trim()
+                .replace(/^[\s\p{Emoji}\p{Symbol}\p{Punctuation}]+/gu, '')
+                .trim();
+            
+            // Se após o nome vier uma saudação ou nada
+            for (const greeting of commonGreetings) {
+                if (afterVariable.startsWith(greeting)) {
+                    return true;
+                }
+            }
+            if (afterVariable.length === 0) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

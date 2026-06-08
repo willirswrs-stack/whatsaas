@@ -84,6 +84,12 @@ export class Tenant {
     @Column({ name: 'asaas_subscription_id', nullable: true })
     asaasSubscriptionId: string;
 
+    @Column({ name: 'ai_tokens_consumed', default: 0 })
+    aiTokensConsumed: number;
+
+    @Column('decimal', { name: 'ai_tokens_cost', precision: 10, scale: 4, default: 0 })
+    aiTokensCost: number;
+
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;
 

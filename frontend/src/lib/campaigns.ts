@@ -17,6 +17,13 @@ export interface Campaign {
     startedAt?: string;
     completedAt?: string;
     createdAt: string;
+    settings?: {
+        metaTemplateId?: string;
+        greetingStyle?: string;
+        activeHoursStart?: string;
+        activeHoursEnd?: string;
+        [key: string]: any;
+    };
 }
 
 export interface CreateCampaignDto {
@@ -186,6 +193,11 @@ export const campaignsService = {
         const response = await api.post<{ imported: number; failed: number }>('/campaigns/contacts/import', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
+        return response.data;
+    },
+
+    async retryFailed(id: string): Promise<any> {
+        const response = await api.post<any>(`/campaigns/${id}/retry`);
         return response.data;
     },
 };

@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
-export default function LoginCallbackPage() {
+function LoginCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -44,3 +44,17 @@ export default function LoginCallbackPage() {
         </div>
     );
 }
+
+export default function LoginCallbackPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-[#0f0c29] flex flex-col items-center justify-center text-white">
+                <div className="w-16 h-16 border-4 border-t-cyan-400 border-transparent rounded-full animate-spin mb-6"></div>
+                <h1 className="text-2xl font-bold tracking-wider">Carregando login social...</h1>
+            </div>
+        }>
+            <LoginCallbackContent />
+        </Suspense>
+    );
+}
+

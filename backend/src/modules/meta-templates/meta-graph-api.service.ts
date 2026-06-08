@@ -50,6 +50,14 @@ export class MetaGraphApiService {
      * Get WABA info
      */
     async getWabaInfo(wabaId: string, accessToken: string): Promise<any> {
+        if (accessToken?.startsWith('mock') || wabaId?.startsWith('mock')) {
+            return {
+                id: wabaId,
+                name: 'Mock WABA Account',
+                currency: 'BRL',
+                timezone_id: '1'
+            };
+        }
         try {
             const client = this.createClient(accessToken);
             const response = await client.get(`/${wabaId}`);
@@ -63,6 +71,15 @@ export class MetaGraphApiService {
      * Get phone number info including quality rating
      */
     async getPhoneNumberInfo(phoneNumberId: string, accessToken: string): Promise<any> {
+        if (accessToken?.startsWith('mock') || phoneNumberId?.startsWith('mock')) {
+            return {
+                display_phone_number: '+55 11 99999-9999',
+                verified_name: 'Mock Account',
+                quality_rating: 'GREEN',
+                platform_type: 'CLOUD_API',
+                throughput: '10'
+            };
+        }
         try {
             const client = this.createClient(accessToken);
             const response = await client.get(`/${phoneNumberId}`, {
@@ -80,6 +97,17 @@ export class MetaGraphApiService {
      * Get business profile
      */
     async getBusinessProfile(phoneNumberId: string, accessToken: string): Promise<BusinessProfile> {
+        if (accessToken?.startsWith('mock') || phoneNumberId?.startsWith('mock')) {
+            return {
+                about: 'Conta Mock para testes locais.',
+                address: 'Av. Paulista, 1000 - São Paulo, SP',
+                description: 'WhatSaas Mock Profile',
+                email: 'mock@company.com',
+                profile_picture_url: '',
+                websites: ['https://whatsaas.com'],
+                vertical: 'OTHER'
+            };
+        }
         try {
             const client = this.createClient(accessToken);
             const response = await client.get(`/${phoneNumberId}/whatsapp_business_profile`, {
@@ -117,6 +145,41 @@ export class MetaGraphApiService {
      * List all message templates
      */
     async listTemplates(wabaId: string, accessToken: string): Promise<MetaTemplate[]> {
+        if (accessToken?.startsWith('mock') || wabaId?.startsWith('mock')) {
+            return [
+                {
+                    id: 'mock-template-1',
+                    name: 'boas_vindas',
+                    category: 'MARKETING',
+                    language: 'pt_BR',
+                    status: 'APPROVED',
+                    components: [
+                        { type: 'HEADER', format: 'TEXT', text: 'Olá {{1}}!' },
+                        { type: 'BODY', text: 'Seja bem-vindo à nossa plataforma. Seu código é {{1}}.' }
+                    ]
+                },
+                {
+                    id: 'mock-template-2',
+                    name: 'lembrete_fatura',
+                    category: 'UTILITY',
+                    language: 'pt_BR',
+                    status: 'APPROVED',
+                    components: [
+                        { type: 'BODY', text: 'Sua fatura vence amanhã. Valor: R$ {{1}}.' }
+                    ]
+                },
+                {
+                    id: 'mock-template-3',
+                    name: 'codigo_seguranca',
+                    category: 'AUTHENTICATION',
+                    language: 'pt_BR',
+                    status: 'APPROVED',
+                    components: [
+                        { type: 'BODY', text: 'Seu código de acesso é {{1}}.' }
+                    ]
+                }
+            ];
+        }
         try {
             const client = this.createClient(accessToken);
             const templates: MetaTemplate[] = [];

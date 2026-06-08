@@ -320,6 +320,66 @@ export default function WarmupPage() {
         socketRef.current?.disconnect();
     };
 
+    const openConfig = (chip: any) => {
+        setConfigInstanceId(chip.id);
+        const savedVoice = chip.metaConfig?.voiceProfile || 'alloy';
+        const presets = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+        if (!presets.includes(savedVoice) && savedVoice) {
+            setSelectedVoice(savedVoice);
+        } else {
+            setSelectedVoice(savedVoice);
+        }
+        setSelectedVoiceSpeed(Number(chip.metaConfig?.voiceSpeed) || 1.0);
+        setSelectedVoiceModel((chip.metaConfig?.voiceModel as any) === 'tts-1' ? 'tts-1' : 'tts-1-hd');
+    };
+
+    const saveConfig = async () => {
+        if (!configInstanceId) return;
+        try {
+            await instancesService.update(configInstanceId, {
+                metaConfig: { 
+                    voiceProfile: selectedVoice,
+                    voiceSpeed: selectedVoiceSpeed,
+                    voiceModel: selectedVoiceModel
+                }
+            } as any);
+            alert('Configuração salva com sucesso!');
+            setConfigInstanceId(null);
+            loadData();
+        } catch (err: any) {
+            alert('Erro ao salvar: ' + (err.response?.data?.message || err.message));
+        }
+    };
+
+    const playVoicePreview = async () => {
+        if (isPlayingPreview) return;
+        if (!selectedVoice) {
+            alert('Por favor, informe a voz.');
+            return;
+        }
+        setIsPlayingPreview(true);
+        try {
+            const res = await api.post('/ai/preview', { 
+                voice: selectedVoice, 
+                speed: selectedVoiceSpeed,
+                model: selectedVoiceModel
+            });
+            if (res.data?.audioBase64) {
+                const audio = new Audio(`data:audio/mpeg;base64,${res.data.audioBase64}`);
+                audio.play();
+                audio.onended = () => setIsPlayingPreview(false);
+                audio.onerror = () => {
+                    alert('Erro ao carregar arquivo de áudio.');
+                    setIsPlayingPreview(false);
+                };
+            }
+        } catch (err) {
+            console.error('Preview Error', err);
+            alert('Falha ao carregar preview de voz da API.');
+            setIsPlayingPreview(false);
+        }
+    };
+
     if (loading && !stats) {
         return (
             <div className="flex items-center justify-center min-h-screen bg-[var(--bg-primary)]">

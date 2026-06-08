@@ -58,6 +58,10 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
 
     emitToTenant(tenantId: string, event: string, data: any) {
-        this.server.to(`tenant:${tenantId}`).emit(event, data);
+        if (this.server) {
+            this.server.to(`tenant:${tenantId}`).emit(event, data);
+        } else {
+            this.logger.warn(`Could not emit event "${event}" to tenant "${tenantId}" - WebSocket server not initialized.`);
+        }
     }
 }

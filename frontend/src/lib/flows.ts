@@ -50,6 +50,7 @@ export interface Flow {
     executionCount: number;
     lastExecutedAt?: string;
     triggers?: FlowTrigger[];
+    category?: string;
     createdAt: string;
     updatedAt: string;
 }

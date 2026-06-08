@@ -7,7 +7,11 @@ import {
     contentSpinnerUserPrompt,
     WARMUP_CONVERSATION_SYSTEM_PROMPT,
     warmupConversationUserPrompt,
+    SUPPORT_AGENT_SYSTEM_PROMPT,
 } from './prompts/ai.prompts';
+import { SettingsService } from '../settings/settings.service';
+import { LLMProviderFactory } from './providers/llm-provider.factory';
+import { LLMProviderType } from './providers/llm-provider.interface';
 
 export interface SpinResult {
     variations: string[];
@@ -23,10 +27,14 @@ export interface WarmupConversation {
 @Injectable()
 export class AiService {
     private readonly logger = new Logger(AiService.name);
+    private readonly providerFactory = new LLMProviderFactory();
     private openai: OpenAI;
     private anthropicApiKey: string;
 
-    constructor(private configService: ConfigService) {
+    constructor(
+        private configService: ConfigService,
+        private settingsService: SettingsService,
+    ) {
         const openaiKey = configService.get('OPENAI_API_KEY');
         if (openaiKey && openaiKey !== 'sk-placeholder') {
             this.openai = new OpenAI({ apiKey: openaiKey });
@@ -476,5 +484,78 @@ export class AiService {
             this.logger.error(`OpenAI Chat Error: ${error.message}`);
             return `[ERROR AI] ${error.message}`;
         }
+    }
+
+    /**
+     * Generate a response for the support chat agent using the global LLM config and keys
+     */
+    async generateSupportChatResponse(
+        tenantId: string,
+        userMessage: string,
+        history: { role: 'user' | 'assistant'; content: string }[],
+    ): Promise<string> {
+        try {
+            // 1. Obter chaves de API eficazes e a LLM global
+            const globalSettings = await this.settingsService.getGlobalSettings();
+            const keys = await this.settingsService.getEffectiveLLMKeys(tenantId);
+
+            // 2. Configurar o factory com as chaves
+            this.providerFactory.configureForTenant({
+                openaiKey: keys.openaiKey,
+                anthropicKey: keys.anthropicKey,
+                geminiKey: keys.geminiKey,
+                groqKey: keys.groqKey,
+            });
+
+            // 3. Obter o provider configurado
+            const providerType = (globalSettings.globalLlmProvider || 'openai') as LLMProviderType;
+            const provider = this.providerFactory.getProvider(providerType);
+
+            if (!provider || !provider.isConfigured()) {
+                this.logger.warn(`Provider ${providerType} não configurado. Usando mock.`);
+                return this.getMockSupportResponse(userMessage);
+            }
+
+            // 4. Montar o prompt incluindo o histórico
+            let prompt = '';
+            if (history && history.length > 0) {
+                prompt += "Histórico da conversa:\n";
+                for (const msg of history) {
+                    const roleName = msg.role === 'user' ? 'Usuário' : 'Assistente';
+                    prompt += `${roleName}: ${msg.content}\n`;
+                }
+                prompt += "\n";
+            }
+            prompt += `Usuário: ${userMessage}\nAssistente:`;
+
+            const response = await provider.generate(prompt, {
+                model: globalSettings.globalLlmModel,
+                temperature: globalSettings.globalLlmTemperature ?? 0.7,
+                maxTokens: globalSettings.globalLlmMaxTokens ?? 1024,
+                systemPrompt: SUPPORT_AGENT_SYSTEM_PROMPT,
+            });
+
+            return response.content || '';
+        } catch (error) {
+            this.logger.error(`Erro no suporte via AI: ${error.message}`);
+            return this.getMockSupportResponse(userMessage);
+        }
+    }
+
+    private getMockSupportResponse(userMessage: string): string {
+        const msgLower = userMessage.toLowerCase();
+        if (
+            msgLower.includes('humano') ||
+            msgLower.includes('whatsapp') ||
+            msgLower.includes('suporte') ||
+            msgLower.includes('falar com') ||
+            msgLower.includes('atendente') ||
+            msgLower.includes('contato') ||
+            msgLower.includes('ajuda humana') ||
+            msgLower.includes('pessoa')
+        ) {
+            return `Entendi que você precisa de suporte humano. Você pode falar diretamente com nossa equipe no WhatsApp pelo número (62) 98195-2897 ou clicando no link abaixo:\n\n👉 https://wa.me/5562981952897?text=Ol%C3%A1!%20Preciso%20de%20ajuda%20com%20o%20WhatSaas.`;
+        }
+        return `Olá! Sou o assistente de suporte virtual do WhatSaas. \n\nPosso te ajudar a configurar Chips, criar Campanhas, ajustar regras de Anti-Ban, criar Fluxos no Flow Builder ou entender o Aquecimento de chips. Como posso ajudar você hoje? (Se preferir suporte humano, basta pedir por "suporte humano").`;
     }
 }
