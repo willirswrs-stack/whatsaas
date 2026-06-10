@@ -17,7 +17,7 @@ COPY . .
 RUN npm run build
 
 # Remove dev dependencies after build
-RUN npm prune --production
+RUN npm prune --production --legacy-peer-deps
 
 # --- Stage 2: Production ---
 FROM node:20-alpine AS production
