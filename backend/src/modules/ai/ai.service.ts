@@ -12,6 +12,7 @@ import {
 import { SettingsService } from '../settings/settings.service';
 import { LLMProviderFactory } from './providers/llm-provider.factory';
 import { LLMProviderType } from './providers/llm-provider.interface';
+import { getGlobalApiSettings } from '../../common/global-settings';
 
 export interface SpinResult {
     variations: string[];
@@ -35,7 +36,7 @@ export class AiService {
         private configService: ConfigService,
         private settingsService: SettingsService,
     ) {
-        const openaiKey = configService.get('OPENAI_API_KEY');
+        const openaiKey = getGlobalApiSettings().openaiKey;
         if (openaiKey && openaiKey !== 'sk-placeholder') {
             this.openai = new OpenAI({ apiKey: openaiKey });
         }

@@ -22,8 +22,6 @@ services:
       POSTGRES_DB: ${DATABASE_NAME}
       # Create Evolution DB on init
       POSTGRES_MULTIPLE_DATABASES: wathsaas_evolution
-    ports:
-      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -41,8 +39,6 @@ services:
     container_name: whatsaas-redis
     restart: always
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
-    ports:
-      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:

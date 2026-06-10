@@ -101,7 +101,7 @@ export default function AnalyticsPage() {
                         </div>
                         <div>
                             <div className="flex items-center gap-2">
-                                <h1 className="text-3xl font-bold text-white tracking-tight">Analytics & Insights</h1>
+                                <h1 className="text-3xl font-bold text-[var(--text-primary)] tracking-tight">Analytics & Insights</h1>
                                 <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-green-500/10 text-green-400 text-[10px] font-bold uppercase tracking-wider border border-green-500/20">
                                     <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
                                     Live

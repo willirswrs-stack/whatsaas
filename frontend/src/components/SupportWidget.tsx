@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { MessageCircle, X, Send, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import api from '@/lib/api';
 
 interface Message {
@@ -12,6 +12,7 @@ interface Message {
 
 export function SupportWidget() {
     const [isOpen, setIsOpen] = useState(false);
+    const dragControls = useDragControls();
     const [messages, setMessages] = useState<Message[]>([
         {
             role: 'assistant',
@@ -76,7 +77,10 @@ export function SupportWidget() {
 
         return (
             <div className="space-y-3">
-                <div className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--text-primary)] dark:text-white">
+                <div 
+                    className="whitespace-pre-wrap text-sm leading-relaxed font-medium" 
+                    style={{ color: 'var(--text-primary)' }}
+                >
                     {parts.map((part, index) => {
                         if (part.match(whatsappRegex)) {
                             // Extract only path and query parameters cleanly
@@ -112,31 +116,39 @@ export function SupportWidget() {
     };
 
     return (
-        <div className="fixed bottom-6 right-6 z-[9999]">
-            <AnimatePresence>
-                {isOpen && (
-                    <motion.div
-                        initial={{ opacity: 0, y: 30, scale: 0.95 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{ opacity: 0, y: 30, scale: 0.95 }}
-                        className="glass border border-[var(--border-color)] rounded-2xl shadow-2xl w-[360px] h-[500px] mb-4 overflow-hidden flex flex-col"
-                    >
-                        {/* Header */}
-                        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white flex justify-between items-center shadow-md">
-                            <div className="flex items-center gap-3">
-                                <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-lg">🤖</div>
-                                <div>
-                                    <h3 className="font-bold text-sm leading-tight text-white">Suporte Inteligente</h3>
-                                    <p className="text-[10px] text-indigo-100 flex items-center gap-1">
-                                        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
-                                        Assistente IA ativo
-                                    </p>
+        <div className="fixed bottom-6 right-6 z-[9999] pointer-events-none">
+            <div className="pointer-events-auto flex flex-col items-end relative">
+                <AnimatePresence>
+                    {isOpen && (
+                        <motion.div
+                            drag
+                            dragControls={dragControls}
+                            dragListener={false}
+                            dragMomentum={false}
+                            initial={{ opacity: 0, y: 30, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 30, scale: 0.95 }}
+                            className="glass border border-[var(--border-color)] rounded-2xl shadow-2xl w-[360px] h-[500px] mb-4 overflow-hidden flex flex-col absolute bottom-16 right-0"
+                        >
+                            {/* Header */}
+                            <div 
+                                onPointerDown={(e) => dragControls.start(e)}
+                                className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white flex justify-between items-center shadow-md cursor-grab active:cursor-grabbing"
+                            >
+                                <div className="flex items-center gap-3 pointer-events-none">
+                                    <div className="w-9 h-9 rounded-full bg-white/10 flex items-center justify-center text-lg">🤖</div>
+                                    <div>
+                                        <h3 className="font-bold text-sm leading-tight text-white">Suporte Inteligente</h3>
+                                        <p className="text-[10px] text-indigo-100 flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+                                            Assistente IA ativo
+                                        </p>
+                                    </div>
                                 </div>
+                                <button onPointerDown={(e) => e.stopPropagation()} onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-1.5 rounded-lg transition-colors text-white z-10">
+                                    <X size={18} />
+                                </button>
                             </div>
-                            <button onClick={() => setIsOpen(false)} className="hover:bg-white/10 p-1.5 rounded-lg transition-colors text-white">
-                                <X size={18} />
-                            </button>
-                        </div>
 
                         {/* Body (Message list) */}
                         <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-950/20">
@@ -223,6 +235,7 @@ export function SupportWidget() {
             >
                 {isOpen ? <X size={28} /> : <MessageCircle size={28} />}
             </button>
+            </div>
         </div>
     );
 }

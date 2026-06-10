@@ -281,7 +281,7 @@ export function ChipCard({
                         disabled={isUpdatingVoice}
                         onChange={(e) => handleVoiceChange(e.target.value)}
                         className={`
-                            appearance-none bg-[#1e1b2e]/40 border border-fuchsia-500/30 hover:border-fuchsia-500/80 text-fuchsia-300 text-[11px] font-bold tracking-wide 
+                            appearance-none bg-fuchsia-500/10 border border-fuchsia-500/30 hover:border-fuchsia-500/80 text-[var(--text-primary)] text-[11px] font-bold tracking-wide 
                             rounded-full px-3 py-1 pr-6 transition-all duration-300 cursor-pointer outline-none
                             shadow-[inset_0_1px_1px_rgba(255,255,255,0.05),0_0_8px_rgba(217,70,239,0.2)]
                             hover:shadow-[0_0_12px_rgba(217,70,239,0.4)]
@@ -294,7 +294,7 @@ export function ChipCard({
                         }}
                     >
                         {voices.map(v => (
-                            <option key={v.id} value={v.id} className="bg-[#1a1c24] text-white">{v.name}</option>
+                            <option key={v.id} value={v.id} className="bg-[var(--bg-secondary)] text-[var(--text-primary)]">{v.name}</option>
                         ))}
                     </select>
                 </div>
@@ -318,7 +318,7 @@ export function ChipCard({
                 </button>
 
                 {showAdvancedWarmup && (
-                    <div className="flex flex-col gap-2 py-2 px-2 bg-black/20 border border-orange-500/20 rounded-lg animate-fadeIn mt-1 mb-2">
+                    <div className="flex flex-col gap-2 py-2 px-2 bg-[var(--bg-secondary)]/50 border border-orange-500/20 rounded-lg animate-fadeIn mt-1 mb-2">
                         <div>
                             <label className="text-[9px] font-medium text-orange-300 mb-1 block">Nicho / Segmento</label>
                             <input 
@@ -326,7 +326,7 @@ export function ChipCard({
                                 placeholder="Ex: Marketing Digital, Emagrecimento"
                                 value={nicheText}
                                 onChange={(e) => setNicheText(e.target.value)}
-                                className="w-full bg-[#1a1c24] border border-[var(--border-color)] focus:border-orange-500/50 text-xs rounded px-2 py-1 text-white focus:outline-none transition-all"
+                                className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] focus:border-orange-500/50 text-xs rounded px-2 py-1 text-[var(--text-primary)] focus:outline-none transition-all"
                             />
                         </div>
 
@@ -334,7 +334,7 @@ export function ChipCard({
                             <span className="text-[9px] text-[var(--text-muted)]">Automação de Grupos</span>
                             <button
                                 onClick={() => setGroupWarmup(!groupWarmup)}
-                                className={`relative w-8 h-4 rounded-full transition-colors focus:outline-none ${groupWarmup ? 'bg-orange-500' : 'bg-[#2a2d3a]'}`}
+                                className={`relative w-8 h-4 rounded-full transition-colors focus:outline-none ${groupWarmup ? 'bg-orange-500' : 'bg-gray-300 dark:bg-[#2a2d3a]'}`}
                             >
                                 <span className={`absolute top-0.5 left-0.5 w-3 h-3 rounded-full bg-white transition-transform ${groupWarmup ? 'translate-x-4' : ''}`} />
                             </button>
@@ -350,7 +350,7 @@ export function ChipCard({
                                         max="14"
                                         value={groupDay}
                                         onChange={(e) => setGroupDay(Number(e.target.value))}
-                                        className="w-12 bg-[#1a1c24] border border-[var(--border-color)] focus:border-orange-500/50 text-[10px] rounded px-1 py-0.5 text-center text-white focus:outline-none"
+                                        className="w-12 bg-[var(--bg-secondary)] border border-[var(--border-color)] focus:border-orange-500/50 text-[10px] rounded px-1 py-0.5 text-center text-[var(--text-primary)] focus:outline-none"
                                     />
                                 </div>
 
@@ -361,7 +361,7 @@ export function ChipCard({
                                         value={customLinks}
                                         onChange={(e) => setCustomLinks(e.target.value)}
                                         rows={2}
-                                        className="w-full bg-[#1a1c24] border border-[var(--border-color)] focus:border-orange-500/50 text-[9px] rounded px-2 py-1 text-white focus:outline-none transition-all font-mono resize-none"
+                                        className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] focus:border-orange-500/50 text-[9px] rounded px-2 py-1 text-[var(--text-primary)] focus:outline-none transition-all font-mono resize-none"
                                     />
                                 </div>
                             </>

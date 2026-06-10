@@ -54,7 +54,12 @@ export class EvolutionAdapter implements IWhatsAppProvider {
 
             if (isOfficial) {
                 payload.token = config?.token || config?.accessToken;
-                payload.number = config?.phoneNumber; // Evolution expects 'number' for phone
+                payload.number = config?.phoneNumber || config?.phoneNumberId; // A Evolution usa 'number' mas na WABA é o Phone Number ID
+                
+                // Mapeia o Business Account ID se fornecido
+                if (config?.wabaId) {
+                    payload.businessId = config.wabaId;
+                }
             }
 
             // Create new instance

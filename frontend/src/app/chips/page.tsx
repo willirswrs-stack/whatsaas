@@ -22,6 +22,11 @@ export default function ChipsPage() {
     const [newInstanceName, setNewInstanceName] = useState('');
     const [selectedProvider, setSelectedProvider] = useState<ProviderType>('evolution');
     const [selectedWarmupProfile, setSelectedWarmupProfile] = useState<'inbound' | 'warm_outbound' | 'cold_outbound' | 'groups'>('cold_outbound');
+    const [warmupDay, setWarmupDay] = useState<number>(60);
+    const [isWaba, setIsWaba] = useState(false);
+    const [wabaId, setWabaId] = useState('');
+    const [phoneNumberId, setPhoneNumberId] = useState('');
+    const [wabaToken, setWabaToken] = useState('');
     const [isCreating, setIsCreating] = useState(false);
     const [createdInstanceId, setCreatedInstanceId] = useState<string | null>(null);
     const [connectionStatus, setConnectionStatus] = useState('');
@@ -170,11 +175,19 @@ export default function ChipsPage() {
             setError('');
             setConnectionStatus('Criando instância...');
 
+            const config = isWaba ? {
+                wabaId,
+                phoneNumberId,
+                token: wabaToken
+            } : undefined;
+
             // Backend retorna { instance, qrCode } diretamente
             const result = await instancesService.create({
                 name: newInstanceName,
                 provider: selectedProvider,
-                warmupProfile: selectedWarmupProfile
+                warmupProfile: selectedWarmupProfile,
+                warmupDay: warmupDay,
+                config
             });
             setInstances([...instances, result.instance]);
 
@@ -296,6 +309,7 @@ export default function ChipsPage() {
         setSelectedVoiceModel((instance?.metaConfig?.voiceModel as any) === 'tts-1' ? 'tts-1' : 'tts-1-hd');
         setIsSystemSeed(!!instance?.isSystemSeed);
         setSelectedWarmupProfile(instance?.warmupProfile || 'cold_outbound');
+        setWarmupDay(instance?.warmupDay || 60);
     };
 
     const saveConfig = async () => {
@@ -307,6 +321,7 @@ export default function ChipsPage() {
                 proxyId: selectedProxyId || null,
                 isSystemSeed: isSystemSeed,
                 warmupProfile: selectedWarmupProfile,
+                warmupDay: warmupDay,
                 metaConfig: { 
                     voiceProfile: finalVoice || 'alloy',
                     voiceSpeed: selectedVoiceSpeed,
@@ -679,12 +694,12 @@ export default function ChipsPage() {
                                         </p>
                                         
                                         {qrCode ? (
-                                            <div className="bg-white p-4 rounded-xl inline-block mb-4 shadow-inner ring-4 ring-white/5">
+                                            <div className="bg-white p-4 rounded-xl inline-block mb-4 shadow-[0_0_30px_rgba(34,197,94,0.4)] ring-4 ring-green-500/50 transition-all duration-500 hover:shadow-[0_0_40px_rgba(34,197,94,0.6)]">
                                                 <img src={qrCode} alt="QR Code" className="w-48 h-48 mx-auto" />
                                             </div>
                                         ) : (
-                                            <div className="w-48 h-48 mx-auto bg-white/5 rounded-xl border border-dashed border-white/10 flex items-center justify-center mb-4">
-                                                <div className="w-8 h-8 border-3 border-[var(--accent-primary)] border-t-transparent rounded-full animate-spin" />
+                                            <div className="w-48 h-48 mx-auto bg-white/5 rounded-xl border-2 border-dashed border-green-500/30 flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(34,197,94,0.1)]">
+                                                <div className="w-8 h-8 border-3 border-green-500 border-t-transparent rounded-full animate-spin drop-shadow-[0_0_10px_rgba(34,197,94,0.8)]" />
                                             </div>
                                         )}
 
@@ -716,7 +731,7 @@ export default function ChipsPage() {
                                                     </label>
                                                     <input
                                                         type="text"
-                                                        className="input w-full bg-[#161922] border-white/10 hover:border-white/20 text-white placeholder-gray-500 font-mono text-sm tracking-wider"
+                                                        className="input w-full font-mono text-sm tracking-wider"
                                                         placeholder="Ex: 5511999999999"
                                                         value={pairingPhone}
                                                         onChange={(e) => setPairingPhone(e.target.value.replace(/\D/g, ''))}
@@ -753,13 +768,13 @@ export default function ChipsPage() {
                                                 </p>
 
                                                 {/* Display do Código */}
-                                                <div className="relative group bg-[#161922] p-4 rounded-xl border border-white/10 flex items-center justify-center gap-3">
+                                                <div className="relative group bg-[var(--bg-secondary)] p-4 rounded-xl border border-[var(--border-color)] flex items-center justify-center gap-3">
                                                     <span className="text-3xl font-extrabold tracking-widest text-[var(--accent-primary)] font-mono animate-pulse">
                                                         {pairingCode}
                                                     </span>
                                                     <button
                                                         type="button"
-                                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[var(--text-secondary)] hover:text-white transition-colors"
+                                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors"
                                                         onClick={() => {
                                                             navigator.clipboard.writeText(pairingCode);
                                                             setConnectionStatus('📋 Código copiado!');
@@ -774,22 +789,22 @@ export default function ChipsPage() {
                                                 </div>
 
                                                 {/* Instruções de Pareamento */}
-                                                <div className="text-left bg-[#161922]/50 p-4 rounded-lg border border-white/5 text-xs space-y-2.5 text-[var(--text-secondary)]">
-                                                    <span className="font-bold text-white block mb-1">Como conectar:</span>
+                                                <div className="text-left bg-[var(--bg-secondary)]/50 p-4 rounded-lg border border-[var(--border-subtle)] text-xs space-y-2.5 text-[var(--text-secondary)]">
+                                                    <span className="font-bold text-[var(--text-primary)] block mb-1">Como conectar:</span>
                                                     <div className="flex gap-2.5">
-                                                        <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">1</span>
+                                                        <span className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-[var(--text-primary)] flex-shrink-0">1</span>
                                                         <span>Abra o <strong>WhatsApp</strong> no celular que deseja conectar.</span>
                                                     </div>
                                                     <div className="flex gap-2.5">
-                                                        <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">2</span>
+                                                        <span className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-[var(--text-primary)] flex-shrink-0">2</span>
                                                         <span>Vá em <strong>Aparelhos conectados</strong> no menu.</span>
                                                     </div>
                                                     <div className="flex gap-2.5">
-                                                        <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">3</span>
+                                                        <span className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-[var(--text-primary)] flex-shrink-0">3</span>
                                                         <span>Toque em <strong>Conectar aparelho</strong> e depois em <strong>Conectar com número de telefone</strong>.</span>
                                                     </div>
                                                     <div className="flex gap-2.5">
-                                                        <span className="w-5 h-5 rounded-full bg-white/5 flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0">4</span>
+                                                        <span className="w-5 h-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold text-[var(--text-primary)] flex-shrink-0">4</span>
                                                         <span>Digite o código <strong>{pairingCode}</strong> exibido acima.</span>
                                                     </div>
                                                 </div>
@@ -831,7 +846,7 @@ export default function ChipsPage() {
                                 <div className="mt-6 pt-4 border-t border-white/5 flex gap-3">
                                     <button
                                         type="button"
-                                        className="btn btn-secondary w-full py-2 text-xs font-semibold hover:bg-white/10"
+                                        className="btn btn-secondary w-full py-2 text-xs font-semibold"
                                         onClick={() => {
                                             setShowModal(false);
                                             setQrCode('');
@@ -849,13 +864,13 @@ export default function ChipsPage() {
                         ) : (
                             // Fase de Criação (Instance Form)
                             <>
-                                <h2 className="text-xl font-bold mb-4">Nova Instância WhatsApp</h2>
+                                <h2 className="text-xl font-bold mb-4 text-[var(--text-primary)]">Nova Instância WhatsApp</h2>
                                 
                                 <div className="mb-4">
-                                    <label className="block text-sm font-medium mb-2">Nome da Instância</label>
+                                    <label className="block text-sm font-medium mb-2 text-[var(--text-secondary)]">Nome da Instância</label>
                                     <input
                                         type="text"
-                                        className="input w-full bg-[#161922] border-white/10 hover:border-white/20 text-white placeholder-gray-500"
+                                        className="input w-full"
                                         placeholder="Ex: Chip Principal"
                                         value={newInstanceName}
                                         onChange={(e) => setNewInstanceName(e.target.value)}
@@ -863,9 +878,9 @@ export default function ChipsPage() {
                                 </div>
 
                                 <div className="mb-4">
-                                    <label className="block text-sm font-medium mb-2">Provedor WhatsApp</label>
+                                    <label className="block text-sm font-medium mb-2 text-[var(--text-secondary)]">Provedor WhatsApp</label>
                                     <select
-                                        className="input w-full bg-[#161922] border-white/10 text-white"
+                                        className="input w-full"
                                         value={selectedProvider}
                                         onChange={(e) => setSelectedProvider(e.target.value as ProviderType)}
                                     >
@@ -880,11 +895,45 @@ export default function ChipsPage() {
                                     </p>
                                 </div>
 
+                                {/* TOOGLE DA API OFICIAL (WABA) */}
                                 <div className="mb-4">
-                                    <label className="block text-sm font-medium mb-2">Perfil de Aquecimento</label>
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={isWaba}
+                                            onChange={(e) => setIsWaba(e.target.checked)}
+                                            className="w-4 h-4 rounded border-[var(--border-color)] bg-[var(--bg-secondary)] text-emerald-500 focus:ring-emerald-500 focus:ring-offset-[var(--bg-primary)]"
+                                        />
+                                        <span className="text-sm font-bold text-[var(--text-primary)]">Usar API Oficial da Meta (Cloud API)</span>
+                                        <span className="bg-emerald-500/20 text-emerald-400 text-[10px] px-2 py-0.5 rounded-full uppercase tracking-wider font-bold">Premium</span>
+                                    </label>
+                                    <p className="text-xs text-[var(--text-muted)] mt-1.5 ml-6">
+                                        Recomendado para grandes operações (Agency/Enterprise). Exige Business Account ID e Token Permanente.
+                                    </p>
+                                </div>
+
+                                {isWaba && (
+                                    <div className="mb-4 space-y-4 p-5 border border-emerald-500/30 bg-emerald-500/5 rounded-xl">
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1 text-[var(--text-secondary)]">WhatsApp Business Account ID</label>
+                                            <input type="text" className="input w-full text-sm" value={wabaId} onChange={e => setWabaId(e.target.value)} placeholder="Ex: 104593847593" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1 text-[var(--text-secondary)]">Phone Number ID</label>
+                                            <input type="text" className="input w-full text-sm" value={phoneNumberId} onChange={e => setPhoneNumberId(e.target.value)} placeholder="Ex: 1029384756" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold mb-1 text-[var(--text-secondary)]">Token de Acesso (Permanente)</label>
+                                            <input type="password" className="input w-full text-sm" value={wabaToken} onChange={e => setWabaToken(e.target.value)} placeholder="EAAG..." />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium mb-2 text-[var(--text-secondary)]">Perfil de Aquecimento</label>
                                     {isSuperAdmin ? (
                                         <select
-                                            className="input w-full bg-[#161922] border-white/10 text-white"
+                                            className="input w-full"
                                             value={selectedWarmupProfile}
                                             onChange={(e) => setSelectedWarmupProfile(e.target.value as any)}
                                         >
@@ -895,7 +944,7 @@ export default function ChipsPage() {
                                         </select>
                                     ) : (
                                         <select
-                                            className="input w-full bg-[#161922] border-white/10 text-white"
+                                            className="input w-full"
                                             value={selectedWarmupProfile}
                                             onChange={(e) => setSelectedWarmupProfile(e.target.value as any)}
                                         >
@@ -910,9 +959,25 @@ export default function ChipsPage() {
                                     </p>
                                     {!isSuperAdmin && (
                                         <p className="text-[10px] text-orange-400 mt-1 flex items-center gap-1">
-                                            🔒 Duração definida pelo administrador
+                                            🔒 Duração padrão definida pelo administrador
                                         </p>
                                     )}
+                                    <div className="mt-4 bg-[var(--bg-secondary)] border border-[var(--border-color)] p-4 rounded-xl flex flex-col gap-2">
+                                        <div className="flex justify-between items-end">
+                                            <label className="text-xs font-bold text-[var(--text-primary)]">Duração de Maturação (Dias)</label>
+                                            <span className="text-xl font-black text-orange-400 font-mono">{warmupDay}</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min={7} max={90} step={1}
+                                            value={warmupDay}
+                                            onChange={e => setWarmupDay(parseInt(e.target.value))}
+                                            className="w-full h-1.5 rounded-full appearance-none cursor-pointer mt-2"
+                                            style={{
+                                                background: `linear-gradient(to right, var(--primary) ${((warmupDay - 7) / (90 - 7)) * 100}%, rgba(255,255,255,0.1) ${((warmupDay - 7) / (90 - 7)) * 100}%)`
+                                            }}
+                                        />
+                                    </div>
                                 </div>
 
                                 <div className="flex gap-3 pt-2">
@@ -924,6 +989,10 @@ export default function ChipsPage() {
                                             setQrCode('');
                                             setNewInstanceName('');
                                             setSelectedProvider('evolution');
+                                            setIsWaba(false);
+                                            setWabaId('');
+                                            setPhoneNumberId('');
+                                            setWabaToken('');
                                         }}
                                     >
                                         Cancelar
@@ -1023,7 +1092,7 @@ export default function ChipsPage() {
                         </div>
 
                         {/* System Seed Toggle */}
-                        <div className="mb-6 flex flex-col gap-2 p-3 bg-white/5 border border-white/10 rounded-lg">
+                        <div className="mb-6 flex flex-col gap-2 p-3 bg-[var(--bg-secondary)]/50 border border-[var(--border-color)] rounded-lg">
                             <div className="flex items-center justify-between">
                                 <label className="text-sm font-medium text-green-400 flex items-center gap-2">
                                     🌱 Chip Semente do Sistema
@@ -1031,21 +1100,21 @@ export default function ChipsPage() {
                                 <button
                                     type="button"
                                     onClick={() => setIsSystemSeed(!isSystemSeed)}
-                                    className={`relative w-10 h-5 rounded-full transition-colors focus:outline-none ${isSystemSeed ? 'bg-green-500' : 'bg-gray-700'}`}
+                                    className={`relative w-10 h-5 rounded-full transition-colors focus:outline-none ${isSystemSeed ? 'bg-green-500' : 'bg-gray-400 dark:bg-gray-700'}`}
                                 >
                                     <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${isSystemSeed ? 'translate-x-5' : 'translate-x-0'}`} />
                                 </button>
                             </div>
-                            <p className="text-xs text-gray-400 leading-relaxed">
+                            <p className="text-xs text-[var(--text-secondary)] leading-relaxed">
                                 Se ativado, este chip ajudará a aquecer outros clientes. Ele fará conversas ativas com contas novas.
                             </p>
                         </div>
 
                         <div className="mb-6">
-                            <label className="block text-sm font-medium mb-2">Perfil de Aquecimento (Atual: {instances.find(i => i.id === configInstanceId)?.warmupDay || 0} dias)</label>
+                            <label className="block text-sm font-medium mb-2 text-[var(--text-secondary)]">Perfil de Aquecimento (Atual: {instances.find(i => i.id === configInstanceId)?.warmupDay || 0} dias)</label>
                             {isSuperAdmin ? (
                                 <select
-                                    className="input w-full bg-[#161922] border-white/10 text-white"
+                                    className="input w-full"
                                     value={selectedWarmupProfile}
                                     onChange={(e) => setSelectedWarmupProfile(e.target.value as any)}
                                 >
@@ -1057,7 +1126,7 @@ export default function ChipsPage() {
                             ) : (
                                 <>
                                     <select
-                                        className="input w-full bg-[#161922] border-white/10 text-white"
+                                        className="input w-full"
                                         value={selectedWarmupProfile}
                                         onChange={(e) => setSelectedWarmupProfile(e.target.value as any)}
                                     >
@@ -1067,19 +1136,35 @@ export default function ChipsPage() {
                                         <option value="inbound">Receptivo (Risco Baixo)</option>
                                     </select>
                                     <p className="text-[10px] text-orange-400 mt-1.5 flex items-center gap-1">
-                                        🔒 Duração definida pelo administrador — para alterar, acesse Config. Globais SA
+                                        🔒 Duração padrão definida pelo administrador
                                     </p>
                                 </>
                             )}
+                            <div className="mt-4 bg-[var(--bg-secondary)] border border-[var(--border-color)] p-4 rounded-xl flex flex-col gap-2">
+                                <div className="flex justify-between items-end">
+                                    <label className="text-xs font-bold text-[var(--text-primary)]">Duração de Maturação (Dias)</label>
+                                    <span className="text-xl font-black text-orange-400 font-mono">{warmupDay}</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min={7} max={90} step={1}
+                                    value={warmupDay}
+                                    onChange={e => setWarmupDay(parseInt(e.target.value))}
+                                    className="w-full h-1.5 rounded-full appearance-none cursor-pointer mt-2"
+                                    style={{
+                                        background: `linear-gradient(to right, var(--primary) ${((warmupDay - 7) / (90 - 7)) * 100}%, rgba(255,255,255,0.1) ${((warmupDay - 7) / (90 - 7)) * 100}%)`
+                                    }}
+                                />
+                            </div>
                         </div>
 
-                        <div className="mb-6 bg-white/5 border border-white/10 rounded-2xl p-5 relative overflow-hidden">
+                        <div className="mb-6 bg-[var(--bg-secondary)]/50 border border-[var(--border-color)] rounded-2xl p-5 relative overflow-hidden">
                             {/* Efeito de brilho de fundo */}
                             <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -z-10 rounded-full" />
 
                             <div className="flex items-center justify-between mb-4">
-                                <label className="flex items-center gap-2 text-sm font-bold text-indigo-100">
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-indigo-400"><path d="M12 2c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm7 9c0 3.87-3.13 7-7 7s-7-3.13-7-7H3c0 4.53 3.32 8.36 7.57 8.93V22h2.86v-3.07c4.25-.57 7.57-4.4 7.57-8.93h-2z"/></svg>
+                                <label className="flex items-center gap-2 text-sm font-bold text-indigo-600 dark:text-indigo-200">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-indigo-500 dark:text-indigo-400"><path d="M12 2c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm7 9c0 3.87-3.13 7-7 7s-7-3.13-7-7H3c0 4.53 3.32 8.36 7.57 8.93V22h2.86v-3.07c4.25-.57 7.57-4.4 7.57-8.93h-2z"/></svg>
                                     Motor de Voz AI
                                 </label>
                                 
@@ -1089,7 +1174,7 @@ export default function ChipsPage() {
                                     type="button"
                                     className={`
                                         flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all
-                                        ${isPlayingPreview ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 animate-pulse' : 'bg-white/5 border-white/10 text-gray-300 hover:bg-indigo-500/10 hover:text-indigo-300 hover:border-indigo-500/30'}
+                                        ${isPlayingPreview ? 'bg-indigo-500/20 border-indigo-500/40 text-indigo-300 animate-pulse' : 'bg-white/5 border-white/10 text-[var(--text-secondary)] hover:bg-indigo-500/10 hover:text-indigo-500 hover:border-indigo-500/30'}
                                     `}
                                 >
                                     {isPlayingPreview ? (
@@ -1106,7 +1191,7 @@ export default function ChipsPage() {
                             <div className="space-y-4">
                                 <div>
                                     <select
-                                        className="input w-full bg-[#0f1117] border-white/10 focus:border-indigo-500"
+                                        className="input w-full focus:border-indigo-500"
                                         value={selectedVoice}
                                         onChange={(e) => setSelectedVoice(e.target.value)}
                                     >
@@ -1126,10 +1211,10 @@ export default function ChipsPage() {
 
                                 {selectedVoice === 'custom' && (
                                     <div className="animate-fadeIn">
-                                        <label className="block text-[10px] uppercase tracking-wider text-indigo-300 mb-1 font-bold">ID ou Nome da Voz</label>
+                                        <label className="block text-[10px] uppercase tracking-wider text-indigo-600 dark:text-indigo-300 mb-1 font-bold">ID ou Nome da Voz</label>
                                         <input 
-                                            type="text"
-                                            className="input w-full text-sm bg-[#0f1117] border-indigo-500/40 focus:border-indigo-500 placeholder:text-gray-600"
+                                            type="text" 
+                                            className="input w-full text-sm focus:border-indigo-500"
                                             placeholder="Digite o ID da voz (ex: eleven_labs_id)..."
                                             value={customVoiceName}
                                             onChange={(e) => setCustomVoiceName(e.target.value)}
@@ -1139,8 +1224,8 @@ export default function ChipsPage() {
 
                                 <div className="pt-2 border-t border-white/5">
                                     <div className="flex items-center justify-between mb-1.5">
-                                        <label className="text-xs text-gray-400">Velocidade da Fala</label>
-                                        <span className="text-xs font-mono text-indigo-300 font-bold">{selectedVoiceSpeed}x</span>
+                                        <label className="text-xs text-[var(--text-secondary)]">Velocidade da Fala</label>
+                                        <span className="text-xs font-mono text-indigo-600 dark:text-indigo-300 font-bold">{selectedVoiceSpeed}x</span>
                                     </div>
                                     <input 
                                         type="range" 
@@ -1149,9 +1234,9 @@ export default function ChipsPage() {
                                         step="0.05"
                                         value={selectedVoiceSpeed}
                                         onChange={(e) => setSelectedVoiceSpeed(parseFloat(e.target.value))}
-                                        className="w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                                        className="w-full h-1.5 bg-gray-200 dark:bg-white/10 rounded-lg appearance-none cursor-pointer accent-indigo-500"
                                     />
-                                    <div className="flex justify-between text-[9px] text-gray-600 px-0.5">
+                                    <div className="flex justify-between text-[9px] text-[var(--text-muted)] px-0.5">
                                         <span>Lento</span>
                                         <span>Normal</span>
                                         <span>Rápido</span>
@@ -1160,15 +1245,15 @@ export default function ChipsPage() {
 
                                 <div className="flex items-center justify-between pt-2 border-t border-white/5">
                                     <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-gray-300 flex items-center gap-1">
+                                        <span className="text-xs font-bold text-[var(--text-primary)] flex items-center gap-1">
                                             🚀 Modo Ultra HD (OpenAI)
                                         </span>
-                                        <span className="text-[9px] text-gray-500">Voz mais natural, menos robótica.</span>
+                                        <span className="text-[9px] text-[var(--text-muted)]">Voz mais natural, menos robótica.</span>
                                     </div>
                                     <button
                                         type="button"
                                         onClick={() => setSelectedVoiceModel(prev => prev === 'tts-1' ? 'tts-1-hd' : 'tts-1')}
-                                        className={`relative w-8 h-4.5 rounded-full transition-colors ${selectedVoiceModel === 'tts-1-hd' ? 'bg-indigo-500' : 'bg-gray-700'}`}
+                                        className={`relative w-8 h-4.5 rounded-full transition-colors ${selectedVoiceModel === 'tts-1-hd' ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-700'}`}
                                     >
                                         <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform ${selectedVoiceModel === 'tts-1-hd' ? 'translate-x-3.5' : 'translate-x-0'}`} />
                                     </button>
@@ -1190,8 +1275,8 @@ export default function ChipsPage() {
                                         className={`
                                             w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider border transition-all
                                             ${isCloningVoice 
-                                                ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30 animate-pulse cursor-wait' 
-                                                : 'bg-gradient-to-r from-indigo-600/20 to-purple-600/20 border-indigo-500/30 text-indigo-300 hover:from-indigo-500/30 hover:to-purple-500/30 hover:border-indigo-400 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)]'
+                                                ? 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-300 border-indigo-500/30 animate-pulse cursor-wait' 
+                                                : 'bg-gradient-to-r from-indigo-600/10 to-purple-600/10 dark:from-indigo-600/20 dark:to-purple-600/20 border-indigo-500/30 text-indigo-600 dark:text-indigo-300 hover:from-indigo-500/20 hover:to-purple-500/20 hover:border-indigo-400 hover:shadow-[0_0_15px_rgba(99,102,241,0.2)]'
                                             }
                                         `}
                                     >
@@ -1204,7 +1289,7 @@ export default function ChipsPage() {
                                             </>
                                         )}
                                     </button>
-                                    <p className="text-[9px] text-center text-gray-500 mt-1.5">Requer ELEVENLABS_API_KEY no backend.</p>
+                                    <p className="text-[9px] text-center text-[var(--text-muted)] mt-1.5">Requer ELEVENLABS_API_KEY no backend.</p>
                                 </div>
                             </div>
                         </div>

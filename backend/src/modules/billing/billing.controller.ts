@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Logger, HttpCode, HttpStatus, UseGuards, Request, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Logger, HttpCode, HttpStatus, UseGuards, Request, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AuthGuard } from '@nestjs/passport';
@@ -18,6 +18,14 @@ export class BillingController {
         @InjectRepository(SubscriptionPlan)
         private planRepo: Repository<SubscriptionPlan>,
     ) {}
+
+    @Get('plans')
+    async getPlans() {
+        // Retorna todos os planos ordenados pelo preço para o Frontend
+        return await this.planRepo.find({
+            order: { price: 'ASC' }
+        });
+    }
 
     @UseGuards(AuthGuard('jwt'))
     @Post('subscribe')

@@ -270,14 +270,14 @@ export default function FlowsPage() {
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <img src="/icons/sidebar/flows.png" alt="Fluxos" className="w-10 h-10 object-contain drop-shadow-md" />
-                        <h1 className="text-2xl font-bold !text-gray-900 dark:!text-white">Fluxos</h1>
+                        <h1 className="text-2xl font-bold text-[var(--text-primary)]">Fluxos</h1>
                         <button
                             onClick={() => setShowChannelModal(true)}
                             className="px-4 py-2 bg-[#22c55e] text-white rounded-full font-semibold text-sm hover:bg-[#16a34a] transition-colors"
                         >
                             CRIAR
                         </button>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xl">
+                        <p className="text-sm text-[var(--text-muted)] max-w-xl">
                             Fluxos são utilizados para criar sequência de mensagens com o público, alimentar seus funis para uma visualização analítica do negócio
                         </p>
                     </div>

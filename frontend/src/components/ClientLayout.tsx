@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { LlmProvider } from '@/contexts/LlmContext';
 import { Sidebar } from './Sidebar';
 import { ProtectedRoute } from './ProtectedRoute';
+import { Toaster } from 'react-hot-toast';
 
 import { OnboardingAssistant } from './onboarding/OnboardingAssistant';
 import { SupportWidget } from './SupportWidget';
@@ -21,6 +22,9 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
 
     return (
         <ThemeProvider>
+            <Toaster position="top-right" toastOptions={{ 
+                style: { background: '#1e293b', color: '#fff', borderRadius: '12px', border: '1px solid #334155' }
+            }} />
             <AuthProvider>
                 <LlmProvider>
                     {isPublicRoute ? (

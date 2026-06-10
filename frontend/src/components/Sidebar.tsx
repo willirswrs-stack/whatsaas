@@ -31,14 +31,14 @@ export function Sidebar() {
     // O navItems já está definido fora.
 
     return (
-        <aside className="sidebar flex flex-col h-full bg-[#1e2330] border-r border-[#2d3241]">
-            <div className="sidebar-logo p-2 flex justify-center border-b border-[#2d3241] min-h-[140px] items-center overflow-hidden">
-                <Link href="/" className="flex items-center w-full justify-center p-1">
+        <aside className="sidebar flex flex-col h-full">
+            <div className="sidebar-brand h-[80px] flex items-center justify-center border-b border-[var(--border-color)] shrink-0 bg-transparent overflow-hidden">
+                <Link href="/" className="flex items-center justify-center w-full h-full group">
                     <img
                         src="/logo.png"
                         alt="WhatSaas"
-                        className="w-full max-w-[210px] object-contain drop-shadow-[0_0_15px_rgba(37,211,102,0.5)] hover:scale-105 transition-all duration-300"
-                        style={{ height: '110px', width: 'auto' }}
+                        className="w-full h-full object-contain drop-shadow-[0_0_10px_rgba(16,185,129,0.4)] group-hover:drop-shadow-[0_0_15px_rgba(16,185,129,0.6)] transition-all duration-300 hover:scale-[1.6]"
+                        style={{ transform: 'scale(1.5)' }}
                     />
                 </Link>
             </div>
@@ -51,7 +51,7 @@ export function Sidebar() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`nav-item ${isActive ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors`}
+                            className={`nav-item ${isActive ? 'active' : ''} flex items-center gap-3 transition-colors`}
                         >
                             <img
                                 src={item.icon}
@@ -65,42 +65,57 @@ export function Sidebar() {
 
                 {/* Área de Super Admin */}
                 {isSuperAdmin && (
-                    <div className="mt-6 pt-4 border-t border-[#2d3241]">
+                    <div className="mt-6 pt-4 border-t border-[var(--border-color)]">
                         <p className="px-4 text-xs font-bold text-indigo-400 uppercase tracking-widest mb-3">
                             Super Admin
                         </p>
                         <Link
                             href="/admin/dashboard"
-                            className={`nav-item ${pathname === '/admin/dashboard' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
+                            className={`nav-item ${pathname === '/admin/dashboard' ? 'active' : ''} flex items-center gap-3 transition-colors group`}
                         >
-                            <div className="w-6 h-6 flex items-center justify-center bg-cyan-500/10 rounded-md group-hover:bg-cyan-500/20 text-cyan-400">
-                                🖥️
-                            </div>
-                            <span className="text-sm font-medium">Dashboard Global</span>
+                            <span className="text-[var(--text-muted)] group-hover:text-[var(--primary)] transition-colors">📊</span>
+                            <span className="font-medium text-[var(--text-secondary)] group-hover:text-[var(--text-primary)] transition-colors">Dashboard</span>
+                        </Link>
+                        
+                        <Link
+                            href="/planos"
+                            className={`nav-item ${pathname === '/planos' ? 'active' : ''} flex items-center gap-3 transition-all duration-300 group mt-2 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 rounded-xl px-4 py-2 shadow-[0_0_15px_rgba(16,185,129,0.1)] hover:shadow-[0_0_20px_rgba(16,185,129,0.2)]`}
+                        >
+                            <span className="text-emerald-400 group-hover:scale-110 transition-transform">💎</span>
+                            <span className="font-bold text-emerald-400">Meu Plano</span>
                         </Link>
                         <Link
                             href="/admin/tenants"
-                            className={`nav-item ${pathname === '/admin/tenants' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
+                            className={`nav-item ${pathname === '/admin/tenants' ? 'active' : ''} flex items-center gap-3 transition-colors group`}
                         >
                             <div className="w-6 h-6 flex items-center justify-center bg-emerald-500/10 rounded-md group-hover:bg-emerald-500/20 text-emerald-400">
                                 🏢
                             </div>
-                            <span className="text-sm font-medium">Tenants (Clientes)</span>
+                            <span className="text-sm font-medium">Clientes</span>
                         </Link>
                         <Link
                             href="/admin/logs"
-                            className={`nav-item ${pathname === '/admin/logs' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
+                            className={`nav-item ${pathname === '/admin/logs' ? 'active' : ''} flex items-center gap-3 transition-colors group`}
                         >
                             <div className="w-6 h-6 flex items-center justify-center bg-yellow-500/10 rounded-md group-hover:bg-yellow-500/20 text-yellow-400">
                                 📜
                             </div>
                             <span className="text-sm font-medium">Logs do Servidor</span>
                         </Link>
+                        <Link
+                            href="/admin/apis"
+                            className={`nav-item ${pathname === '/admin/apis' ? 'active' : ''} flex items-center gap-3 transition-colors group`}
+                        >
+                            <div className="w-6 h-6 flex items-center justify-center bg-purple-500/10 rounded-md group-hover:bg-purple-500/20 text-purple-400">
+                                🔌
+                            </div>
+                            <span className="text-sm font-medium">APIs e Integrações</span>
+                        </Link>
                         <a
                             href={`${process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '')}/admin/queues` || 'http://localhost:3333/admin/queues'}
                             target="_blank"
                             rel="noreferrer"
-                            className="nav-item flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group"
+                            className="nav-item flex items-center gap-3 transition-colors group"
                         >
                             <div className="w-6 h-6 flex items-center justify-center bg-red-500/10 rounded-md group-hover:bg-red-500/20 text-red-400">
                                 📊
@@ -112,7 +127,7 @@ export function Sidebar() {
                         </a>
                         <Link
                             href="/admin/ai-agent"
-                            className={`nav-item ${pathname === '/admin/ai-agent' ? 'active' : ''} flex items-center gap-3 px-3 py-2 rounded-lg text-gray-400 hover:text-white hover:bg-[#2d3241] transition-colors group`}
+                            className={`nav-item ${pathname === '/admin/ai-agent' ? 'active' : ''} flex items-center gap-3 transition-colors group`}
                         >
                             <div className="w-6 h-6 flex items-center justify-center bg-indigo-500/10 rounded-md group-hover:bg-indigo-500/20 text-indigo-400">
                                 🧠
@@ -123,7 +138,7 @@ export function Sidebar() {
                 )}
             </nav>
 
-            <div className="px-4 py-4 border-t border-[#2d3241]">
+            <div className="px-4 py-4 border-t border-[var(--border-color)]">
                 <div className="glass-card p-4">
                     <UserSection />
                 </div>

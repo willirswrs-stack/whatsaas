@@ -8,6 +8,7 @@ import { Tenant, User, SubscriptionPlan } from '../tenants/entities/tenant.entit
 import { Instance } from '../instances/entities/instance.entity';
 import { ProxyEntity } from '../proxies/entities/proxy.entity';
 import { Campaign } from '../campaigns/entities/campaign.entity';
+import { getGlobalApiSettings, updateGlobalApiSettings } from '../../common/global-settings';
 
 @Injectable()
 export class AdminService {
@@ -216,5 +217,32 @@ export class AdminService {
             { timestamp: new Date(), level: 'info', message: 'Servidor iniciado com sucesso.', context: 'Bootstrap' },
             { timestamp: new Date(Date.now() - 5000), level: 'warn', message: 'Tentativa de acesso inválida detectada.', context: 'Auth' },
         ];
+    }
+
+    async getApiSettings() {
+        const settings = getGlobalApiSettings();
+        const mask = (key: string) => key && key.length > 8 ? key.substring(0, 4) + '...***...' + key.slice(-4) : (key ? '***' : '');
+        return {
+            openaiKey: mask(settings.openaiKey),
+            elevenlabsKey: mask(settings.elevenlabsKey),
+            evolutionUrl: settings.evolutionUrl,
+            evolutionKey: mask(settings.evolutionKey),
+            webhookUrl: settings.webhookUrl,
+        };
+    }
+
+    async updateApiSettings(payload: any) {
+        const cleanPayload: any = {};
+        for (const [k, v] of Object.entries(payload)) {
+            if (v !== undefined && v !== null && !String(v).includes('***')) {
+                cleanPayload[k] = String(v).trim();
+            }
+        }
+        try {
+            updateGlobalApiSettings(cleanPayload);
+            return { success: true, message: 'Configurações de APIs salvas com sucesso' };
+        } catch (e) {
+            throw new InternalServerErrorException(e.message);
+        }
     }
 }

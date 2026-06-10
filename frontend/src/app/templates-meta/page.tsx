@@ -222,7 +222,7 @@ export default function TemplatesMetaPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <div>
-                    <p className="font-medium text-white">Selecione um número</p>
+                    <p className="font-medium text-[var(--text-primary)]">Selecione um número</p>
                     <p className="text-sm text-[var(--text-muted)]">
                         Clique em uma caixa de entrada para gerenciar seus templates da API Oficial do WhatsApp
                     </p>
@@ -253,7 +253,7 @@ export default function TemplatesMetaPage() {
                                         </svg>
                                     </div>
                                     <div className="flex-1">
-                                        <h3 className="font-semibold text-white">{account.name}</h3>
+                                        <h3 className="font-semibold text-[var(--text-primary)]">{account.name}</h3>
                                         <p className="text-sm text-[var(--text-muted)]">{account.phoneNumber}</p>
                                         <p className="text-xs text-[var(--text-muted)]">ID: {account.wabaId?.substring(0, 10)}...</p>
                                     </div>
@@ -331,7 +331,7 @@ export default function TemplatesMetaPage() {
                         {selectedAccount ? (
                             <>
                                 <div className="flex items-center justify-between mb-6">
-                                    <h3 className="font-semibold text-white">
+                                    <h3 className="font-semibold text-[var(--text-primary)]">
                                         Templates - {selectedAccount.name}
                                     </h3>
                                     <button
@@ -352,7 +352,7 @@ export default function TemplatesMetaPage() {
                                             <div key={template.id} className="glass p-4 rounded-lg">
                                                 <div className="flex items-start justify-between">
                                                     <div>
-                                                        <h4 className="font-medium text-white">{template.name}</h4>
+                                                        <h4 className="font-medium text-[var(--text-primary)]">{template.name}</h4>
                                                         <p className="text-xs text-[var(--text-muted)]">
                                                             {template.category} • {template.language}
                                                         </p>
@@ -397,7 +397,7 @@ export default function TemplatesMetaPage() {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="glass-card p-8 w-full max-w-lg">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-white">Adicionar Conta WABA</h2>
+                            <h2 className="text-xl font-bold text-[var(--text-primary)]">Adicionar Conta WABA</h2>
                             <button
                                 className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"
                                 onClick={() => setShowAddAccount(false)}
@@ -511,7 +511,7 @@ export default function TemplatesMetaPage() {
                     <div className="glass-card p-8 w-full max-w-2xl my-8">
                         <div className="flex items-center justify-between mb-6">
                             <div>
-                                <h2 className="text-xl font-bold text-white">⚙️ Configurar Perfil Comercial</h2>
+                                <h2 className="text-xl font-bold text-[var(--text-primary)]">⚙️ Configurar Perfil Comercial</h2>
                                 <p className="text-sm text-[var(--text-muted)]">
                                     {selectedAccount.name} • {selectedAccount.phoneNumber}
                                 </p>
@@ -563,7 +563,7 @@ export default function TemplatesMetaPage() {
                             <div>
                                 <label className="block text-sm font-medium mb-2">😊 Nome de exibição</label>
                                 <div className="glass p-3 rounded-lg">
-                                    <p className="font-medium text-white">{selectedAccount.displayName || selectedAccount.name}</p>
+                                    <p className="font-medium text-[var(--text-primary)]">{selectedAccount.displayName || selectedAccount.name}</p>
                                     <p className="text-xs text-[var(--text-muted)] mt-1">
                                         ℹ️ O nome de exibição só pode ser alterado pelo Meta Business Manager e requer aprovação.
                                     </p>
@@ -674,7 +674,7 @@ export default function TemplatesMetaPage() {
                             <div className="w-24 h-24 rounded-full bg-[var(--primary)]/30 mx-auto mb-3 flex items-center justify-center text-4xl">
                                 🏢
                             </div>
-                            <h3 className="text-xl font-semibold text-white">{selectedAccount.displayName || selectedAccount.name}</h3>
+                            <h3 className="text-xl font-semibold text-[var(--text-primary)]">{selectedAccount.displayName || selectedAccount.name}</h3>
                             <p className="text-sm text-[var(--text-muted)]">{selectedAccount.phoneNumber}</p>
 
                             <button className="btn btn-primary mt-4">
@@ -724,7 +724,7 @@ export default function TemplatesMetaPage() {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
                     <div className="glass-card p-8 w-full max-w-2xl my-8">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-white">📝 Criar Novo Template</h2>
+                            <h2 className="text-xl font-bold text-[var(--text-primary)]">📝 Criar Novo Template</h2>
                             <button
                                 className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"
                                 onClick={() => setShowCreateTemplate(false)}
@@ -804,7 +804,7 @@ export default function TemplatesMetaPage() {
                             </div>
 
                             <div className="p-4 glass rounded-xl">
-                                <h4 className="font-medium text-white mb-2">📋 Preview</h4>
+                                <h4 className="font-medium text-[var(--text-primary)] mb-2">📋 Preview</h4>
                                 <div className="bg-[#075E54] p-3 rounded-lg text-white text-sm">
                                     {newTemplate.body || 'O corpo da mensagem aparecerá aqui...'}
                                     {newTemplate.footer && (

@@ -15,6 +15,7 @@ export interface Instance {
     isSystemSeed?: boolean; // Whether it is a system seed chip
     warmupProfile?: 'inbound' | 'warm_outbound' | 'cold_outbound' | 'groups';
     warmupProgress?: number; // Alias for compatibility
+    warmupDay?: number;
     dailyLimit: number;
     dailySent: number;     // Backend field name
     messagesSent?: number; // Alias for compatibility
@@ -34,6 +35,7 @@ export interface CreateInstanceDto {
     proxyId?: string;
     provider?: ProviderType;
     warmupProfile?: 'inbound' | 'warm_outbound' | 'cold_outbound' | 'groups';
+    warmupDay?: number;
 }
 
 export interface Proxy {
@@ -148,7 +150,8 @@ export const instancesService = {
             instanceName: sanitizedName,
             proxyId: data.proxyId,
             provider: data.provider || 'evolution',  // Evolution como padrão
-            warmupProfile: data.warmupProfile || 'cold_outbound'
+            warmupProfile: data.warmupProfile || 'cold_outbound',
+            warmupDay: data.warmupDay
         });
         return response.data;
     },

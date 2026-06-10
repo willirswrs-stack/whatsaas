@@ -384,7 +384,7 @@ export default function ContactsPage() {
                                 placeholder="Buscar por nome, telefone ou email..."
                                 value={search}
                                 onChange={(e) => setSearch(e.target.value)}
-                                className="input w-full pl-10"
+                                className="input w-full !pl-10"
                             />
                             <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                 <circle cx="11" cy="11" r="8" />

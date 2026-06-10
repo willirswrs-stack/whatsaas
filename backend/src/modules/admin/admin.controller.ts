@@ -82,4 +82,16 @@ export class AdminController {
     async getRecentLogs() {
         return this.adminService.getRecentLogs();
     }
+
+    @Get('apis')
+    @ApiOperation({ summary: 'Obtém as configurações globais de APIs' })
+    async getApiSettings() {
+        return this.adminService.getApiSettings();
+    }
+
+    @Patch('apis')
+    @ApiOperation({ summary: 'Atualiza as configurações globais de APIs' })
+    async updateApiSettings(@Body() body: any) {
+        return this.adminService.updateApiSettings(body);
+    }
 }

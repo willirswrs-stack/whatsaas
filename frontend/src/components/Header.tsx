@@ -29,7 +29,7 @@ export function Header() {
                     <input
                         type="text"
                         placeholder="Buscar..."
-                        className="input w-80 pl-10"
+                        className="input w-80 !pl-10"
                     />
                     <svg
                         className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)]"

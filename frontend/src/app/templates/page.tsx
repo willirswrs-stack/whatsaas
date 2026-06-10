@@ -160,7 +160,7 @@ export default function TemplatesPage() {
                                 <div className="flex items-center gap-3">
                                     <span className="text-2xl">{contentTypeIcons[template.category] || '📝'}</span>
                                     <div>
-                                        <h3 className="font-semibold text-white">{template.name}</h3>
+                                        <h3 className="font-semibold text-[var(--text-primary)]">{template.name}</h3>
                                         <span className="text-xs text-[var(--text-muted)]">
                                             Criado em {new Date(template.createdAt).toLocaleDateString()}
                                         </span>
@@ -231,7 +231,7 @@ export default function TemplatesPage() {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="glass-card p-8 w-full max-w-2xl">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-white">Novo Template</h2>
+                            <h2 className="text-xl font-bold text-[var(--text-primary)]">Novo Template</h2>
                             <button
                                 className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"
                                 onClick={() => setIsCreating(false)}
@@ -307,7 +307,7 @@ export default function TemplatesPage() {
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                     <div className="glass-card p-8 w-full max-w-2xl">
                         <div className="flex items-center justify-between mb-6">
-                            <h2 className="text-xl font-bold text-white">{selectedTemplate.name}</h2>
+                            <h2 className="text-xl font-bold text-[var(--text-primary)]">{selectedTemplate.name}</h2>
                             <button
                                 className="p-2 hover:bg-[var(--bg-tertiary)] rounded-lg"
                                 onClick={() => setSelectedTemplate(null)}

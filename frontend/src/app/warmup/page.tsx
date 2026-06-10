@@ -513,7 +513,7 @@ export default function WarmupPage() {
                                                         )}
                                                         {chip.phone || chip.id}
                                                         {chip.metaConfig?.voiceProfile && (
-                                                            <span className="ml-2 text-[9px] font-bold tracking-wider uppercase flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/20 text-gray-300 border border-white/10 group-hover:border-white/20 transition-all">
+                                                            <span className="ml-2 text-[9px] font-bold tracking-wider uppercase flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-[var(--bg-secondary)]/50 text-[var(--text-secondary)] border border-[var(--border-color)] group-hover:border-[var(--primary)] transition-all">
                                                                 <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" className="opacity-70"><path d="M12 2c1.1 0 2 .9 2 2v8c0 1.1-.9 2-2 2s-2-.9-2-2V4c0-1.1.9-2 2-2zm7 9c0 3.87-3.13 7-7 7s-7-3.13-7-7H3c0 4.53 3.32 8.36 7.57 8.93V22h2.86v-3.07c4.25-.57 7.57-4.4 7.57-8.93h-2z"/></svg>
                                                                 {chip.metaConfig.voiceProfile}
                                                             </span>
@@ -544,15 +544,15 @@ export default function WarmupPage() {
 
             {/* Dashboard de Sessões — Agora INTEGRADO À PÁGINA para permitir múltiplas seleções simultâneas */}
             {Object.keys(activeSessions).length > 0 && (
-                <div className="mt-16 pt-12 border-t border-white/10 container mx-auto px-4 max-w-7xl flex flex-col relative animate-fadeIn">
+                <div className="mt-16 pt-12 border-t border-[var(--border-color)] container mx-auto px-4 max-w-7xl flex flex-col relative animate-fadeIn">
                     
                     {/* Floating Controls */}
-                    <div className="sticky top-0 z-[110] flex items-center justify-between bg-[#1a1c24]/80 backdrop-blur-md border border-white/10 p-4 rounded-2xl mb-8 max-w-6xl mx-auto w-full shadow-2xl shadow-black/50">
+                    <div className="sticky top-0 z-[110] flex items-center justify-between bg-[var(--bg-card)] backdrop-blur-md border border-[var(--border-color)] p-4 rounded-2xl mb-8 max-w-6xl mx-auto w-full shadow-2xl shadow-black/50">
                         <div className="flex items-center gap-4">
                             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
                             <div>
-                                <h2 className="text-lg font-bold text-white">Painel de Controle Real</h2>
-                                <p className="text-xs text-gray-400">{Object.keys(activeSessions).length} {Object.keys(activeSessions).length === 1 ? 'conversa ativa' : 'conversas ativas em paralelo'}</p>
+                                <h2 className="text-lg font-bold text-[var(--text-primary)]">Painel de Controle Real</h2>
+                                <p className="text-xs text-[var(--text-secondary)]">{Object.keys(activeSessions).length} {Object.keys(activeSessions).length === 1 ? 'conversa ativa' : 'conversas ativas em paralelo'}</p>
                             </div>
                         </div>
                         <button 
@@ -574,7 +574,7 @@ export default function WarmupPage() {
                                 {/* Background glow for distinct session separation */}
                                 <div className="absolute -inset-4 bg-indigo-500/5 rounded-[2rem] blur-xl" />
                                 
-                                <div className="relative flex flex-col lg:flex-row items-center justify-center gap-6 bg-white/5 border border-white/10 p-6 md:p-8 rounded-[2rem]">
+                                <div className="relative flex flex-col lg:flex-row items-center justify-center gap-6 bg-[var(--bg-secondary)]/30 dark:bg-white/5 border border-[var(--border-color)] p-6 md:p-8 rounded-[2rem]">
                                     
                                     <WhatsAppMockup 
                                         simulatedChips={session.chips} 
@@ -591,8 +591,8 @@ export default function WarmupPage() {
                                         isLive={session.isLive} 
                                     />
                                     
-                                    <div className="hidden lg:flex flex-col items-center gap-3 text-white/30 py-8">
-                                        <div className={`w-12 h-12 rounded-full border-2 ${session.isLive ? 'border-red-500/30 text-red-400' : 'border-indigo-500/30 text-indigo-400'} flex items-center justify-center text-xl font-bold bg-black/30 shadow-lg`}>
+                                    <div className="hidden lg:flex flex-col items-center gap-3 text-[var(--text-muted)] py-8">
+                                        <div className={`w-12 h-12 rounded-full border-2 ${session.isLive ? 'border-red-500/30 text-red-400' : 'border-indigo-500/30 text-indigo-400'} flex items-center justify-center text-xl font-bold bg-[var(--bg-primary)]/50 shadow-lg`}>
                                             {session.isLive ? '🔴' : '🤖'}
                                         </div>
                                         <div className="h-24 w-0.5 bg-gradient-to-b from-white/20 via-white/5 to-transparent" />
@@ -624,18 +624,18 @@ export default function WarmupPage() {
             {/* Config Modal */}
             {configInstanceId && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
-                    <div className="bg-[#1a1c24] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl shadow-black/50 overflow-hidden flex flex-col">
-                        <div className="p-4 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <h3 className="font-bold text-white flex items-center gap-2">
+                    <div className="bg-[var(--bg-card)] border border-[var(--border-color)] rounded-2xl w-full max-w-md shadow-2xl shadow-black/50 overflow-hidden flex flex-col">
+                        <div className="p-4 border-b border-[var(--border-color)] flex justify-between items-center bg-[var(--bg-secondary)]/50">
+                            <h3 className="font-bold text-[var(--text-primary)] flex items-center gap-2">
                                 🎙️ Configurar Voz IA
                             </h3>
-                            <button onClick={() => setConfigInstanceId(null)} className="text-gray-400 hover:text-white p-1">✕</button>
+                            <button onClick={() => setConfigInstanceId(null)} className="text-[var(--text-secondary)] hover:text-[var(--text-primary)] p-1">✕</button>
                         </div>
                         <div className="p-5 space-y-4">
                             <div>
-                                <label className="block text-xs font-medium text-gray-400 mb-1">Voz (OpenAI ou ID ElevenLabs)</label>
+                                <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Voz (OpenAI ou ID ElevenLabs)</label>
                                 <select 
-                                    className="w-full bg-[#0f1115] border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                    className="input w-full px-3 py-2 text-sm"
                                     value={['alloy','echo','fable','onyx','nova','shimmer'].includes(selectedVoice) ? selectedVoice : 'custom'}
                                     onChange={(e) => {
                                         if (e.target.value !== 'custom') {
@@ -663,18 +663,18 @@ export default function WarmupPage() {
                                         <input 
                                             type="text" 
                                             placeholder="Voice ID do ElevenLabs"
-                                            className="w-full bg-[#0f1115] border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                            className="input w-full px-3 py-2 text-sm"
                                             value={selectedVoice}
                                             onChange={(e) => setSelectedVoice(e.target.value)}
                                         />
-                                        <p className="text-[10px] text-gray-500 mt-1">Insira o Voice ID de uma voz clonada no painel ElevenLabs.</p>
+                                        <p className="text-[10px] text-[var(--text-muted)] mt-1">Insira o Voice ID de uma voz clonada no painel ElevenLabs.</p>
                                     </div>
                                 )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-400 mb-1">Velocidade: {selectedVoiceSpeed}x</label>
+                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Velocidade: {selectedVoiceSpeed}x</label>
                                     <input 
                                         type="range" min="0.25" max="2.0" step="0.25" 
                                         value={selectedVoiceSpeed} 
@@ -683,9 +683,9 @@ export default function WarmupPage() {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-400 mb-1">Qualidade do Áudio</label>
+                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Qualidade do Áudio</label>
                                     <select 
-                                        className="w-full bg-[#0f1115] border border-white/10 rounded-lg px-3 py-2 text-sm text-white"
+                                        className="input w-full px-3 py-2 text-sm"
                                         value={selectedVoiceModel}
                                         onChange={(e) => setSelectedVoiceModel(e.target.value as any)}
                                     >
@@ -696,11 +696,11 @@ export default function WarmupPage() {
                             </div>
                         </div>
 
-                        <div className="p-4 border-t border-white/10 bg-white/5 flex justify-between gap-3 items-center">
+                        <div className="p-4 border-t border-[var(--border-color)] bg-[var(--bg-secondary)]/50 flex justify-between gap-3 items-center">
                             <button 
                                 onClick={playVoicePreview}
                                 disabled={isPlayingPreview || !selectedVoice}
-                                className="px-4 py-2 bg-[#202c33] text-[#53bdeb] text-sm font-medium rounded-lg border border-[#53bdeb]/30 hover:bg-[#53bdeb]/10 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                className="px-4 py-2 bg-[var(--bg-secondary)] text-[#53bdeb] text-sm font-medium rounded-lg border border-[#53bdeb]/30 hover:bg-[#53bdeb]/20 transition-colors flex items-center gap-2 disabled:opacity-50"
                             >
                                 {isPlayingPreview ? (
                                     <><div className="w-3 h-3 border-2 border-current border-t-transparent rounded-full animate-spin" /> Testando...</>

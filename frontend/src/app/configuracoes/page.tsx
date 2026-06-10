@@ -121,14 +121,14 @@ export default function SettingsPage() {
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-lg">🧠</div>
                                     <div>
-                                        <p className="text-sm font-semibold text-white">IA Ativa na Plataforma</p>
+                                        <p className="text-sm font-semibold text-indigo-900 dark:text-white">IA Ativa na Plataforma</p>
                                         <p className="text-xs text-[var(--text-muted)]">
-                                            {providerLabel} — <span className="text-indigo-300 font-medium">{modelLabel}</span>
+                                            {providerLabel} — <span className="text-indigo-700 dark:text-indigo-300 font-medium">{modelLabel}</span>
                                         </p>
                                     </div>
                                 </div>
                                 {isSuperAdmin ? (
-                                    <a href="/admin/ai-agent" className="text-xs px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors border border-indigo-500/30">
+                                    <a href="/admin/ai-agent" className="text-xs px-3 py-1.5 rounded-lg bg-indigo-500/20 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-500/30 transition-colors border border-indigo-500/30">
                                         ⚙️ Configurar
                                     </a>
                                 ) : (
