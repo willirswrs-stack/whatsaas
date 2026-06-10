@@ -1,185 +1,89 @@
-# ============================================
-# WhatSaas - Production Docker Compose
-# ============================================
-# Usage:
-#   1. Copy .env.production.example to .env.production
-#   2. Fill in all secrets
-#   3. docker compose -f docker-compose.prod.yml --env-file .env.production up -d
-# ============================================
-
 version: '3.8'
 
 services:
-  # ============ Infrastructure ============
-
   postgres:
     image: postgres:15-alpine
     container_name: whatsaas-postgres
     restart: always
     environment:
-      POSTGRES_USER: ${DATABASE_USER}
-      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
-      POSTGRES_DB: ${DATABASE_NAME}
-      # Create Evolution DB on init
-      POSTGRES_MULTIPLE_DATABASES: wathsaas_evolution
+      POSTGRES_USER: ${DATABASE_USER:-postgres}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-postgres}
+      POSTGRES_DB: ${DATABASE_NAME:-wathsaas}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${DATABASE_USER}" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 512M
+    networks:
+      - whatsaas-network
 
   redis:
-    image: redis:7-alpine
+    image: redis:alpine
     container_name: whatsaas-redis
     restart: always
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --requirepass ${REDIS_PASSWORD:-wathsaas_redis_2024}
     volumes:
       - redis_data:/data
-    healthcheck:
-      test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          memory: 256M
+    networks:
+      - whatsaas-network
 
-  # ============ WhatsApp Provider ============
-
-  evolution:
-    image: evoapicloud/evolution-api:v2.3.7
-    container_name: whatsaas-evolution
+  evolution-api:
+    image: atendai/evolution-api:v2.1.1
+    container_name: evolution-api
     restart: always
     environment:
-      AUTHENTICATION_TYPE: apikey
-      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY}
-      AUTHENTICATION_EXPOSE_IN_FETCH_INSTANCES: "true"
-      SERVER_TYPE: http
-      SERVER_PORT: "8080"
-      CORS_ORIGIN: "*"
-      CORS_METHODS: "POST,GET,PUT,DELETE"
-      CORS_CREDENTIALS: "true"
-      DATABASE_ENABLED: "true"
-      DATABASE_PROVIDER: postgresql
-      DATABASE_CONNECTION_URI: postgresql://${DATABASE_USER}:${DATABASE_PASSWORD}@postgres:5432/wathsaas_evolution
-      CACHE_REDIS_ENABLED: "true"
-      CACHE_REDIS_URI: redis://default:${REDIS_PASSWORD}@redis:6379
-      WEBHOOK_GLOBAL_URL: http://backend:3333/api/v1/webhooks/evolution
-      WEBHOOK_GLOBAL_ENABLED: "true"
-      CONFIG_SESSION_PHONE_CLIENT: "WhatSaas"
-      QRCODE_LIMIT: 30
-      STORE_MESSAGES: "true"
-      STORE_CONTACTS: "true"
-      STORE_CHATS: "true"
-    volumes:
-      - evolution_data:/evolution/instances
+      - SERVER_URL=https://evolution.seusaas.com.br
+      - CONFIG_SESSION_PHONE_CLIENT=WhatSaas
+      - AUTH_TYPE=apikey
+      - AUTH_API_KEY=${EVOLUTION_API_KEY:-evolution_key_2024}
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://${DATABASE_USER:-postgres}:${DATABASE_PASSWORD:-postgres}@postgres:5432/${DATABASE_NAME:-wathsaas}?schema=public
+      - REDIS_ENABLED=true
+      - REDIS_URI=redis://:${REDIS_PASSWORD:-wathsaas_redis_2024}@redis:6379/1
+      - RABBITMQ_ENABLED=false
+      - WEBSOCKET_ENABLED=true
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://:${REDIS_PASSWORD:-wathsaas_redis_2024}@redis:6379/2
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-
-  # ============ Application ============
+      - postgres
+      - redis
+    ports:
+      - "8081:8080"
+    volumes:
+      - evolution_instances:/evolution/instances
+    networks:
+      - whatsaas-network
 
   backend:
-    build:
+    build: 
       context: ./backend
       dockerfile: Dockerfile
     container_name: whatsaas-backend
     restart: always
-    environment:
-      NODE_ENV: production
-      PORT: 3333
-      PUBLIC_HOST: backend
-      DATABASE_HOST: postgres
-      DATABASE_PORT: 5432
-      DATABASE_USER: ${DATABASE_USER}
-      DATABASE_PASSWORD: ${DATABASE_PASSWORD}
-      DATABASE_NAME: ${DATABASE_NAME}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRATION: ${JWT_EXPIRATION:-7h}
-      EVOLUTION_API_URL: http://evolution:8080
-      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
-      WEBHOOK_URL: ${WEBHOOK_URL}
-      CORS_ORIGINS: ${CORS_ORIGINS}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
-      UPLOADS_BASE_URL: ${UPLOADS_BASE_URL}
-    volumes:
-      - uploads_data:/app/uploads
+    env_file: .env
+    ports:
+      - "3333:3333"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:3333/api/v1/health" ]
-      interval: 30s
-      timeout: 10s
-      start_period: 30s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          memory: 1G
+      - postgres
+      - redis
+    networks:
+      - whatsaas-network
 
   frontend:
-    build:
+    build: 
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3333/api/v1}
     container_name: whatsaas-frontend
     restart: always
-    depends_on:
-      backend:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-
-  # ============ Reverse Proxy ============
-
-  nginx:
-    image: nginx:alpine
-    container_name: whatsaas-nginx
-    restart: always
+    env_file: ./frontend/.env.production
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - uploads_data:/var/www/uploads:ro
-    depends_on:
-      - backend
-      - frontend
-    deploy:
-      resources:
-        limits:
-          memory: 128M
+      - "3000:3000"
+    networks:
+      - whatsaas-network
 
 volumes:
   postgres_data:
   redis_data:
-  evolution_data:
-  uploads_data:
-
+  evolution_instances:
 
 networks:
-  default:
-    name: whatsaas-prod-network
+  whatsaas-network:
+    driver: bridge

@@ -10,7 +10,7 @@ WORKDIR /app
 
 # Install dependencies first (Docker cache optimization)
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm ci --ignore-scripts --legacy-peer-deps
 
 # Copy source and build
 COPY . .
