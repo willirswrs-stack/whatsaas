@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const archiver = require('archiver');
+const { ZipArchive } = require('archiver');
 const { NodeSSH } = require('node-ssh');
 
 const ssh = new NodeSSH();
@@ -18,7 +18,7 @@ async function zipProject() {
     console.log('📦 Compactando projeto...');
     return new Promise((resolve, reject) => {
         const output = fs.createWriteStream(zipPath);
-        const archive = archiver('zip', { zlib: { level: 9 } });
+        const archive = new ZipArchive({ zlib: { level: 9 } });
 
         output.on('close', () => {
             console.log(`✅ Projeto compactado: ${(archive.pointer() / 1024 / 1024).toFixed(2)} MB`);
@@ -31,14 +31,17 @@ async function zipProject() {
         archive.glob('**/*', {
             cwd: rootDir,
             ignore: [
-                'node_modules/**', 
-                'frontend/node_modules/**', 
-                'backend/node_modules/**',
+                '**/node_modules/**', 
+                'PhotoCleanAI/**',
+                'backups/**',
+                '**/uploads/**',
                 '.git/**', 
                 '.deploy/**', 
                 'frontend/.next/**', 
                 'backend/dist/**',
-                '**/*.zip'
+                '**/*.zip',
+                '**/*.log',
+                'backend/*.txt'
             ],
             dot: true
         });
@@ -70,7 +73,7 @@ async function deploy() {
         await ssh.execCommand('cd /var/www/whatsaas && unzip -o whatsaas.zip && rm whatsaas.zip');
 
         console.log('🚀 Iniciando os containers Docker (Construindo API e Painel)...');
-        const dockerRes = await ssh.execCommand('cd /var/www/whatsaas && docker-compose -f docker-compose.prod.yml up -d --build');
+        const dockerRes = await ssh.execCommand('cd /var/www/whatsaas && docker compose -f docker-compose.prod.yml up -d --build');
         
         console.log('=== LOGS DO DOCKER ===');
         console.log(dockerRes.stdout || dockerRes.stderr);

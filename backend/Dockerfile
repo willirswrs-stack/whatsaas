@@ -6,11 +6,14 @@
 # --- Stage 1: Build ---
 FROM node:20-alpine AS builder
 
+# Install build dependencies for native modules (bcrypt)
+RUN apk add --no-cache make gcc g++ python3
+
 WORKDIR /app
 
 # Install dependencies first (Docker cache optimization)
 COPY package*.json ./
-RUN npm ci --ignore-scripts --legacy-peer-deps
+RUN npm ci --legacy-peer-deps
 
 # Copy source and build
 COPY . .
@@ -43,7 +46,7 @@ EXPOSE 3333
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-    CMD wget -qO- http://localhost:3333/api/v1/health || exit 1
+    CMD wget -qO- http://127.0.0.1:3333/api/v1/health || exit 1
 
 # Start
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]

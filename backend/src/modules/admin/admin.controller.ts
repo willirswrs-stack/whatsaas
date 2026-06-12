@@ -94,4 +94,10 @@ export class AdminController {
     async updateApiSettings(@Body() body: any) {
         return this.adminService.updateApiSettings(body);
     }
+
+    @Post('impersonate/:userId')
+    @ApiOperation({ summary: '[Super Admin] Personifica um usuário cliente, retornando um novo token de acesso' })
+    async impersonateUser(@Param('userId') userId: string) {
+        return this.adminService.impersonateUser(userId);
+    }
 }

@@ -279,7 +279,7 @@ export class AuthService {
         }
     }
 
-    private generateTokens(user: User, tenant: Tenant) {
+    public generateTokens(user: User, tenant: Tenant) {
         const payload = {
             sub: user.id,
             email: user.email,

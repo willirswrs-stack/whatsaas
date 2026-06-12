@@ -10,7 +10,8 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
-import { IsString, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsIn, IsNumber } from 'class-validator';
+
 
 import { InstancesService } from './instances.service';
 import { TenantGuard } from '../auth/guards/tenant.guard';
@@ -36,6 +37,10 @@ class CreateInstanceDto {
     @IsOptional()
     @IsIn(['inbound', 'warm_outbound', 'cold_outbound', 'groups'])
     warmupProfile?: string;
+
+    @IsOptional()
+    @IsNumber()
+    warmupDay?: number;
 }
 
 @ApiTags('instances')

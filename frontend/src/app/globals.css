@@ -1352,3 +1352,19 @@ html * {
     width: 160px;
   }
 }
+
+/* ===== USER IMPERSONATION BANNER LAYOUT SHIFTS ===== */
+html.has-impersonate-banner .sidebar {
+  top: 44px;
+  height: calc(100vh - 44px);
+  max-height: calc(100vh - 44px);
+}
+html.has-impersonate-banner .main-content {
+  margin-top: 44px;
+  min-height: calc(100vh - 44px);
+}
+@media (max-width: 1024px) {
+  html.has-impersonate-banner .main-content {
+    margin-top: 44px;
+  }
+}

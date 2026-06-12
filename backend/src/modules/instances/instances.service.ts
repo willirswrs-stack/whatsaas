@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import axios from 'axios';
@@ -6,6 +6,7 @@ import { SocksProxyAgent } from 'socks-proxy-agent';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
 import { Instance } from './entities/instance.entity';
+import { Tenant } from '../tenants/entities/tenant.entity';
 import { WhatsAppProviderFactory, ProviderType } from '../whatsapp';
 import { InstanceStatus } from '../../common/enums/instance-status.enum';
 import { ProxiesService } from '../proxies/proxies.service';
@@ -17,6 +18,8 @@ export class InstancesService {
     constructor(
         @InjectRepository(Instance)
         private instanceRepo: Repository<Instance>,
+        @InjectRepository(Tenant)
+        private tenantRepo: Repository<Tenant>,
         private providerFactory: WhatsAppProviderFactory,
         private proxiesService: ProxiesService,
     ) { }
@@ -65,7 +68,32 @@ export class InstancesService {
         proxyId?: string;
         provider?: ProviderType;
         config?: any;
+        warmupProfile?: string;
+        warmupDay?: number;
     }) {
+        // 1. Obter o Tenant e seu plano
+        const tenant = await this.tenantRepo.findOne({
+            where: { id: tenantId },
+            relations: ['plan'],
+        });
+
+        if (!tenant) {
+            throw new NotFoundException('Tenant não encontrado');
+        }
+
+        // 2. Contar chips atuais do tenant
+        const currentCount = await this.instanceRepo.count({
+            where: { tenantId }
+        });
+
+        // 3. Verificar limite de instâncias do plano
+        const maxInstances = tenant.plan?.maxInstances || 1;
+        if (currentCount >= maxInstances) {
+            throw new BadRequestException(
+                `Limite de chips atingido para o plano ${tenant.plan?.name || 'contratado'} (${currentCount}/${maxInstances}). Por favor, faça um upgrade no seu plano nas configurações financeiras.`
+            );
+        }
+
         // Verificar se já existe uma instância com este nome
         const existing = await this.instanceRepo.findOne({
             where: { instanceName: data.instanceName }
@@ -125,6 +153,8 @@ export class InstancesService {
                     instanceId: providerResult.instanceId,
                     integration: isOfficial ? 'WHATSAPP-BUSINESS' : 'WHATSAPP-BAILEYS',
                 },
+                warmupProfile: data.warmupProfile,
+                warmupDay: data.warmupDay,
             });
 
             await this.instanceRepo.save(instance);

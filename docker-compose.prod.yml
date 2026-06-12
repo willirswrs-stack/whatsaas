@@ -25,12 +25,12 @@ services:
       - whatsaas-network
 
   evolution-api:
-    image: atendai/evolution-api:v2.1.1
+    image: atendai/evolution-api:v2.2.3
     container_name: evolution-api
     restart: always
     environment:
-      - SERVER_URL=https://evolution.seusaas.com.br
-      - CONFIG_SESSION_PHONE_CLIENT=WhatSaas
+      - SERVER_URL=https://evolution.whatsaas.online
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1035194821
       - AUTH_TYPE=apikey
       - AUTH_API_KEY=${EVOLUTION_API_KEY:-evolution_key_2024}
       - DATABASE_ENABLED=true
@@ -72,7 +72,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        - NEXT_PUBLIC_API_URL=http://2.25.159.205:3333/api/v1
+        - NEXT_PUBLIC_API_URL=https://api.whatsaas.online/api/v1
+        - NEXT_PUBLIC_EVOLUTION_URL=https://evolution.whatsaas.online
     container_name: whatsaas-frontend
     restart: always
     env_file: ./frontend/.env.production

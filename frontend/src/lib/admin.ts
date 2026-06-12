@@ -77,5 +77,10 @@ export const adminService = {
     async toggleFeature(name: string, status: boolean): Promise<any> {
         const { data } = await api.post('/admin/features/toggle', { name, status });
         return data;
+    },
+
+    async impersonateUser(userId: string): Promise<any> {
+        const { data } = await api.post(`/admin/impersonate/${userId}`);
+        return data;
     }
 };

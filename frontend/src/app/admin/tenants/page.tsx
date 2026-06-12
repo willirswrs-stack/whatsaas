@@ -486,6 +486,34 @@ function TenantDetailModal({ tenant, plans, onClose, onSavePlan, onSaveCadastrai
     const [selectedPlan, setSelectedPlan] = useState(tenant.planId || '');
     const [billingCycle, setBillingCycle] = useState(tenant.settings?.billingCycleOverride || 'monthly');
     const [showRenovacao, setShowRenovacao] = useState(!!tenant.settings?.exibirRenovacao);
+    const [selectedUserToImpersonate, setSelectedUserToImpersonate] = useState('');
+    const [impersonating, setImpersonating] = useState(false);
+
+    const handleImpersonate = async () => {
+        if (!selectedUserToImpersonate) return;
+        try {
+            setImpersonating(true);
+            const data = await adminService.impersonateUser(selectedUserToImpersonate);
+            
+            // Guardar credenciais do admin atual
+            localStorage.setItem('admin_accessToken', localStorage.getItem('accessToken') || '');
+            localStorage.setItem('admin_refreshToken', localStorage.getItem('refreshToken') || '');
+            localStorage.setItem('admin_user', localStorage.getItem('user') || '');
+
+            // Definir novas credenciais
+            localStorage.setItem('accessToken', data.accessToken);
+            localStorage.setItem('refreshToken', data.refreshToken);
+            localStorage.setItem('user', JSON.stringify(data.user));
+
+            alert(`🎭 Iniciando sessão como ${data.user.name}...`);
+            window.location.href = '/contatos';
+        } catch (e) {
+            console.error(e);
+            alert('Erro ao tentar personificar usuário.');
+        } finally {
+            setImpersonating(false);
+        }
+    };
     
     const initialCadastrais = tenant.settings?.cadastrais || {
         nomeFantasia: '', cnpjCpf: '', endereco: '', complemento: '', cidade: '', estado: '', cep: '',
@@ -628,6 +656,30 @@ function TenantDetailModal({ tenant, plans, onClose, onSavePlan, onSaveCadastrai
                                             ))}
                                         </select>
                                         <button className="bg-emerald-600 text-[10px] px-2 py-1 rounded text-white">Vincular</button>
+                                    </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-[var(--border-color)]">
+                                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Personificar Usuário (Acesso à Conta):</p>
+                                    <div className="flex gap-2">
+                                        <select 
+                                            value={selectedUserToImpersonate}
+                                            onChange={e => setSelectedUserToImpersonate(e.target.value)}
+                                            className="flex-1 bg-[var(--bg-secondary)] border border-[var(--border-color)] text-[10px] text-[var(--text-primary)] px-2 rounded py-1"
+                                        >
+                                            <option value="">-- Selecione Usuário --</option>
+                                            {tenant.users?.map((u: any) => (
+                                                <option key={u.id} value={u.id}>{u.name} ({u.email})</option>
+                                            ))}
+                                        </select>
+                                        <button 
+                                            type="button"
+                                            onClick={handleImpersonate}
+                                            disabled={impersonating || !selectedUserToImpersonate}
+                                            className="bg-blue-600 disabled:opacity-50 text-[10px] px-2 py-1 rounded text-white font-bold"
+                                        >
+                                            {impersonating ? 'Acessando...' : 'Acessar'}
+                                        </button>
                                     </div>
                                 </div>
                             </div>

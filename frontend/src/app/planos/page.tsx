@@ -244,14 +244,15 @@ export default function PlansPage() {
                             </div>
                             
                             <div>
-                                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">WhatsApp para Contato (opcional)</label>
+                                <label className="block text-sm font-semibold text-[var(--text-secondary)] mb-2">WhatsApp para Contato (obrigatório)</label>
                                 <input 
                                     type="text" 
+                                    required
                                     className="w-full bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-xl px-4 py-3 text-[var(--text-primary)] focus:outline-none focus:border-[var(--primary)]"
                                     placeholder="(11) 99999-9999"
                                     value={phone}
                                     onChange={(e) => setPhone(e.target.value)}
-                                />
+                                 />
                             </div>
 
                             <button 

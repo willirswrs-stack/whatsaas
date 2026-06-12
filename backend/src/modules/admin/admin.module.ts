@@ -8,9 +8,12 @@ import { Instance } from '../instances/entities/instance.entity';
 import { ProxyEntity } from '../proxies/entities/proxy.entity';
 import { Campaign } from '../campaigns/entities/campaign.entity';
 
+import { AuthModule } from '../auth/auth.module';
+
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Tenant, User, Instance, ProxyEntity, Campaign, SubscriptionPlan])
+        TypeOrmModule.forFeature([Tenant, User, Instance, ProxyEntity, Campaign, SubscriptionPlan]),
+        AuthModule
     ],
     controllers: [AdminController],
     providers: [AdminService],

@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/contexts/ThemeContext';
 import { LlmProvider } from '@/contexts/LlmContext';
 import { Sidebar } from './Sidebar';
 import { ProtectedRoute } from './ProtectedRoute';
+import { ImpersonateBanner } from './ImpersonateBanner';
 import { Toaster } from 'react-hot-toast';
 
 import { OnboardingAssistant } from './onboarding/OnboardingAssistant';
@@ -33,6 +34,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                     ) : (
                         // Rotas protegidas - com sidebar
                         <ProtectedRoute>
+                            <ImpersonateBanner />
                             <Sidebar />
                             <main className="main-content">{children}</main>
                             <OnboardingAssistant />

@@ -9,6 +9,7 @@ import { Instance } from '../instances/entities/instance.entity';
 import { ProxyEntity } from '../proxies/entities/proxy.entity';
 import { Campaign } from '../campaigns/entities/campaign.entity';
 import { getGlobalApiSettings, updateGlobalApiSettings } from '../../common/global-settings';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class AdminService {
@@ -28,6 +29,7 @@ export class AdminService {
         private planRepo: Repository<SubscriptionPlan>,
         @InjectRepository(ProxyEntity)
         private proxyRepo: Repository<ProxyEntity>,
+        private readonly authService: AuthService,
     ) {}
 
     private globalFeatures = {
@@ -244,5 +246,33 @@ export class AdminService {
         } catch (e) {
             throw new InternalServerErrorException(e.message);
         }
+    }
+
+    async impersonateUser(userId: string) {
+        const user = await this.userRepo.findOne({
+            where: { id: userId },
+            relations: ['tenant', 'tenant.plan']
+        });
+        if (!user) {
+            throw new ConflictException('Usuário para personificação não encontrado.');
+        }
+
+        const tokens = this.authService.generateTokens(user, user.tenant);
+
+        return {
+            ...tokens,
+            tenant: {
+                id: user.tenant.id,
+                name: user.tenant.name,
+                slug: user.tenant.slug,
+                plan: user.tenant.plan,
+            },
+            user: {
+                id: user.id,
+                name: user.name,
+                email: user.email,
+                role: user.role,
+            },
+        };
     }
 }

@@ -437,7 +437,7 @@ export default function ChipsPage() {
                 </div>
                 <div className="flex gap-2">
                     <a
-                        href="http://localhost:8081/manager"
+                        href={`${process.env.NEXT_PUBLIC_EVOLUTION_URL || 'http://localhost:8081'}/manager`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="btn btn-secondary text-sm flex items-center gap-2"
@@ -445,16 +445,6 @@ export default function ChipsPage() {
                     >
                         <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
                         Evolution
-                    </a>
-                    <a
-                        href="http://localhost:8080/dashboard"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="btn btn-secondary text-sm flex items-center gap-2"
-                        title="Acessar WAHA Dashboard"
-                    >
-                        <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                        WAHA
                     </a>
                     <button className="btn btn-success" onClick={() => setShowModal(true)}>
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

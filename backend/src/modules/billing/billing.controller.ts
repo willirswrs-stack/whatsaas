@@ -68,11 +68,14 @@ export class BillingController {
         // O status mudará para active APENAS quando o webhook confirmar o primeiro pagamento!
         await this.tenantRepo.save(tenant);
 
+        // Buscar informações do pagamento gerado para obter o link da fatura (invoiceUrl)
+        const paymentInfo = await this.asaasService.getSubscriptionPaymentInfo(subRes.id);
+
         return {
             message: 'Assinatura gerada com sucesso',
-            invoiceUrl: subRes.invoiceUrl, // Link p/ cliente pagar
-            bankSlipUrl: subRes.bankSlipUrl,
-            invoiceNumber: subRes.invoiceNumber
+            invoiceUrl: paymentInfo?.invoiceUrl || subRes.invoiceUrl,
+            bankSlipUrl: paymentInfo?.bankSlipUrl || subRes.bankSlipUrl,
+            invoiceNumber: paymentInfo?.invoiceNumber || subRes.invoiceNumber
         };
     }
 

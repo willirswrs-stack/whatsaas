@@ -54,6 +54,14 @@ export default function AntiBanDashboard() {
         healthTrends: []
     };
 
+    const totalMessages = safeData.stackPerformance.reduce((sum, s) => sum + s.totalMessages, 0);
+    const avgSuccessRate = totalMessages > 0
+        ? (safeData.stackPerformance.reduce((sum, s) => sum + (s.successRate * s.totalMessages), 0) / totalMessages)
+        : 100.0;
+    const avgLatency = totalMessages > 0
+        ? (safeData.stackPerformance.reduce((sum, s) => sum + (s.averageLatencyMs * s.totalMessages), 0) / totalMessages / 1000)
+        : 0.0;
+
     return (
         <div className="animate-fadeIn pb-12">
             <Header />
@@ -94,8 +102,6 @@ export default function AntiBanDashboard() {
                     <StatCard
                         label="Mensagens (24h)"
                         value={safeData.overview.totalMessagesSent24h.toLocaleString()}
-                        trend="+12%" // Placeholder trend
-                        trendUp={true}
                     />
                     <StatCard
                         label="Taxa de Entrega"
@@ -109,8 +115,8 @@ export default function AntiBanDashboard() {
                     />
                     <StatCard
                         label="Performance do Stack"
-                        value="98.5%"
-                        subtext="Latência média: 1.2s"
+                        value={`${avgSuccessRate.toFixed(1)}%`}
+                        subtext={totalMessages > 0 ? `Latência média: ${avgLatency.toFixed(1)}s` : 'Sem dados de latência'}
                         color="text-indigo-500"
                     />
                 </div>
@@ -216,35 +222,6 @@ export default function AntiBanDashboard() {
                     </div>
                 </div>
 
-                {/* Recommendations */}
-                <div className="glass-card p-6 bg-gradient-to-br from-[var(--bg-secondary)] to-[var(--bg-tertiary)] border border-[var(--border-primary)]">
-                    <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-4 flex items-center gap-2">
-                        <svg className="w-5 h-5 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                            <path d="M2 12h5" />
-                            <path d="M17 12h5" />
-                            <path d="M12 2v5" />
-                            <path d="M12 17v5" />
-                            <path d="M12 12m-3 0a3 3 0 1 0 6 0a3 3 0 1 0-6 0" />
-                            <path d="M22 17v1c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2v-1" />
-                        </svg>
-                        Insights do StackRouter
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        <div className="p-4 rounded-lg bg-[var(--bg-card)] border border-[var(--border-primary)]">
-                            <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2">Aquecimento de Chips</h4>
-                            <p className="text-xs text-[var(--text-secondary)] mb-3">5 chips estão próximos de subir de nível de maturação. Recomenda-se aumentar volume gradualmente.</p>
-                            <button className="text-xs font-medium text-indigo-500 hover:text-indigo-400">Ver Chips &rarr;</button>
-                        </div>
-                        <div className="p-4 rounded-lg bg-[var(--bg-card)] border border-[var(--border-primary)]">
-                            <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2">Otimização de Stack</h4>
-                            <p className="text-xs text-[var(--text-secondary)] mb-3">WAHA está com latência 15% menor hoje. O router priorizará WAHA para campanhas de médio volume.</p>
-                        </div>
-                        <div className="p-4 rounded-lg bg-[var(--bg-card)] border border-[var(--border-primary)]">
-                            <h4 className="text-sm font-semibold text-[var(--text-primary)] mb-2">Comportamento Humano</h4>
-                            <p className="text-xs text-[var(--text-secondary)] mb-3">Variações de saudação estão com 98% de unicidade. Risco de detecção de spam baixo.</p>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     );

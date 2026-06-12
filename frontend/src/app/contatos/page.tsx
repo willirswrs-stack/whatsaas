@@ -842,11 +842,11 @@ export default function ContactsPage() {
                     <div className="glass-card w-full max-w-md p-6 m-4 animate-fadeIn">
                         <h2 className="text-xl font-bold mb-4">Importar Contatos</h2>
                         <p className="text-sm text-[var(--text-secondary)] mb-4">
-                            Faça upload de um arquivo CSV com as colunas: <strong>telefone, nome, email</strong>
+                            Faça upload de um arquivo CSV ou Excel (XLSX, XLS) com as colunas: <strong>telefone, nome, email</strong>
                         </p>
                         <input
                             type="file"
-                            accept=".csv"
+                            accept=".csv,.xlsx,.xls"
                             onChange={(e) => e.target.files?.[0] && handleImport(e.target.files[0])}
                             className="input w-full"
                         />
