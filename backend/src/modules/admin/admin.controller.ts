@@ -4,6 +4,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 
 import { AdminService } from './admin.service';
 import { AdminGuard } from '../auth/guards/admin.guard';
+import { CreateManualTenantDto } from './dto/create-manual-tenant.dto';
 
 @ApiTags('admin')
 @ApiBearerAuth()
@@ -39,7 +40,7 @@ export class AdminController {
     @Post('tenants')
     @ApiOperation({ summary: 'Cria um novo cliente/empresa manualmente com usuário admin inicial' })
     async createManualTenant(
-        @Body() data: { name: string; email: string; planId?: string; userName: string; userEmail: string; passwordHash: string }
+        @Body() data: CreateManualTenantDto
     ) {
         return this.adminService.createManualTenant(data);
     }

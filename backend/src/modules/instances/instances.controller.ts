@@ -18,6 +18,7 @@ import { TenantGuard } from '../auth/guards/tenant.guard';
 import { CurrentTenant } from '../auth/decorators/current-tenant.decorator';
 import { ChipHealthService } from '../anti-ban/chip-health.service';
 import type { ProviderType } from '../whatsapp';
+import { UpdateInstanceDto, ToggleWarmupDto, PairingCodeDto } from './dto/instances.dto';
 
 class CreateInstanceDto {
     @IsString()
@@ -74,7 +75,7 @@ export class InstancesController {
     @ApiOperation({ summary: 'Update instance configuration' })
     async update(
         @Param('id') id: string,
-        @Body() data: { proxyId?: string; warmupEnabled?: boolean; isSystemSeed?: boolean; warmupProfile?: string; metaConfig?: Record<string, any> },
+        @Body() data: UpdateInstanceDto,
         @CurrentTenant() tenantId: string,
     ) {
         return this.instancesService.update(id, tenantId, data as any);
@@ -84,7 +85,7 @@ export class InstancesController {
     @ApiOperation({ summary: 'Toggle warmup mode for instance' })
     async toggleWarmup(
         @Param('id') id: string,
-        @Body() body: { enabled: boolean },
+        @Body() body: ToggleWarmupDto,
         @CurrentTenant() tenantId: string,
     ) {
         return this.instancesService.update(id, tenantId, { warmupEnabled: body.enabled } as any);
@@ -161,7 +162,7 @@ export class InstancesController {
     @ApiOperation({ summary: 'Get phone pairing code for instance' })
     async getPairingCode(
         @Param('id') id: string,
-        @Body() body: { phoneNumber: string },
+        @Body() body: PairingCodeDto,
         @CurrentTenant() tenantId: string,
     ) {
         const result = await this.instancesService.getPairingCode(id, tenantId, body.phoneNumber);

@@ -9,10 +9,13 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 import { QueryFailedError } from 'typeorm';
+import { AutoHealingService } from '../../modules/auto-healing/auto-healing.service';
 
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
     private readonly logger = new Logger(GlobalExceptionFilter.name);
+
+    constructor(private readonly autoHealingService?: AutoHealingService) {}
 
     catch(exception: unknown, host: ArgumentsHost) {
         const ctx = host.switchToHttp();
@@ -77,6 +80,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             this.logger.error(`Critical Error [${requestId}]: ${message}`, logContext);
         } else {
             this.logger.warn(`Request Error [${requestId}]: ${message}`, logContext);
+        }
+
+        // Trigger Auto-Healing for handled and unhandled errors
+        if (this.autoHealingService) {
+            this.autoHealingService.handleCapturedError(exception, logContext).catch(e => {
+                this.logger.error(`Auto-Healing failed to execute: ${e.message}`);
+            });
         }
 
         // Resposta padronizada para o cliente

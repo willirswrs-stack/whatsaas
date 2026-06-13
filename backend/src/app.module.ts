@@ -42,6 +42,7 @@ import { SentryModule } from '@sentry/nestjs/setup';
 import { ProxiesModule } from './modules/proxies/proxies.module';
 import { InboxModule } from './modules/inbox/inbox.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AutoHealingModule } from './modules/auto-healing/auto-healing.module';
 
 
 @Module({
@@ -162,6 +163,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     OrderWebhooksModule,
     ProxiesModule,
     InboxModule,
+    AutoHealingModule,
   ],
   controllers: [AppController],
   providers: [

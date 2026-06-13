@@ -10,6 +10,7 @@ import * as path from 'path';
 
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { AutoHealingService } from './modules/auto-healing/auto-healing.service';
 
 async function bootstrap() {
   // Buffer logs during startup to avoid losing them
@@ -29,7 +30,8 @@ async function bootstrap() {
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   // Global Exception Filter (Consistent Errors)
-  app.useGlobalFilters(new GlobalExceptionFilter());
+  const autoHealingService = app.get(AutoHealingService);
+  app.useGlobalFilters(new GlobalExceptionFilter(autoHealingService));
 
   // Global Validation Pipe
   app.useGlobalPipes(

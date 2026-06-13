@@ -6,6 +6,7 @@ import { CurrentUser } from '../auth/decorators/current-tenant.decorator';
 import type { UserPayload } from '../auth/decorators/current-tenant.decorator';
 import { SettingsService } from './settings.service';
 import type { GlobalConfig } from './settings.service';
+import { UpdateTenantSettingsDto } from './dto/update-tenant-settings.dto';
 
 @ApiTags('Settings')
 @ApiBearerAuth()
@@ -26,13 +27,7 @@ export class SettingsController {
     @ApiOperation({ summary: 'Update tenant settings' })
     async updateSettings(
         @CurrentTenant() tenantId: string,
-        @Body() data: {
-            openaiKey?: string;
-            anthropicKey?: string;
-            geminiKey?: string;
-            groqKey?: string;
-            elevenLabsKey?: string;
-        },
+        @Body() data: UpdateTenantSettingsDto,
     ) {
         await this.settingsService.updateSettings(tenantId, data);
         return { success: true, message: 'Settings updated successfully' };

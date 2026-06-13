@@ -11,6 +11,7 @@ import { Toaster } from 'react-hot-toast';
 
 import { OnboardingAssistant } from './onboarding/OnboardingAssistant';
 import { SupportWidget } from './SupportWidget';
+import { AutoHealingAgent } from './AutoHealingAgent';
 
 // Rotas públicas que não precisam de autenticação
 const publicRoutes = ['/login', '/landing'];
@@ -39,6 +40,7 @@ export function ClientLayout({ children }: { children: React.ReactNode }) {
                             <main className="main-content">{children}</main>
                             <OnboardingAssistant />
                             <SupportWidget />
+                            <AutoHealingAgent />
                         </ProtectedRoute>
                     )}
                 </LlmProvider>
