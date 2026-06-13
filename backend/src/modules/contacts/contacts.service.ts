@@ -2,6 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger } from '@nes
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, Like, ILike, Between, MoreThanOrEqual, LessThanOrEqual } from 'typeorm';
 import { Contact, Tag, ContactTag, CustomField } from './entities/contact.entity';
+import { Instance } from '../instances/entities/instance.entity';
 import * as XLSX from 'xlsx';
 import {
     CreateContactDto,
@@ -30,6 +31,8 @@ export class ContactsService {
         private contactTagRepository: Repository<ContactTag>,
         @InjectRepository(CustomField)
         private customFieldRepository: Repository<CustomField>,
+        @InjectRepository(Instance)
+        private instanceRepository: Repository<Instance>,
         private providerFactory: WhatsAppProviderFactory,
     ) { }
 
@@ -462,6 +465,52 @@ export class ContactsService {
         // TODO: Implement later for performance
 
         return results;
+    }
+
+    async importFromWhatsApp(tenantId: string, instanceId: string) {
+        const instance = await this.instanceRepository.findOne({ where: { id: instanceId, tenantId } });
+        if (!instance) {
+            throw new NotFoundException('Instância não encontrada');
+        }
+
+        const providerType = (instance.provider as ProviderType) || 'evolution';
+        const provider = this.providerFactory.getProvider(providerType);
+        
+        this.logger.log(`Importing contacts from WhatsApp instance: ${instance.instanceName} for tenant: ${tenantId}`);
+        const wahaContacts = await provider.getContacts(instance.instanceName);
+        
+        if (!wahaContacts || wahaContacts.length === 0) {
+            return { imported: 0, skipped: 0, errors: [] };
+        }
+
+        const contactsToImport: CreateContactDto[] = [];
+        
+        for (const contact of wahaContacts) {
+            // Filtrar apenas contatos válidos (usuários, não grupos)
+            // No WAHA, o ID de usuário termina em @s.whatsapp.net e grupos em @g.us
+            const id = contact.id || contact.id?._serialized || '';
+            const phoneStr = typeof id === 'string' ? id : '';
+            
+            if (!phoneStr.includes('@s.whatsapp.net')) {
+                continue; // Ignorar grupos, broadcast lists, etc.
+            }
+            
+            const phone = phoneStr.split('@')[0];
+            const name = contact.name || contact.pushName || contact.notify || undefined;
+            
+            if (phone) {
+                contactsToImport.push({
+                    phone: phone,
+                    name: name,
+                    // Deixamos a categoria opcional, pode ser definida depois
+                });
+            }
+        }
+        
+        this.logger.log(`Found ${contactsToImport.length} valid contacts to import from WhatsApp`);
+        
+        // Usar o método importContacts existente que já lida com duplicatas e otimização de banco
+        return this.importContacts(tenantId, contactsToImport);
     }
 
     async parseAndImportHeaderFile(tenantId: string, buffer: Buffer, mimetype: string) {

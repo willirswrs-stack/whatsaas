@@ -348,4 +348,34 @@ export class EvolutionApiService {
     private sleep(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
+
+    /**
+     * Get contacts from the WAHA API instance
+     */
+    async getContacts(instanceName: string): Promise<any[]> {
+        // WAHA Core só suporta sessão 'default'
+        const sessionName = 'default';
+
+        try {
+            this.logger.log(`Fetching contacts from WAHA API session: ${sessionName}`);
+            // GET /api/${sessionName}/contacts
+            const response = await this.request('GET', `/api/${sessionName}/contacts`);
+            
+            // Expected response format from WAHA:
+            // Array of objects, each containing an 'id' and optionally a 'name' or 'pushName'
+            if (Array.isArray(response)) {
+                return response;
+            } else if (response && Array.isArray(response.contacts)) {
+                return response.contacts;
+            } else if (response && Array.isArray(response.data)) {
+                return response.data;
+            }
+            
+            this.logger.warn(`Unexpected format for contacts response: ${JSON.stringify(response).substring(0, 200)}`);
+            return [];
+        } catch (error) {
+            this.logger.error(`Failed to get contacts: ${error.message}`);
+            throw error;
+        }
+    }
 }

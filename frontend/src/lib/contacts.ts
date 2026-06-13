@@ -136,6 +136,11 @@ export const contactsApi = {
         return response.data;
     },
 
+    async importFromWhatsApp(instanceId: string): Promise<{ imported: number; skipped: number; errors: string[] }> {
+        const response = await api.post('/contacts/import/whatsapp', { instanceId });
+        return response.data;
+    },
+
     async exportContacts(tagIds?: string[]): Promise<Contact[]> {
         const params = tagIds ? `?tagIds=${tagIds.join(',')}` : '';
         const response = await api.get(`/contacts/export${params}`);

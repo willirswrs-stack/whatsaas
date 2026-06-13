@@ -256,4 +256,18 @@ export class WahaAdapter implements IWhatsAppProvider {
     private sleep(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
+
+    async getContacts(instanceName: string): Promise<any[]> {
+        const sessionName = 'default';
+        try {
+            const response = await this.request('GET', `/api/${sessionName}/contacts`);
+            if (Array.isArray(response)) return response;
+            if (response && Array.isArray(response.contacts)) return response.contacts;
+            if (response && Array.isArray(response.data)) return response.data;
+            return [];
+        } catch (error: any) {
+            this.logger.error(`Failed to get WAHA contacts: ${error.message}`);
+            throw error;
+        }
+    }
 }

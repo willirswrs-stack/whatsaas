@@ -74,6 +74,14 @@ export class ContactsController {
         return this.contactsService.importContacts(req.user.tenantId, dto.contacts);
     }
 
+    @Post('import/whatsapp')
+    async importFromWhatsApp(@Request() req, @Body('instanceId') instanceId: string) {
+        if (!instanceId) {
+            throw new BadRequestException('ID da instância é obrigatório');
+        }
+        return this.contactsService.importFromWhatsApp(req.user.tenantId, instanceId);
+    }
+
     @Post('import/file')
     @UseInterceptors(FileInterceptor('file', {
         limits: { fileSize: 10 * 1024 * 1024 }, // 10MB

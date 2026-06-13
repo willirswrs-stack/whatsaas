@@ -93,4 +93,9 @@ export interface IWhatsAppProvider {
      * Join a WhatsApp group via invite URL
      */
     joinGroup(instanceName: string, inviteUrl: string): Promise<any>;
+
+    /**
+     * Get contacts from the WhatsApp instance
+     */
+    getContacts(instanceName: string): Promise<any[]>;
 }

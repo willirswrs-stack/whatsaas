@@ -31,6 +31,7 @@ export default function ContactsPage() {
     const [showTagModal, setShowTagModal] = useState(false);
     const [showImportModal, setShowImportModal] = useState(false);
     const [showBulkTagModal, setShowBulkTagModal] = useState(false);
+    const [showInstanceModal, setShowInstanceModal] = useState(false);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
     const [editingTag, setEditingTag] = useState<Tag | null>(null);
 
@@ -301,6 +302,52 @@ export default function ContactsPage() {
         }
     };
 
+    const [isImportingWA, setIsImportingWA] = useState(false);
+    const [instances, setInstances] = useState<any[]>([]);
+    const [isLoadingInstances, setIsLoadingInstances] = useState(false);
+
+    const handleOpenInstanceModal = async () => {
+        setIsLoadingInstances(true);
+        setShowInstanceModal(true);
+        try {
+            // Import instancesApi dynamically
+            const { instancesApi } = await import('@/lib/instances');
+            const data = await instancesApi.getAll();
+            const connectedInstances = data.filter((i: any) => i.status === 'connected');
+            setInstances(connectedInstances);
+            
+            // Auto-select se houver apenas uma
+            if (connectedInstances.length === 1) {
+                setShowInstanceModal(false);
+                handleImportFromWhatsApp(connectedInstances[0].id);
+            }
+        } catch (err: any) {
+            console.error('Erro ao buscar instâncias:', err);
+            alert('Erro ao buscar suas conexões de WhatsApp.');
+            setShowInstanceModal(false);
+        } finally {
+            setIsLoadingInstances(false);
+        }
+    };
+
+    const handleImportFromWhatsApp = async (instanceId: string) => {
+        if (!confirm('Deseja importar os contatos desta conexão do WhatsApp? Isso pode evitar duplicatas de contatos já salvos.')) return;
+        
+        try {
+            setIsImportingWA(true);
+            setShowInstanceModal(false);
+            const result = await contactsApi.importFromWhatsApp(instanceId);
+            alert(`Importação Concluída!\n\nNovos contatos: ${result.imported}\nContatos já existentes ignorados: ${result.skipped || 0}\nErros: ${result.errors?.length || 0}`);
+            loadContacts();
+            loadStats();
+        } catch (err: any) {
+            console.error('Erro ao importar do WhatsApp:', err);
+            alert('Erro ao importar contatos do WhatsApp: ' + (err.response?.data?.message || err.message));
+        } finally {
+            setIsImportingWA(false);
+        }
+    };
+
     const formatPhone = (phone: string) => {
         if (!phone) return '';
         const cleaned = phone.replace(/\D/g, '');
@@ -329,6 +376,24 @@ export default function ContactsPage() {
                     </div>
                 </div>
                 <div className="flex gap-3">
+                    <button 
+                        className="btn btn-secondary" 
+                        style={{ color: 'var(--whatsapp)', borderColor: 'var(--whatsapp)' }}
+                        onClick={handleOpenInstanceModal} 
+                        disabled={isImportingWA || isLoadingInstances}
+                    >
+                        {isImportingWA || isLoadingInstances ? (
+                            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                                <path d="M12 2a10 10 0 0 1 10 10" />
+                            </svg>
+                        ) : (
+                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                            </svg>
+                        )}
+                        <span>{isImportingWA ? 'Importando...' : isLoadingInstances ? 'Buscando...' : 'Importar do WA'}</span>
+                    </button>
                     <button className="btn btn-secondary" onClick={() => setShowImportModal(true)}>
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
@@ -932,6 +997,55 @@ export default function ContactsPage() {
                                 disabled={bulkSelectedTags.length === 0}
                             >
                                 Adicionar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Seleção de Instância para Importação */}
+            {showInstanceModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="glass-card w-full max-w-md p-6 m-4 animate-fadeIn">
+                        <div className="flex justify-between items-center mb-3">
+                            <h2 className="text-xl font-bold">Selecione o Chip</h2>
+                        </div>
+                        <div className="space-y-4">
+                            <p className="text-sm text-[var(--text-secondary)]">
+                                Você tem mais de um chip conectado. Selecione de qual deles deseja importar os contatos:
+                            </p>
+
+                            <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2">
+                                {instances.length === 0 ? (
+                                    <div className="p-4 text-center text-sm text-[var(--text-secondary)] bg-[var(--bg-secondary)] rounded-lg">
+                                        Nenhum chip conectado encontrado.
+                                    </div>
+                                ) : (
+                                    instances.map(inst => (
+                                        <button
+                                            key={inst.id}
+                                            onClick={() => handleImportFromWhatsApp(inst.id)}
+                                            className="w-full flex items-center justify-between p-3 rounded-lg border border-[var(--border-color)] hover:border-[var(--whatsapp)] hover:bg-[var(--whatsapp)]/5 transition-all text-left group"
+                                        >
+                                            <div>
+                                                <div className="font-medium text-[var(--text-primary)] group-hover:text-[var(--whatsapp)]">
+                                                    {inst.instanceName}
+                                                </div>
+                                                <div className="text-xs text-[var(--text-secondary)]">
+                                                    {inst.phone || 'Sem número'}
+                                                </div>
+                                            </div>
+                                            <svg className="w-5 h-5 text-[var(--whatsapp)] opacity-0 group-hover:opacity-100 transition-opacity" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M5 12h14M12 5l7 7-7 7" />
+                                            </svg>
+                                        </button>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3 mt-6">
+                            <button onClick={() => setShowInstanceModal(false)} className="btn btn-ghost">
+                                Cancelar
                             </button>
                         </div>
                     </div>

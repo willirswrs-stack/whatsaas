@@ -471,4 +471,17 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     private sleep(ms: number): Promise<void> {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
+
+    async getContacts(instanceName: string): Promise<any[]> {
+        try {
+            const response = await this.request('POST', `/chat/findContacts/${instanceName}`, {});
+            if (Array.isArray(response)) return response;
+            if (response && Array.isArray(response.contacts)) return response.contacts;
+            if (response && Array.isArray(response.data)) return response.data;
+            return [];
+        } catch (error: any) {
+            this.logger.error(`Failed to get Evolution contacts: ${error.message}`);
+            return [];
+        }
+    }
 }
