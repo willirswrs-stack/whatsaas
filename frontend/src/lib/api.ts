@@ -82,7 +82,9 @@ export interface PaginatedResponse<T> {
 // Helper para tratar erros
 export const getErrorMessage = (error: unknown): string => {
     if (axios.isAxiosError(error)) {
-        return error.response?.data?.message || error.message || 'Erro desconhecido';
+        const data = error.response?.data;
+        const msg = data?.message || data?.error?.message || error.message || 'Erro desconhecido';
+        return Array.isArray(msg) ? msg[0] : msg;
     }
     if (error instanceof Error) {
         return error.message;
