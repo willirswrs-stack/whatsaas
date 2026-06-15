@@ -12,7 +12,6 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Instance } from '../instances/entities/instance.entity';
-import { MessageLog } from '../order-webhooks/entities/message-log.entity';
 import { WarmupService } from './warmup.service';
 import { WARMUP_QUEUE } from '../../config/bull.config';
 import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
@@ -31,8 +30,6 @@ export class WarmupProcessor extends WorkerHost {
         private readonly activePrevention: ActivePreventionService,
         @InjectRepository(Instance)
         private instanceRepo: Repository<Instance>,
-        @InjectRepository(MessageLog)
-        private messageLogRepo: Repository<MessageLog>,
     ) {
         super();
     }
@@ -104,22 +101,6 @@ export class WarmupProcessor extends WorkerHost {
                 await this.instanceRepo.increment({ id: instanceId }, 'dailySent', 1).catch(err => {
                     this.logger.warn(`Failed to increment dailySent for instance ${instanceId}: ${err.message}`);
                 });
-            }
-
-            // Registrar no histórico de mensagens
-            try {
-                if (job.data.tenantId) {
-                    const newLog = this.messageLogRepo.create({
-                        tenantId: job.data.tenantId,
-                        instanceId: instanceId,
-                        toPhone: toPhone,
-                        status: 'sent',
-                        providerMessageId: result?.id || result?.key?.id || 'warmup-' + Date.now(),
-                    });
-                    await this.messageLogRepo.save(newLog);
-                }
-            } catch (err) {
-                this.logger.warn(`Failed to log warmup message to message_logs: ${err.message}`);
             }
 
             this.logger.log(`✅ Warmup Message Sent with Active Protection | instanceName=${instanceName} | to=${toPhone}`);
