@@ -261,8 +261,8 @@ export class WarmupService {
             let attempts = 0;
 
             // Possíveis parceiros para este chip
-            // Restrição de Tenant: Um chip de cliente NUNCA fala com outro chip do mesmo tenant
-            const possibleClients = clientChips.filter(c => c.id !== chip.id && c.tenantId !== chip.tenantId);
+            // Removida restrição de Tenant para permitir que os 10 chips do próprio cliente conversem entre si
+            const possibleClients = clientChips.filter(c => c.id !== chip.id);
             const possibleSeeds = seedChips.filter(c => c.id !== chip.id);
 
             // Embaralha para aleatoriedade
