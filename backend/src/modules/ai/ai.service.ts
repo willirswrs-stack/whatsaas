@@ -190,11 +190,14 @@ export class AiService {
     /**
      * Generate warm-up conversation script
      */
-    async generateWarmupConversation(options: {
-        messageCount: number;
-        topics: string[];
-        niche?: string;
-    }): Promise<WarmupConversation[]> {
+    async generateWarmupConversation(
+        tenantId: string,
+        options: {
+            messageCount: number;
+            topics: string[];
+            niche?: string;
+        }
+    ): Promise<WarmupConversation[]> {
         const userPrompt = warmupConversationUserPrompt(
             options.messageCount,
             options.topics,
@@ -202,30 +205,44 @@ export class AiService {
         );
 
         try {
-            if (!this.openai) {
+            const globalSettings = await this.settingsService.getGlobalSettings();
+            const keys = await this.settingsService.getEffectiveLLMKeys(tenantId);
+
+            this.providerFactory.configureForTenant({
+                openaiKey: keys.openaiKey,
+                anthropicKey: keys.anthropicKey,
+                geminiKey: keys.geminiKey,
+                groqKey: keys.groqKey,
+            });
+
+            const providerType = (globalSettings.globalLlmProvider || 'openai') as LLMProviderType;
+            const provider = this.providerFactory.getProvider(providerType);
+
+            if (!provider || !provider.isConfigured()) {
+                this.logger.warn(`Provider ${providerType} não configurado para Warmup. Usando mock.`);
                 return this.getMockConversation(options.messageCount);
             }
 
-            const response = await this.openai.chat.completions.create({
-                model: 'gpt-4o',
-                messages: [
-                    { role: 'system', content: WARMUP_CONVERSATION_SYSTEM_PROMPT },
-                    { role: 'user', content: userPrompt },
-                ],
+            const response = await provider.generate(userPrompt, {
+                model: globalSettings.globalLlmModel,
                 temperature: 0.9,
-                response_format: { type: 'json_object' },
+                systemPrompt: WARMUP_CONVERSATION_SYSTEM_PROMPT,
             });
 
-            const content = response.choices[0]?.message?.content;
+            const content = response.content;
             if (!content) {
-                throw new Error('Empty response from OpenAI');
+                throw new Error('Empty response from LLM');
             }
 
-            const result = JSON.parse(content);
+            // Extract JSON from markdown if needed
+            const jsonMatch = content.match(/\{[\s\S]*\}/);
+            const jsonString = jsonMatch ? jsonMatch[0] : content;
+
+            const result = JSON.parse(jsonString);
             return result.conversation;
 
         } catch (error) {
-            this.logger.error(`AI Error: ${error.message}`);
+            this.logger.error(`AI Error in Warmup: ${error.message}`);
             return this.getMockConversation(options.messageCount);
         }
     }

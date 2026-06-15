@@ -387,11 +387,14 @@ export class WarmupService {
 
         let conversation;
         try {
-            conversation = await this.aiService.generateWarmupConversation({
-                messageCount: Math.floor(Math.random() * 8) + 8, // 8-15 messages (more than before)
-                topics: randomTopics,
-                niche: niche || undefined,
-            });
+            conversation = await this.aiService.generateWarmupConversation(
+                tenantId,
+                {
+                    messageCount: Math.floor(Math.random() * 8) + 8, // 8-15 messages (more than before)
+                    topics: randomTopics,
+                    niche: niche || undefined,
+                }
+            );
 
             if (!conversation || !Array.isArray(conversation)) {
                 this.logger.error(`AI generated invalid conversation: ${JSON.stringify(conversation)}`);
@@ -519,11 +522,14 @@ export class WarmupService {
 
         let conversation: any[];
         try {
-            conversation = await this.aiService.generateWarmupConversation({
-                messageCount: Math.floor(Math.random() * 6) + 6, // 6-11 msgs
-                topics,
-                niche: niche || undefined,
-            });
+            conversation = await this.aiService.generateWarmupConversation(
+                tenantId,
+                {
+                    messageCount: Math.floor(Math.random() * 6) + 6, // 6-11 msgs
+                    topics,
+                    niche: niche || undefined,
+                }
+            );
         } catch (e) {
             this.logger.error(`[LIVE] AI error: ${e.message}`);
             return { success: false, reason: 'ai_error' };
