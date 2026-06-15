@@ -16,8 +16,11 @@ const getLatencyColor = (latency: number) => {
 
 const getStatusConfig = (status: string) => {
     switch (status) {
+        case 'active':
         case 'online': return { color: 'var(--accent-success)', label: 'Online', bg: 'rgba(34, 197, 94, 0.15)' };
         case 'slow': return { color: 'var(--accent-warning)', label: 'Lento', bg: 'rgba(245, 158, 11, 0.15)' };
+        case 'expired': return { color: 'var(--accent-danger)', label: 'Expirado', bg: 'rgba(239, 68, 68, 0.15)' };
+        case 'suspended':
         case 'offline': return { color: 'var(--accent-danger)', label: 'Offline', bg: 'rgba(239, 68, 68, 0.15)' };
         default: return { color: 'var(--text-muted)', label: 'Desconhecido', bg: 'rgba(107, 101, 128, 0.15)' };
     }
@@ -145,11 +148,11 @@ export default function ProxiesPage() {
                 </div>
                 <div className="stat-card">
                     <span className="stat-label">Online</span>
-                    <span className="stat-value text-[var(--accent-success)]">{proxyList.filter(p => p.status === 'online').length}</span>
+                    <span className="stat-value text-[var(--accent-success)]">{proxyList.filter(p => ['online', 'active'].includes(p.status)).length}</span>
                 </div>
                 <div className="stat-card">
                     <span className="stat-label">Offline</span>
-                    <span className="stat-value text-[var(--accent-danger)]">{proxyList.filter(p => p.status === 'offline').length}</span>
+                    <span className="stat-value text-[var(--accent-danger)]">{proxyList.filter(p => ['offline', 'expired', 'suspended'].includes(p.status)).length}</span>
                 </div>
                 <div className="stat-card">
                     <span className="stat-label">Latência Média</span>
@@ -287,7 +290,7 @@ export default function ProxiesPage() {
                             <div className="pt-4 border-t border-[var(--border-color)]">
                                 <div className="grid grid-cols-3 gap-4 text-center">
                                     <div>
-                                        <div className="text-2xl font-bold text-[var(--accent-success)]">{proxyList.filter(p => p.status === 'online').length}</div>
+                                        <div className="text-2xl font-bold text-[var(--accent-success)]">{proxyList.filter(p => ['online', 'active'].includes(p.status)).length}</div>
                                         <div className="text-xs text-[var(--text-muted)]">Online</div>
                                     </div>
                                     <div>
@@ -295,7 +298,7 @@ export default function ProxiesPage() {
                                         <div className="text-xs text-[var(--text-muted)]">Lentos</div>
                                     </div>
                                     <div>
-                                        <div className="text-2xl font-bold text-[var(--accent-danger)]">{proxyList.filter(p => p.status === 'offline').length}</div>
+                                        <div className="text-2xl font-bold text-[var(--accent-danger)]">{proxyList.filter(p => ['offline', 'expired', 'suspended'].includes(p.status)).length}</div>
                                         <div className="text-xs text-[var(--text-muted)]">Offline</div>
                                     </div>
                                 </div>

@@ -28,6 +28,37 @@ export class BillingController {
     }
 
     @UseGuards(AuthGuard('jwt'))
+    @Get('status')
+    async getStatus(@Request() req) {
+        const user = req.user;
+        const tenant = await this.tenantRepo.findOne({
+            where: { id: user.tenantId },
+            relations: ['plan']
+        });
+        
+        // Check actively if pending
+        if (tenant?.status !== 'active' && tenant?.asaasSubscriptionId) {
+            try {
+                const paymentInfo = await this.asaasService.getSubscriptionPaymentInfo(tenant.asaasSubscriptionId);
+                if (paymentInfo && (paymentInfo.status === 'RECEIVED' || paymentInfo.status === 'CONFIRMED')) {
+                    tenant.status = 'active';
+                    await this.tenantRepo.save(tenant);
+                    this.logger.log(`Tenant ${tenant.name} ativado automaticamente via consulta no GET /status`);
+                }
+            } catch (e) {
+                this.logger.error(`Erro ao consultar status do pagamento: ${e.message}`);
+            }
+        }
+
+        return {
+            plan: tenant?.plan || null,
+            status: tenant?.status || 'inactive',
+            messagesSent: 0,
+            instancesActive: 0
+        };
+    }
+
+    @UseGuards(AuthGuard('jwt'))
     @Post('subscribe')
     async createSubscription(@Request() req, @Body() body: { planId: string, cpfCnpj: string, phone?: string }) {
         const user = req.user;

@@ -484,4 +484,39 @@ export class EvolutionAdapter implements IWhatsAppProvider {
             return [];
         }
     }
+
+    async getGroupParticipants(instanceName: string): Promise<{ id: string, name?: string, groupName: string }[]> {
+        try {
+            this.logger.log(`Fetching group participants for ${instanceName}`);
+            // Usa fetchAllGroups com getParticipants=true
+            const response = await this.request('GET', `/group/fetchAllGroups/${instanceName}?getParticipants=true`);
+            
+            const participants: { id: string, name?: string, groupName: string }[] = [];
+            
+            let groupsArray: any[] = [];
+            if (Array.isArray(response)) groupsArray = response;
+            else if (response && Array.isArray(response.data)) groupsArray = response.data;
+            else if (response && Array.isArray(response.groups)) groupsArray = response.groups;
+            
+            for (const group of groupsArray) {
+                const groupName = group.subject || group.name || 'Grupo Desconhecido';
+                
+                if (group.participants && Array.isArray(group.participants)) {
+                    for (const member of group.participants) {
+                        participants.push({
+                            id: member.id || member.jid || member,
+                            name: member.name || member.pushName || undefined,
+                            groupName: groupName
+                        });
+                    }
+                }
+            }
+            
+            this.logger.log(`Found ${participants.length} group participants in ${instanceName}`);
+            return participants;
+        } catch (error: any) {
+            this.logger.error(`Failed to get Evolution group participants: ${error.message}`);
+            return [];
+        }
+    }
 }

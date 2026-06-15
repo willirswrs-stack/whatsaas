@@ -21,6 +21,8 @@ export default function ContactsPage() {
     const [bulkSelectedTags, setBulkSelectedTags] = useState<string[]>([]); // For bulk actions
     const [filterCategory, setFilterCategory] = useState('');
     const [filterOptedOut, setFilterOptedOut] = useState<boolean | undefined>(undefined);
+    const [sortBy, setSortBy] = useState<'name' | 'createdAt'>('createdAt');
+    const [sortOrder, setSortOrder] = useState<'ASC' | 'DESC'>('DESC');
 
     // Selection
     const [selectedContacts, setSelectedContacts] = useState<Set<string>>(new Set());
@@ -63,6 +65,8 @@ export default function ContactsPage() {
                 tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
                 category: filterCategory || undefined,
                 optedOut: filterOptedOut,
+                sortBy,
+                sortOrder,
             };
             const response = await contactsApi.getContacts(params);
             setContacts(response.data);
@@ -74,7 +78,7 @@ export default function ContactsPage() {
         } finally {
             setLoading(false);
         }
-    }, [page, search, selectedTagIds, filterCategory, filterOptedOut]);
+    }, [page, search, selectedTagIds, filterCategory, filterOptedOut, sortBy, sortOrder]);
 
     const loadTags = async () => {
         try {
@@ -305,25 +309,22 @@ export default function ContactsPage() {
     const [isImportingWA, setIsImportingWA] = useState(false);
     const [instances, setInstances] = useState<any[]>([]);
     const [isLoadingInstances, setIsLoadingInstances] = useState(false);
+    const [importIncludeGroups, setImportIncludeGroups] = useState(false);
 
     const handleOpenInstanceModal = async () => {
         setIsLoadingInstances(true);
         setShowInstanceModal(true);
         try {
-            // Import instancesApi dynamically
-            const { instancesApi } = await import('@/lib/instances');
-            const data = await instancesApi.getAll();
+            // Import instancesService dynamically
+            const { instancesService } = await import('@/lib/instances');
+            const data = await instancesService.list();
             const connectedInstances = data.filter((i: any) => i.status === 'connected');
             setInstances(connectedInstances);
             
-            // Auto-select se houver apenas uma
-            if (connectedInstances.length === 1) {
-                setShowInstanceModal(false);
-                handleImportFromWhatsApp(connectedInstances[0].id);
-            }
+            // Removido auto-select para permitir que o usuário marque a opção de grupos
         } catch (err: any) {
             console.error('Erro ao buscar instâncias:', err);
-            alert('Erro ao buscar suas conexões de WhatsApp.');
+            alert('Erro ao buscar suas conexões de WhatsApp: ' + (err.message || err.toString()));
             setShowInstanceModal(false);
         } finally {
             setIsLoadingInstances(false);
@@ -336,7 +337,7 @@ export default function ContactsPage() {
         try {
             setIsImportingWA(true);
             setShowInstanceModal(false);
-            const result = await contactsApi.importFromWhatsApp(instanceId);
+            const result = await contactsApi.importFromWhatsApp(instanceId, importIncludeGroups);
             alert(`Importação Concluída!\n\nNovos contatos: ${result.imported}\nContatos já existentes ignorados: ${result.skipped || 0}\nErros: ${result.errors?.length || 0}`);
             loadContacts();
             loadStats();
@@ -467,6 +468,24 @@ export default function ContactsPage() {
                             onChange={(e) => setFilterCategory(e.target.value)}
                             className="input w-full"
                         />
+                    </div>
+
+                    {/* Sort Select */}
+                    <div className="w-[200px]">
+                        <select
+                            className="input w-full"
+                            value={`${sortBy}-${sortOrder}`}
+                            onChange={(e) => {
+                                const [newSortBy, newSortOrder] = e.target.value.split('-');
+                                setSortBy(newSortBy as 'name' | 'createdAt');
+                                setSortOrder(newSortOrder as 'ASC' | 'DESC');
+                                setPage(1);
+                            }}
+                        >
+                            <option value="createdAt-DESC">Recentes</option>
+                            <option value="name-ASC">Nome A-Z</option>
+                            <option value="name-DESC">Nome Z-A</option>
+                        </select>
                     </div>
 
                     {/* Tag Filter */}
@@ -1041,6 +1060,25 @@ export default function ContactsPage() {
                                         </button>
                                     ))
                                 )}
+                            </div>
+
+                            <div className="mt-4 p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
+                                <label className="flex items-start gap-3 cursor-pointer">
+                                    <div className="pt-1">
+                                        <input 
+                                            type="checkbox" 
+                                            className="checkbox checkbox-primary"
+                                            checked={importIncludeGroups}
+                                            onChange={(e) => setImportIncludeGroups(e.target.checked)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <div className="font-medium text-sm">Incluir participantes de Grupos</div>
+                                        <div className="text-xs text-[var(--text-secondary)] mt-1">
+                                            Se marcado, também importará todos os participantes dos grupos em que você está. Uma Tag com o nome do grupo será adicionada automaticamente.
+                                        </div>
+                                    </div>
+                                </label>
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">

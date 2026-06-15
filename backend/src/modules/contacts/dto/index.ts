@@ -122,6 +122,16 @@ export class ContactQueryDto {
     @IsOptional()
     @IsString()
     endDate?: string;
+
+    @IsOptional()
+    @IsString()
+    @IsIn(['name', 'createdAt'])
+    sortBy?: 'name' | 'createdAt' = 'createdAt';
+
+    @IsOptional()
+    @IsString()
+    @IsIn(['ASC', 'DESC'])
+    sortOrder?: 'ASC' | 'DESC' = 'DESC';
 }
 
 export class ImportContactsDto {

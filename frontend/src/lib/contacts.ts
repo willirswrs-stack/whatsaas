@@ -77,6 +77,8 @@ export interface ContactQueryParams {
     optedOut?: boolean;
     page?: number;
     limit?: number;
+    sortBy?: 'name' | 'createdAt';
+    sortOrder?: 'ASC' | 'DESC';
 }
 
 // ============ CONTACTS API ============
@@ -92,6 +94,8 @@ export const contactsApi = {
         if (params?.optedOut !== undefined) queryParams.append('optedOut', String(params.optedOut));
         if (params?.page) queryParams.append('page', String(params.page));
         if (params?.limit) queryParams.append('limit', String(params.limit));
+        if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+        if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
 
         const response = await api.get(`/contacts?${queryParams.toString()}`);
         return response.data;
@@ -136,9 +140,13 @@ export const contactsApi = {
         return response.data;
     },
 
-    async importFromWhatsApp(instanceId: string): Promise<{ imported: number; skipped: number; errors: string[] }> {
-        const response = await api.post('/contacts/import/whatsapp', { instanceId });
-        return response.data;
+    async importFromWhatsApp(instanceId: string, includeGroups?: boolean): Promise<{ imported: number; skipped: number; errors: string[] }> {
+        try {
+            const response = await api.post('/contacts/import/whatsapp', { instanceId, includeGroups }, { timeout: 300000 });
+            return response.data;
+        } catch (error) {
+            throw error;
+        }
     },
 
     async exportContacts(tagIds?: string[]): Promise<Contact[]> {

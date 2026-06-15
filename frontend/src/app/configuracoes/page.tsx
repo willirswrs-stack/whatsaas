@@ -8,7 +8,10 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { useLlm } from '@/contexts/LlmContext';
 import { useSuperAdmin } from '@/hooks/useSuperAdmin';
 
+import { useRouter } from 'next/navigation';
+
 export default function SettingsPage() {
+    const router = useRouter();
     const { theme, setTheme } = useTheme();
     const { llmConfig, providerLabel, modelLabel } = useLlm();
     const { isSuperAdmin } = useSuperAdmin();
@@ -22,6 +25,7 @@ export default function SettingsPage() {
         groqKey: '',
         elevenLabsKey: '',
     });
+    const [billingStatus, setBillingStatus] = useState<any>(null);
     const [showKeys, setShowKeys] = useState({ openai: false, anthropic: false, gemini: false, groq: false, elevenLabs: false });
 
     const tabs = [
@@ -56,6 +60,10 @@ export default function SettingsPage() {
                 groqKey: data.groqKey || '',
                 elevenLabsKey: data.elevenLabsKey || '',
             });
+
+            // Load billing status
+            const billingRes = await api.get('/billing/status');
+            setBillingStatus(billingRes.data);
         } catch (err) {
             console.error('Erro ao carregar configurações:', err);
         }
@@ -540,17 +548,19 @@ export default function SettingsPage() {
                             <div className="glass p-6 rounded-xl">
                                 <div className="flex items-center justify-between mb-6">
                                     <h2 className="text-xl font-semibold text-white">Plano Atual</h2>
-                                    <span className="badge badge-success">Ativo</span>
+                                    <span className={`badge ${billingStatus?.status === 'active' ? 'badge-success' : 'badge-warning'}`}>
+                                        {billingStatus?.status === 'active' ? 'Ativo' : 'Pendente/Inativo'}
+                                    </span>
                                 </div>
 
                                 <div className="p-4 bg-gradient-to-r from-[var(--primary)]/20 to-[var(--secondary)]/20 rounded-xl border border-[var(--primary)]/30 mb-6">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <h3 className="text-2xl font-bold text-white">Professional</h3>
-                                            <p className="text-[var(--text-muted)]">5 instâncias • 25.000 msgs/mês</p>
+                                            <h3 className="text-2xl font-bold text-white">{billingStatus?.plan?.name || 'Gratuito'}</h3>
+                                            <p className="text-[var(--text-muted)]">{billingStatus?.plan?.instanceLimit || 1} instâncias • {billingStatus?.plan?.messageLimit?.toLocaleString() || '1.000'} msgs/mês</p>
                                         </div>
                                         <div className="text-right">
-                                            <span className="text-3xl font-bold text-white">R$ 299</span>
+                                            <span className="text-3xl font-bold text-white">R$ {billingStatus?.plan?.price || '0,00'}</span>
                                             <span className="text-[var(--text-muted)]">/mês</span>
                                         </div>
                                     </div>
@@ -559,18 +569,23 @@ export default function SettingsPage() {
                                 <div className="space-y-3 mb-6">
                                     <div className="flex justify-between">
                                         <span className="text-[var(--text-muted)]">Mensagens enviadas</span>
-                                        <span className="font-medium">18.432 / 25.000</span>
+                                        <span className="font-medium">{billingStatus?.messagesSent || 0} / {billingStatus?.plan?.messageLimit?.toLocaleString() || '1.000'}</span>
                                     </div>
                                     <div className="progress">
-                                        <div className="progress-bar" style={{ width: '73%' }} />
+                                        <div className="progress-bar" style={{ width: `${Math.min(100, ((billingStatus?.messagesSent || 0) / (billingStatus?.plan?.messageLimit || 1000)) * 100)}%` }} />
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-[var(--text-muted)]">Instâncias ativas</span>
-                                        <span className="font-medium">3 / 5</span>
+                                        <span className="font-medium">{billingStatus?.instancesActive || 0} / {billingStatus?.plan?.instanceLimit || 1}</span>
                                     </div>
                                 </div>
 
-                                <button className="btn btn-primary w-full">Fazer Upgrade</button>
+                                <button 
+                                    className="btn btn-primary w-full"
+                                    onClick={() => router.push('/planos')}
+                                >
+                                    Fazer Upgrade
+                                </button>
                             </div>
 
                             <div className="glass p-6 rounded-xl">

@@ -98,4 +98,9 @@ export interface IWhatsAppProvider {
      * Get contacts from the WhatsApp instance
      */
     getContacts(instanceName: string): Promise<any[]>;
+
+    /**
+     * Get all participants from all groups the instance is part of
+     */
+    getGroupParticipants?(instanceName: string): Promise<{ id: string, name?: string, groupName: string }[]>;
 }

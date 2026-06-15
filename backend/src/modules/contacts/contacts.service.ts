@@ -79,9 +79,18 @@ export class ContactsService {
 
         // If simple query (no search or tags), use findAndCount for maximum reliability
         if (!search && (!tagIds || tagIds.length === 0)) {
+            const sortByStr = query.sortBy || 'createdAt';
+            const sortOrderStr = query.sortOrder || 'DESC';
+            
+            // To ensure stable sorting with pagination, add id as secondary sort when not sorting by id
+            const orderOptions: any = { [sortByStr]: sortOrderStr };
+            if ((sortByStr as string) !== 'id') {
+                orderOptions.id = 'DESC';
+            }
+
             [contacts, total] = await this.contactRepository.findAndCount({
                 where,
-                order: { createdAt: 'DESC', id: 'DESC' },
+                order: orderOptions,
                 skip,
                 take: limit,
             });
@@ -129,7 +138,10 @@ export class ContactsService {
                 qb.setParameter('tagIds', tagIds);
             }
 
-            qb.orderBy('contact.createdAt', 'DESC')
+            const sortByStr = query.sortBy || 'createdAt';
+            const sortOrderStr = query.sortOrder || 'DESC';
+            
+            qb.orderBy(`contact.${sortByStr}`, sortOrderStr)
                 .skip(skip)
                 .take(limit);
 
@@ -434,27 +446,39 @@ export class ContactsService {
 
         // 6. Finalize Tags (Common logic for New and Updated)
         const finalTagsToInsert: ContactTag[] = [];
-        const contactIdsToClearTags: string[] = [];
+        const contactIdsToCheck: string[] = [];
+
+        for (const req of contactTagsToInsert) {
+            if (req.contactId) {
+                contactIdsToCheck.push(req.contactId);
+            }
+        }
+
+        // Fetch existing tags to avoid duplicates
+        const existingContactTags = contactIdsToCheck.length > 0 
+            ? await this.contactTagRepository.find({ where: { contactId: In(contactIdsToCheck) } })
+            : [];
 
         for (const req of contactTagsToInsert) {
             if (!req.contactId) continue;
 
-            contactIdsToClearTags.push(req.contactId);
+            const existingTagsForContact = existingContactTags
+                .filter(ct => ct.contactId === req.contactId)
+                .map(ct => ct.tagId);
+
             for (const tagId of req.tagIds) {
-                finalTagsToInsert.push(this.contactTagRepository.create({
-                    contactId: req.contactId,
-                    tagId
-                }));
+                // Only insert if the contact doesn't already have this tag
+                if (!existingTagsForContact.includes(tagId)) {
+                    finalTagsToInsert.push(this.contactTagRepository.create({
+                        contactId: req.contactId,
+                        tagId
+                    }));
+                }
             }
         }
 
-        if (contactIdsToClearTags.length > 0) {
-            // Delete existing tags for these contacts to avoid duplicates/stale data
-            await this.contactTagRepository.delete({ contactId: In(contactIdsToClearTags) });
-        }
-
         if (finalTagsToInsert.length > 0) {
-            // Save tags in chunks
+            // Save tags in chunks safely
             for (let i = 0; i < finalTagsToInsert.length; i += chunkSize) {
                 await this.contactTagRepository.save(finalTagsToInsert.slice(i, i + chunkSize));
             }
@@ -467,7 +491,7 @@ export class ContactsService {
         return results;
     }
 
-    async importFromWhatsApp(tenantId: string, instanceId: string) {
+    async importFromWhatsApp(tenantId: string, instanceId: string, includeGroups?: boolean) {
         const instance = await this.instanceRepository.findOne({ where: { id: instanceId, tenantId } });
         if (!instance) {
             throw new NotFoundException('Instância não encontrada');
@@ -479,32 +503,81 @@ export class ContactsService {
         this.logger.log(`Importing contacts from WhatsApp instance: ${instance.instanceName} for tenant: ${tenantId}`);
         const wahaContacts = await provider.getContacts(instance.instanceName);
         
-        if (!wahaContacts || wahaContacts.length === 0) {
-            return { imported: 0, skipped: 0, errors: [] };
-        }
-
         const contactsToImport: CreateContactDto[] = [];
         
-        for (const contact of wahaContacts) {
-            // Filtrar apenas contatos válidos (usuários, não grupos)
-            // No WAHA, o ID de usuário termina em @s.whatsapp.net e grupos em @g.us
-            const id = contact.id || contact.id?._serialized || '';
-            const phoneStr = typeof id === 'string' ? id : '';
-            
-            if (!phoneStr.includes('@s.whatsapp.net')) {
-                continue; // Ignorar grupos, broadcast lists, etc.
+        if (wahaContacts && wahaContacts.length > 0) {
+            for (const contact of wahaContacts) {
+                // Filtrar apenas contatos válidos (usuários, não grupos)
+                // Evolution v2 usa 'remoteJid', WAHA usa 'id' ou 'id._serialized'
+                const rawId = contact.remoteJid || contact.id?._serialized || contact.id || '';
+                const phoneStr = typeof rawId === 'string' ? rawId : '';
+                
+                if (!phoneStr.includes('@s.whatsapp.net')) {
+                    continue; // Ignorar grupos, broadcast lists, etc.
+                }
+                
+                const phone = phoneStr.split('@')[0];
+                const name = contact.name || contact.pushName || contact.notify || undefined;
+                
+                if (phone) {
+                    contactsToImport.push({
+                        phone: phone,
+                        name: name,
+                    });
+                }
             }
+        }
+        
+        // Importar membros de grupos se solicitado
+        if (includeGroups && typeof provider.getGroupParticipants === 'function') {
+            this.logger.log(`Fetching group participants for instance: ${instance.instanceName}`);
+            const groupParticipants = await provider.getGroupParticipants(instance.instanceName);
             
-            const phone = phoneStr.split('@')[0];
-            const name = contact.name || contact.pushName || contact.notify || undefined;
+            const tagCache = new Map<string, string>(); // Cache groupName -> tagId
             
-            if (phone) {
-                contactsToImport.push({
-                    phone: phone,
-                    name: name,
-                    // Deixamos a categoria opcional, pode ser definida depois
-                });
+            for (const participant of groupParticipants) {
+                const phoneStr = participant.id;
+                if (!phoneStr || !phoneStr.includes('@s.whatsapp.net')) continue;
+                
+                const phone = phoneStr.split('@')[0];
+                if (!phone) continue;
+                
+                // Tratar Tag do Grupo
+                const tagName = `Grupo: ${participant.groupName}`;
+                if (!tagCache.has(tagName)) {
+                    let tag = await this.tagRepository.findOne({ where: { tenantId, name: tagName } });
+                    if (!tag) {
+                        tag = await this.tagRepository.save(this.tagRepository.create({
+                            tenantId,
+                            name: tagName,
+                            color: '#' + Math.floor(Math.random() * 16777215).toString(16)
+                        }));
+                    }
+                    tagCache.set(tagName, tag.id);
+                }
+                const tagId = tagCache.get(tagName);
+                
+                // Verificar se já existe na lista de importação para apenas adicionar a tag
+                const existingIndex = contactsToImport.findIndex(c => c.phone === phone);
+                if (existingIndex >= 0) {
+                    if (!contactsToImport[existingIndex].tagIds) {
+                        contactsToImport[existingIndex].tagIds = [];
+                    }
+                    if (tagId && !contactsToImport[existingIndex].tagIds.includes(tagId)) {
+                        contactsToImport[existingIndex].tagIds.push(tagId);
+                    }
+                } else {
+                    contactsToImport.push({
+                        phone: phone,
+                        name: participant.name,
+                        tagIds: tagId ? [tagId] : []
+                    });
+                }
             }
+        }
+
+        if (contactsToImport.length === 0) {
+            return { imported: 0, skipped: 0, errors: [] };
         }
         
         this.logger.log(`Found ${contactsToImport.length} valid contacts to import from WhatsApp`);
