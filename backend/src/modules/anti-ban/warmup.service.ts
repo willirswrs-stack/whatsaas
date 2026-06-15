@@ -58,6 +58,7 @@ export class WarmupService {
      */
     async onModuleInit() {
         await this.scheduleDailyJob();
+        await this.scheduleContinuousJob();
     }
 
     /**
@@ -85,6 +86,29 @@ export class WarmupService {
         );
 
         this.logger.log('⏰ Daily Warmup Routine scheduled for 04:00 AM');
+    }
+
+    async scheduleContinuousJob() {
+        const repeatableJobs = await this.warmupQueue.getRepeatableJobs();
+        for (const job of repeatableJobs) {
+            if (job.name === 'continuous-warmup-routine') {
+                await this.warmupQueue.removeRepeatableByKey(job.key);
+            }
+        }
+
+        // Add continuous job (runs every 5 minutes)
+        await this.warmupQueue.add(
+            'continuous-warmup-routine',
+            {},
+            {
+                repeat: {
+                    pattern: '*/5 * * * *', // Every 5 minutes
+                },
+                jobId: 'continuous-warmup-routine-job'
+            }
+        );
+
+        this.logger.log('⏰ Continuous Warmup Routine scheduled for every 5 minutes');
     }
 
     // =========================================================================
@@ -125,18 +149,29 @@ export class WarmupService {
             }
         }
 
-        // Trigger warmup sessions globally — cross-tenant + seed chips
+        this.logger.log(`✅ Warmup Routine Finished: ${advancedCount} advanced, ${completedCount} completed.`);
+        return { advanced: advancedCount, completed: completedCount, sessions: 0 };
+    }
+
+    /**
+     * Executes the continuous warmup routine (every 5 mins).
+     * Distributes messages evenly throughout the day based on remaining limit.
+     */
+    async executeContinuousWarmupRoutine(): Promise<{ sessionsTriggered: number }> {
+        this.logger.log('🔥 Executing Continuous Warmup Routing (Gota a Gota)...');
+
         let sessionsTriggered = 0;
         try {
+            // Re-using the same global session creation logic, but we'll apply it more frequently.
+            // The createGlobalWarmupSessions now needs to respect the daily limits.
             const sessionResults = await this.createGlobalWarmupSessions();
             sessionsTriggered = sessionResults.sessionsCreated;
-            this.logger.log(`💬 ${sessionsTriggered} Global Warmup Sessions triggered`);
+            this.logger.log(`💬 ${sessionsTriggered} Global Warmup Sessions triggered dynamically`);
         } catch (err) {
             this.logger.error(`Failed to trigger global sessions: ${err.message}`);
         }
 
-        this.logger.log(`✅ Warmup Routine Finished: ${advancedCount} advanced, ${completedCount} completed, ${sessionsTriggered} sessions created.`);
-        return { advanced: advancedCount, completed: completedCount, sessions: sessionsTriggered };
+        return { sessionsTriggered };
     }
 
     /**
@@ -198,11 +233,12 @@ export class WarmupService {
 
         const candidates = allInstances.filter(i =>
             (i.status === InstanceStatus.CONNECTED || i.status === 'connected' as any) &&
-            i.phone
+            i.phone && 
+            i.dailySent < (i.dailyLimit || 50) // ONLY pick chips that haven't reached their daily limit
         );
 
         if (candidates.length < 2) {
-            this.logger.warn(`Not enough candidates for global warmup (Found ${candidates.length}, need ≥2)`);
+            this.logger.log(`Not enough candidates for global warmup right now (Found ${candidates.length} under limit)`);
             return { sessionsCreated: 0, reason: 'min_instances' };
         }
 
@@ -250,6 +286,19 @@ export class WarmupService {
 
                 if (partner) {
                     const key = [chip.id, partner.id].sort().join(':');
+                    
+                    // We also need a probability check to distribute messages across the day.
+                    // If it runs every 5 mins, that's 288 times a day.
+                    // If a chip needs to send 50 messages, the probability per 5 mins is 50 / 288 ≈ 17%.
+                    const remainingLimit = (chip.dailyLimit || 50) - (chip.dailySent || 0);
+                    // Assume 16 hours of active day (96 slots of 5 mins)
+                    const probability = Math.min(1.0, remainingLimit / 96);
+                    
+                    if (Math.random() > probability) {
+                        // Skip this pair for now to distribute traffic
+                        continue;
+                    }
+
                     if (!pairKeys.has(key)) {
                         pairKeys.add(key);
                         selectedPairs.push([chip, partner]);

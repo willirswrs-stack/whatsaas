@@ -13,6 +13,7 @@ import { ChipHealthService } from './chip-health.service';
 import { WarmupService } from './warmup.service';
 import { WarmupProcessor } from './warmup.processor';
 import { Instance } from '../instances/entities/instance.entity';
+import { MessageLog } from '../order-webhooks/entities/message-log.entity';
 import { WARMUP_QUEUE } from '../../config/bull.config';
 import { InstancesModule } from '../instances/instances.module';
 import { AiModule } from '../ai/ai.module';
@@ -23,7 +24,7 @@ import { GroupWarmupService } from './group-warmup.service';
 
 @Module({
     imports: [
-        TypeOrmModule.forFeature([Instance]),
+        TypeOrmModule.forFeature([Instance, MessageLog]),
         BullModule.registerQueue({
             name: WARMUP_QUEUE,
         }),

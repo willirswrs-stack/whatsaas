@@ -12,6 +12,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Instance } from '../instances/entities/instance.entity';
+import { MessageLog } from '../order-webhooks/entities/message-log.entity';
 import { WarmupService } from './warmup.service';
 import { WARMUP_QUEUE } from '../../config/bull.config';
 import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
@@ -30,6 +31,8 @@ export class WarmupProcessor extends WorkerHost {
         private readonly activePrevention: ActivePreventionService,
         @InjectRepository(Instance)
         private instanceRepo: Repository<Instance>,
+        @InjectRepository(MessageLog)
+        private messageLogRepo: Repository<MessageLog>,
     ) {
         super();
     }
@@ -40,6 +43,9 @@ export class WarmupProcessor extends WorkerHost {
         switch (job.name) {
             case 'daily-warmup-routine':
                 return this.handleDailyWarmup(job);
+
+            case 'continuous-warmup-routine':
+                return this.handleContinuousWarmup(job);
 
             case 'execute-warmup-message':
                 return this.handleWarmupMessage(job);
@@ -57,6 +63,18 @@ export class WarmupProcessor extends WorkerHost {
             return result;
         } catch (error) {
             this.logger.error(`❌ Warmup Routine Failed: ${error.message}`, error.stack);
+            throw error;
+        }
+    }
+
+    private async handleContinuousWarmup(job: Job): Promise<any> {
+        this.logger.log('💧 Starting Continuous Warmup Routine...');
+        try {
+            const result = await this.warmupService.executeContinuousWarmupRoutine();
+            this.logger.log(`✅ Continuous Warmup Completed: ${JSON.stringify(result)}`);
+            return result;
+        } catch (error) {
+            this.logger.error(`❌ Continuous Warmup Failed: ${error.message}`, error.stack);
             throw error;
         }
     }
@@ -86,6 +104,22 @@ export class WarmupProcessor extends WorkerHost {
                 await this.instanceRepo.increment({ id: instanceId }, 'dailySent', 1).catch(err => {
                     this.logger.warn(`Failed to increment dailySent for instance ${instanceId}: ${err.message}`);
                 });
+            }
+
+            // Registrar no histórico de mensagens
+            try {
+                if (job.data.tenantId) {
+                    const newLog = this.messageLogRepo.create({
+                        tenantId: job.data.tenantId,
+                        instanceId: instanceId,
+                        toPhone: toPhone,
+                        status: 'sent',
+                        providerMessageId: result?.id || result?.key?.id || 'warmup-' + Date.now(),
+                    });
+                    await this.messageLogRepo.save(newLog);
+                }
+            } catch (err) {
+                this.logger.warn(`Failed to log warmup message to message_logs: ${err.message}`);
             }
 
             this.logger.log(`✅ Warmup Message Sent with Active Protection | instanceName=${instanceName} | to=${toPhone}`);
