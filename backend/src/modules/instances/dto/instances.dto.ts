@@ -20,6 +20,9 @@ export class UpdateInstanceDto {
     @IsOptional()
     @IsObject()
     metaConfig?: Record<string, any>;
+
+    @IsOptional()
+    warmupDay?: number;
 }
 
 export class ToggleWarmupDto {
