@@ -89,11 +89,17 @@ export class AiController {
 
     @Post('warmup-script')
     @ApiOperation({ summary: 'Generate warm-up conversation script' })
-    async warmupScript(@Body() dto: WarmupScriptDto) {
-        const conversation = await this.aiService.generateWarmupConversation({
-            messageCount: dto.messageCount,
-            topics: dto.topics,
-        });
+    async warmupScript(
+        @Body() dto: WarmupScriptDto,
+        @CurrentTenant() tenantId: string
+    ) {
+        const conversation = await this.aiService.generateWarmupConversation(
+            tenantId,
+            {
+                messageCount: dto.messageCount,
+                topics: dto.topics,
+            }
+        );
 
         return {
             success: true,
