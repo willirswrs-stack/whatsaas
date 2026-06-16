@@ -192,11 +192,10 @@ export class WarmupService {
         const schedule = this.getScheduleForInstance(instance, nextDay);
 
         if (!schedule) {
-            // Reached end of schedule -> Graduate
-            this.logger.log(`🎓 Instance ${instance.instanceName} has graduated from warmup!`);
+            // Reached end of schedule -> Graduate but keep it warm
+            this.logger.log(`🎓 Instance ${instance.instanceName} has graduated from warmup (but keeping it warm)!`);
 
             await this.instanceRepo.update(instance.id, {
-                warmupEnabled: false,
                 warmupDay: nextDay,
                 dailyLimit: MATURE_LIMIT,
                 dailySent: 0,
@@ -690,12 +689,10 @@ export class WarmupService {
         if (profile === 'cold_outbound') maxDays = 60;
         else if (profile === 'warm_outbound' || profile === 'groups') maxDays = 30;
         
-        if (day > maxDays) return null; // Graduates
-
-        const progress = (day - 1) / Math.max(1, maxDays - 1);
-        const limit = Math.floor(50 + progress * (3000 - 50));
-        const interval = Math.max(5, Math.floor(120 - progress * (120 - 5)));
-        const maxPartners = Math.floor(1 + Math.pow(progress, 1.5) * (30 - 1));
+        const clampedProgress = Math.min(1, (day - 1) / Math.max(1, maxDays - 1));
+        const limit = day > maxDays ? MATURE_LIMIT : Math.floor(50 + clampedProgress * (3000 - 50));
+        const interval = Math.max(5, Math.floor(120 - clampedProgress * (120 - 5)));
+        const maxPartners = Math.floor(1 + Math.pow(clampedProgress, 1.5) * (30 - 1));
 
         return { day, limit, interval, maxPartners, maxDays };
     }

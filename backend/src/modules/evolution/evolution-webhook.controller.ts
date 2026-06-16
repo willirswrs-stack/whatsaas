@@ -279,8 +279,9 @@ export class EvolutionWebhookController {
                 this.logger.log(`📥 Incoming message from ${phone}: ${messageContent.substring(0, 50)}`);
 
                 // Find instance to get tenantId
-                const instance = await this.instanceRepo.findOne({ where: { instanceName } });
+                const instance = await this.instanceRepo.findOne({ where: { instanceName }, relations: ['tenant'] });
                 if (!instance) continue;
+                const servicesEnabled = (instance as any).tenant?.settings?.features?.services_enabled !== false;
 
                 // 📦 PERSIST TO INBOX (both individual and group messages)
                 this.inboxService.saveMessage({
@@ -316,10 +317,17 @@ export class EvolutionWebhookController {
 
                 // Intercept group messages for proactive, reactive warm-up interaction
                 if (isGroup) {
-                    this.groupWarmupService.handleGroupIncomingMessage(instanceName, remoteJid, messageContent).catch(err => {
-                        this.logger.error(`Failed during reactive group warmup: ${err.message}`);
-                    });
+                    if (servicesEnabled) {
+                        this.groupWarmupService.handleGroupIncomingMessage(instanceName, remoteJid, messageContent).catch(err => {
+                            this.logger.error(`Failed during reactive group warmup: ${err.message}`);
+                        });
+                    }
                     continue; // Shield regular workflow engines from group chat clutter
+                }
+                
+                // If services are disabled, don't trigger flows or wait for responses
+                if (!servicesEnabled) {
+                    continue;
                 }
 
                 // Find contact by phone

@@ -105,7 +105,7 @@ export class DispatcherProcessor extends WorkerHost {
             // 1. Buscar o registro do contato na campanha
             const campaignContact = await this.campaignContactRepo.findOne({
                 where: { id: campaignContactId },
-                relations: ['contact', 'campaign', 'campaign.template'],
+                relations: ['contact', 'campaign', 'campaign.template', 'campaign.tenant'],
             });
 
             if (!campaignContact) {
@@ -114,6 +114,12 @@ export class DispatcherProcessor extends WorkerHost {
 
             const campaign = campaignContact.campaign;
             const contact = campaignContact.contact;
+            const tenant = (campaignContact.campaign as any)?.tenant;
+
+            if (tenant?.settings?.features?.services_enabled === false) {
+                this.logger.warn(`Skipping contact ${campaignContactId}: Services disabled for tenant ${tenantId}`);
+                throw new Error('SERVICOS_DESATIVADOS');
+            }
 
             // Idempotency: Se já foi enviado, ignorar
             if (campaignContact.status === 'sent') {

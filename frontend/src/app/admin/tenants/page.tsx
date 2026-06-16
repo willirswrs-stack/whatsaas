@@ -639,6 +639,20 @@ function TenantDetailModal({ tenant, plans, onClose, onSavePlan, onSaveCadastrai
                                     </button>
                                 </div>
 
+                                <div className="pt-2">
+                                    <p className="text-[10px] text-[var(--text-muted)] mb-1">Status dos Serviços do Sistema:</p>
+                                    <button 
+                                        onClick={async () => await onToggleFeature('services_enabled')}
+                                        className={`w-full text-xs py-1.5 rounded transition-colors border ${
+                                            currentFeatures.services_enabled !== false
+                                            ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+                                            : 'bg-red-500/10 border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/20'
+                                        }`}
+                                    >
+                                        {currentFeatures.services_enabled !== false ? '✅ Serviços Ativos (Desativar)' : '❌ Serviços Desativados (Ativar)'}
+                                    </button>
+                                </div>
+
                                 <div className="pt-2 border-t border-[var(--border-color)]">
                                     <p className="text-[10px] text-[var(--text-muted)] mb-1">Invalidar todos os tokens de sessão atuais:</p>
                                     <button className="w-full bg-[var(--bg-secondary)] border border-red-500/40 text-red-600 dark:text-red-400 hover:bg-red-500/10 text-xs py-1.5 rounded transition-colors">
