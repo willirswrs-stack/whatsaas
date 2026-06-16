@@ -425,26 +425,47 @@ export class AiService {
         return { variations, tokensUsed: 0 };
     }
 
-    /**
-     * Mock conversation for development/testing
-     */
     private getMockConversation(messageCount: number): WarmupConversation[] {
         const conversation: WarmupConversation[] = [];
+        
+        const greetingsA = ['E aí, tudo bem?', 'Opa, como estão as coisas?', 'Fala! Tudo certo?', 'Bom dia, tranquilo?'];
+        const responsesB = ['Tudo ótimo! E vc?', 'Correndo por aqui, mas bem. E aí?', 'Tudo na paz! Novidades?', 'Tranquilo! Trabalhando muito?'];
+        const topicsA = ['De boa, trabalhando aqui', 'Tudo certo, resolvendo umas coisas', 'Tranquilo também.', 'Correria de sempre rs'];
+        const reactB = ['Sei como é haha', 'Pois é, não tá fácil!', 'Faz parte né', 'Verdade!'];
+        const questionA = ['Viu o jogo ontem?', 'Assistiu aquele filme novo?', 'Como foi o final de semana?', 'Ficou sabendo daquela notícia?'];
+        const answerB = ['Vi sim, que jogo!', 'Ainda não, é bom?', 'Foi massa, descansei bastante', 'Nem vi, estava por fora'];
+        const commentA = ['Demais né, gostei bastante', 'Aham, recomendo muito', 'Que bom! Precisava disso', 'Te mando o link depois'];
+        const commentB = ['Sim, curti demais', 'Me manda sim!', 'Boa! Combinado', 'Fechou!'];
+        const inviteA = ['Bora sair final de semana?', 'Vamos marcar uma call depois?', 'Topa um café amanhã?', 'Vamos nos falando!'];
+        const acceptB = ['Bora! Chama o pessoal', 'Claro, só me dar um toque', 'Super topo! Te aviso o horário', 'Beleza, um abraço!'];
+
+        // Pick random items to build a unique flow
+        const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
+
         const messages = [
-            { role: 'A', content: 'E aí, tudo bem?', isAudio: false },
-            { role: 'B', content: 'Tudo ótimo! E vc?', isAudio: false },
-            { role: 'A', content: 'De boa, trabalhando aqui', isAudio: false },
-            { role: 'B', content: 'Sei como é haha', isAudio: false },
-            { role: 'A', content: 'Viu o jogo ontem?', isAudio: true },
-            { role: 'B', content: 'Vi sim, que jogo!', isAudio: false },
-            { role: 'A', content: 'Demais né, time jogou bem', isAudio: false },
-            { role: 'B', content: 'Sim, melhor jogo do ano', isAudio: false },
-            { role: 'A', content: 'Bora sair final de semana?', isAudio: false },
-            { role: 'B', content: 'Bora! Chama o pessoal', isAudio: true },
+            { role: 'A', content: pick(greetingsA), isAudio: false },
+            { role: 'B', content: pick(responsesB), isAudio: false },
+            { role: 'A', content: pick(topicsA), isAudio: false },
+            { role: 'B', content: pick(reactB), isAudio: false },
+            { role: 'A', content: pick(questionA), isAudio: Math.random() > 0.7 },
+            { role: 'B', content: pick(answerB), isAudio: false },
+            { role: 'A', content: pick(commentA), isAudio: false },
+            { role: 'B', content: pick(commentB), isAudio: false },
+            { role: 'A', content: pick(inviteA), isAudio: false },
+            { role: 'B', content: pick(acceptB), isAudio: Math.random() > 0.7 },
         ];
 
         for (let i = 0; i < messageCount; i++) {
-            conversation.push(messages[i % messages.length]);
+            // Se pedir mais que 10, repete aleatórios (evita quebrar)
+            if (i < messages.length) {
+                conversation.push(messages[i]);
+            } else {
+                conversation.push({
+                    role: i % 2 === 0 ? 'A' : 'B',
+                    content: pick(i % 2 === 0 ? topicsA : reactB),
+                    isAudio: false
+                });
+            }
         }
 
         return conversation;
