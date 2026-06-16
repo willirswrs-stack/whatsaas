@@ -36,17 +36,34 @@ export class BillingController {
             relations: ['plan']
         });
         
+        let updatePaymentUrl: string | null = null;
+        let creditCard: any = null;
+
         // Check actively if pending
-        if (tenant?.status !== 'active' && tenant?.asaasSubscriptionId) {
+        if (tenant?.asaasSubscriptionId) {
             try {
-                const paymentInfo = await this.asaasService.getSubscriptionPaymentInfo(tenant.asaasSubscriptionId);
-                if (paymentInfo && (paymentInfo.status === 'RECEIVED' || paymentInfo.status === 'CONFIRMED')) {
-                    tenant.status = 'active';
-                    await this.tenantRepo.save(tenant);
-                    this.logger.log(`Tenant ${tenant.name} ativado automaticamente via consulta no GET /status`);
+                if (tenant?.status !== 'active') {
+                    const paymentInfo = await this.asaasService.getSubscriptionPaymentInfo(tenant.asaasSubscriptionId);
+                    if (paymentInfo && (paymentInfo.status === 'RECEIVED' || paymentInfo.status === 'CONFIRMED')) {
+                        tenant.status = 'active';
+                        await this.tenantRepo.save(tenant);
+                        this.logger.log(`Tenant ${tenant.name} ativado automaticamente via consulta no GET /status`);
+                    }
+                }
+
+                // Get subscription info for credit card and update URL
+                const asaasSub = await this.asaasService.getSubscription(tenant.asaasSubscriptionId);
+                if (asaasSub) {
+                    if (asaasSub.creditCard) {
+                        creditCard = {
+                            creditCardNumber: asaasSub.creditCard.creditCardNumber,
+                            creditCardBrand: asaasSub.creditCard.creditCardBrand
+                        };
+                    }
+                    updatePaymentUrl = asaasSub.invoiceUrl || asaasSub.updateUrl;
                 }
             } catch (e) {
-                this.logger.error(`Erro ao consultar status do pagamento: ${e.message}`);
+                this.logger.error(`Erro ao consultar status da assinatura: ${e.message}`);
             }
         }
 
@@ -54,7 +71,9 @@ export class BillingController {
             plan: tenant?.plan || null,
             status: tenant?.status || 'inactive',
             messagesSent: 0,
-            instancesActive: 0
+            instancesActive: 0,
+            creditCard,
+            updatePaymentUrl
         };
     }
 
@@ -86,15 +105,27 @@ export class BillingController {
             await this.tenantRepo.save(tenant);
         }
 
-        // 2. Criar Assinatura Asaas
-        const subRes = await this.asaasService.createSubscription({
-            customerId: asaasCustId,
-            planValue: Number(plan.price),
-            description: `Assinatura WhatSaas - Plano ${plan.name}`
-        });
+        // 2. Criar Assinatura Asaas ou Atualizar Existente
+        let subRes;
+        
+        if (tenant.asaasSubscriptionId) {
+            this.logger.log(`Atualizando assinatura existente ${tenant.asaasSubscriptionId} para novo plano`);
+            subRes = await this.asaasService.updateSubscription(tenant.asaasSubscriptionId, {
+                value: Number(plan.price),
+                description: `Assinatura WhatSaas - Plano ${plan.name}`,
+                cycle: plan.billingCycle
+            });
+        } else {
+            subRes = await this.asaasService.createSubscription({
+                customerId: asaasCustId,
+                planValue: Number(plan.price),
+                description: `Assinatura WhatSaas - Plano ${plan.name}`,
+                cycle: plan.billingCycle
+            });
+            tenant.asaasSubscriptionId = subRes.id;
+        }
 
-        // 3. Salvar ID da assinatura e plano atual como pendente/trial ou manter como está até pagar
-        tenant.asaasSubscriptionId = subRes.id;
+        // 3. Salvar ID da assinatura e plano atual
         tenant.planId = plan.id;
         // O status mudará para active APENAS quando o webhook confirmar o primeiro pagamento!
         await this.tenantRepo.save(tenant);
@@ -103,7 +134,7 @@ export class BillingController {
         const paymentInfo = await this.asaasService.getSubscriptionPaymentInfo(subRes.id);
 
         return {
-            message: 'Assinatura gerada com sucesso',
+            message: 'Assinatura processada com sucesso',
             invoiceUrl: paymentInfo?.invoiceUrl || subRes.invoiceUrl,
             bankSlipUrl: paymentInfo?.bankSlipUrl || subRes.bankSlipUrl,
             invoiceNumber: paymentInfo?.invoiceNumber || subRes.invoiceNumber

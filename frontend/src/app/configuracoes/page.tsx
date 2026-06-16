@@ -590,16 +590,37 @@ export default function SettingsPage() {
 
                             <div className="glass p-6 rounded-xl">
                                 <h2 className="text-xl font-semibold text-white mb-6">Método de Pagamento</h2>
-                                <div className="flex items-center gap-4 p-4 border border-[var(--border-subtle)] rounded-lg">
-                                    <div className="w-12 h-8 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold">
-                                        VISA
+                                {billingStatus?.creditCard ? (
+                                    <div className="flex items-center gap-4 p-4 border border-[var(--border-subtle)] rounded-lg">
+                                        <div className="w-12 h-8 bg-blue-600 rounded flex items-center justify-center text-white text-xs font-bold uppercase">
+                                            {billingStatus.creditCard.creditCardBrand || 'CARTÃO'}
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-medium text-white">•••• •••• •••• {billingStatus.creditCard.creditCardNumber?.slice(-4) || '****'}</p>
+                                            <p className="text-sm text-[var(--text-muted)]">Criptografado e Salvo no Asaas</p>
+                                        </div>
+                                        {billingStatus.updatePaymentUrl && (
+                                            <button 
+                                                className="text-[var(--primary)] hover:underline text-sm"
+                                                onClick={() => window.open(billingStatus.updatePaymentUrl, '_blank')}
+                                            >
+                                                Alterar
+                                            </button>
+                                        )}
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="font-medium text-white">•••• •••• •••• 4242</p>
-                                        <p className="text-sm text-[var(--text-muted)]">Expira 12/2025</p>
+                                ) : (
+                                    <div className="flex items-center justify-between p-4 border border-[var(--border-subtle)] rounded-lg">
+                                        <p className="text-[var(--text-muted)]">Nenhum cartão de crédito cadastrado.</p>
+                                        {billingStatus?.updatePaymentUrl && (
+                                            <button 
+                                                className="text-[var(--primary)] hover:underline text-sm"
+                                                onClick={() => window.open(billingStatus.updatePaymentUrl, '_blank')}
+                                            >
+                                                Adicionar Cartão
+                                            </button>
+                                        )}
                                     </div>
-                                    <button className="text-[var(--primary)] hover:underline text-sm">Alterar</button>
-                                </div>
+                                )}
                             </div>
                         </div>
                     )}

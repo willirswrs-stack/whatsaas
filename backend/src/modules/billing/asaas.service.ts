@@ -80,4 +80,45 @@ export class AsaasService {
             return null;
         }
     }
+
+    async getSubscription(subscriptionId: string) {
+        try {
+            const response = await fetch(`${this.baseUrl}/subscriptions/${subscriptionId}`, {
+                headers: this.headers
+            });
+            const result = await response.json();
+            if (!response.ok) throw new Error(result.errors?.[0]?.description || 'Falha ao buscar assinatura');
+            return result;
+        } catch (e) {
+            this.logger.error(`Erro getSubscription: ${e.message}`);
+            return null;
+        }
+    }
+
+    async updateSubscription(subscriptionId: string, data: { value: number; description: string; cycle?: string }) {
+        try {
+            this.logger.log(`Atualizando assinatura Asaas: ${subscriptionId}`);
+            const payload: any = {
+                value: data.value,
+                description: data.description,
+                updatePendingPayments: true // Update future charges
+            };
+            if (data.cycle) payload.cycle = data.cycle;
+            
+            const response = await fetch(`${this.baseUrl}/subscriptions/${subscriptionId}`, {
+                method: 'POST', // Asaas API uses POST to subscriptions/{id} for updates
+                headers: this.headers,
+                body: JSON.stringify(payload)
+            });
+
+            const result = await response.json();
+            if (!response.ok) {
+                throw new Error(result.errors?.[0]?.description || 'Falha ao atualizar assinatura');
+            }
+            return result;
+        } catch (e) {
+            this.logger.error(`Erro updateSubscription: ${e.message}`);
+            throw new HttpException(e.message, HttpStatus.BAD_REQUEST);
+        }
+    }
 }
