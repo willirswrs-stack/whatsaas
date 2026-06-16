@@ -3,7 +3,7 @@ import { OpenAIAdapter } from './openai.adapter';
 import { AnthropicAdapter } from './anthropic.adapter';
 import { GeminiAdapter } from './gemini.adapter';
 import { GroqAdapter } from './groq.adapter';
-import { ILLMProvider, LLMProviderInfo, LLMProviderType } from './llm-provider.interface';
+import { ILLMProvider, LLMProviderInfo, LLMProviderType, LLMOptions, LLMResponse } from './llm-provider.interface';
 
 export interface TenantLLMKeys {
     openaiKey?: string | null;
@@ -63,6 +63,51 @@ export class LLMProviderFactory {
             default:
                 throw new Error(`Provider ${type} não suportado`);
         }
+    }
+
+    /**
+     * Orquestra a geração de texto utilizando fallbacks em cascata em caso de falha.
+     */
+    async generateWithFallback(preferredType: LLMProviderType, prompt: string, options?: LLMOptions): Promise<LLMResponse> {
+        let preferredProvider: ILLMProvider | null = null;
+        try {
+            preferredProvider = this.getProvider(preferredType);
+        } catch (e) {
+            // Ignora erro se o provider não existir
+        }
+
+        if (preferredProvider && preferredProvider.isConfigured()) {
+            try {
+                return await preferredProvider.generate(prompt, options);
+            } catch (error) {
+                this.logger.warn(`Provider preferencial '${preferredType}' falhou (${error.message}). Iniciando fallbacks em cascata...`);
+            }
+        } else {
+            this.logger.warn(`Provider preferencial '${preferredType}' não está configurado. Iniciando fallbacks em cascata...`);
+        }
+
+        // Tentar fallbacks na ordem de segurança/estabilidade
+        const fallbackOrder: LLMProviderType[] = ['openai', 'gemini', 'anthropic', 'groq'];
+        for (const type of fallbackOrder) {
+            if (type === preferredType) continue; // Já tentou ou pulou
+
+            try {
+                const fallbackProvider = this.getProvider(type);
+                if (fallbackProvider && fallbackProvider.isConfigured()) {
+                    this.logger.log(`Tentando fallback com o provedor: ${type}...`);
+                    // Removemos a opção 'model' porque os provedores têm nomes de modelo diferentes
+                    // e deixar o model do preferencial faria o fallback quebrar.
+                    const fallbackOptions = { ...options };
+                    delete fallbackOptions.model;
+                    
+                    return await fallbackProvider.generate(prompt, fallbackOptions);
+                }
+            } catch (fallbackError) {
+                this.logger.warn(`Fallback '${type}' falhou: ${fallbackError.message}`);
+            }
+        }
+
+        throw new Error('Todos os provedores de LLM falharam ou não estão configurados adequadamente.');
     }
 
     /**

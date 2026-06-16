@@ -216,14 +216,8 @@ export class AiService {
             });
 
             const providerType = (globalSettings.globalLlmProvider || 'openai') as LLMProviderType;
-            const provider = this.providerFactory.getProvider(providerType);
 
-            if (!provider || !provider.isConfigured()) {
-                this.logger.warn(`Provider ${providerType} não configurado para Warmup. Usando mock.`);
-                return this.getMockConversation(options.messageCount);
-            }
-
-            const response = await provider.generate(userPrompt, {
+            const response = await this.providerFactory.generateWithFallback(providerType, userPrompt, {
                 model: globalSettings.globalLlmModel,
                 temperature: 0.9,
                 systemPrompt: WARMUP_CONVERSATION_SYSTEM_PROMPT,
@@ -548,12 +542,6 @@ export class AiService {
 
             // 3. Obter o provider configurado
             const providerType = (globalSettings.globalLlmProvider || 'openai') as LLMProviderType;
-            const provider = this.providerFactory.getProvider(providerType);
-
-            if (!provider || !provider.isConfigured()) {
-                this.logger.warn(`Provider ${providerType} não configurado. Usando mock.`);
-                return this.getMockSupportResponse(userMessage);
-            }
 
             // 4. Montar o prompt incluindo o histórico
             let prompt = '';
@@ -567,7 +555,7 @@ export class AiService {
             }
             prompt += `Usuário: ${userMessage}\nAssistente:`;
 
-            const response = await provider.generate(prompt, {
+            const response = await this.providerFactory.generateWithFallback(providerType, prompt, {
                 model: globalSettings.globalLlmModel,
                 temperature: globalSettings.globalLlmTemperature ?? 0.7,
                 maxTokens: globalSettings.globalLlmMaxTokens ?? 1024,
