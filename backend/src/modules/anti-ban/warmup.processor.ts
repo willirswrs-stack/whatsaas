@@ -82,6 +82,25 @@ export class WarmupProcessor extends WorkerHost {
         this.logger.log(`💌 Sending Warmup Message: ${instanceName} -> ${toPhone} (provider: ${resolvedProvider})`);
 
         try {
+            // VERIFICAÇÃO DE SEGURANÇA 1: O remetente ainda está conectado?
+            if (instanceId) {
+                const sender = await this.instanceRepo.findOne({ where: { id: instanceId } });
+                if (!sender || sender.status !== 'connected') {
+                    this.logger.warn(`🛑 Remetente ${instanceName} não está conectado (Status: ${sender?.status}). Abortando envio para evitar falhas.`);
+                    return { success: false, reason: 'sender_disconnected' };
+                }
+            }
+
+            // VERIFICAÇÃO DE SEGURANÇA 2: O destinatário ainda está conectado?
+            // Enviar mensagens repetidas para um número desconectado gera um padrão robótico no WhatsApp (apenas 1 check)
+            if (toPhone) {
+                const receiver = await this.instanceRepo.findOne({ where: { phone: toPhone } });
+                if (!receiver || receiver.status !== 'connected') {
+                    this.logger.warn(`🛑 Destinatário ${toPhone} (${receiver?.instanceName || 'Desconhecido'}) não está conectado. Abortando envio para proteger o remetente contra banimento.`);
+                    return { success: false, reason: 'receiver_disconnected' };
+                }
+            }
+
             const client = this.whatsappFactory.getProvider(resolvedProvider);
 
             // --- [PREVENÇÃO ATIVA] ---
