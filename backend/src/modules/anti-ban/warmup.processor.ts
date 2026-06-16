@@ -103,10 +103,23 @@ export class WarmupProcessor extends WorkerHost {
 
             const client = this.whatsappFactory.getProvider(resolvedProvider);
 
+            // VERIFICAÇÃO DE SEGURANÇA 3: O provedor (Evolution/WAHA) concorda que está conectado? (À prova de falhas de webhook)
+            try {
+                const senderStatus = await client.getStatus(instanceName);
+                if (senderStatus.status !== 'connected') {
+                    this.logger.warn(`🛑 Remetente ${instanceName} consta como '${senderStatus.status}' diretamente no Provedor! Abortando envio.`);
+                    return { success: false, reason: 'sender_disconnected_provider' };
+                }
+            } catch (e) {
+                this.logger.warn(`🛑 Falha ao checar status do remetente no provedor: ${e.message}. Abortando por segurança.`);
+                return { success: false, reason: 'provider_check_failed' };
+            }
+
             // --- [PREVENÇÃO ATIVA] ---
             // 1. Simular comportamento humano (Presença/Digitação)
             const timing = this.humanBehavior.generateTimingMetadata(content);
             this.logger.log(`🎭 [Prevenção] ${instanceName} digitando por ${timing.typingDurationMs}ms...`);
+
             
             await client.sendPresence(instanceName, toPhone, 'composing', timing.typingDurationMs);
 

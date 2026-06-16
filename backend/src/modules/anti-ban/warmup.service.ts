@@ -566,6 +566,20 @@ export class WarmupService {
         let index = 0;
 
         for (const msg of conversation) {
+            // REAL-TIME SAFETY CHECK: Verify if both instances are still connected before sending the next message
+            const currentA = await this.instanceRepo.findOne({ where: { id: instA.id } });
+            const currentB = await this.instanceRepo.findOne({ where: { id: instB.id } });
+
+            if (!currentA || currentA.status !== 'connected' || !currentB || currentB.status !== 'connected') {
+                this.logger.warn(`[LIVE] Aborting live session mid-way! One of the instances disconnected. A: ${currentA?.status}, B: ${currentB?.status}`);
+                this.eventsGateway.emitToTenant(tenantId, 'warmup:live-end', {
+                    sessionId,
+                    totalSent: index,
+                    reason: 'instance_disconnected'
+                });
+                break;
+            }
+
             const sender = msg.role === 'A' ? instA : instB;
             const receiver = msg.role === 'A' ? instB : instA;
             const provider = sender.provider || 'evolution';
@@ -587,6 +601,17 @@ export class WarmupService {
             try {
                 const client = this.whatsappFactory.getProvider(provider);
                 
+                // Double check directly with the provider (safeguard if DB is out of sync)
+                try {
+                    const senderStatus = await client.getStatus(sender.instanceName);
+                    if (senderStatus.status !== 'connected') {
+                        throw new Error(`Provider reports sender ${sender.instanceName} is not connected (${senderStatus.status})`);
+                    }
+                } catch (e) {
+                    this.logger.warn(`[LIVE] Sender provider check failed: ${e.message}`);
+                    throw e; // skip this message
+                }
+
                 if (msg.isAudio) {
                     // 🎙️ RITUAL DO ÁUDIO REAL:
                     this.logger.log(`[LIVE] Generating real voice audio for message index ${index}`);
