@@ -422,16 +422,61 @@ export class AiService {
     private getMockConversation(messageCount: number): WarmupConversation[] {
         const conversation: WarmupConversation[] = [];
         
-        const greetingsA = ['E aí, tudo bem?', 'Opa, como estão as coisas?', 'Fala! Tudo certo?', 'Bom dia, tranquilo?'];
-        const responsesB = ['Tudo ótimo! E vc?', 'Correndo por aqui, mas bem. E aí?', 'Tudo na paz! Novidades?', 'Tranquilo! Trabalhando muito?'];
-        const topicsA = ['De boa, trabalhando aqui', 'Tudo certo, resolvendo umas coisas', 'Tranquilo também.', 'Correria de sempre rs'];
-        const reactB = ['Sei como é haha', 'Pois é, não tá fácil!', 'Faz parte né', 'Verdade!'];
-        const questionA = ['Viu o jogo ontem?', 'Assistiu aquele filme novo?', 'Como foi o final de semana?', 'Ficou sabendo daquela notícia?'];
-        const answerB = ['Vi sim, que jogo!', 'Ainda não, é bom?', 'Foi massa, descansei bastante', 'Nem vi, estava por fora'];
-        const commentA = ['Demais né, gostei bastante', 'Aham, recomendo muito', 'Que bom! Precisava disso', 'Te mando o link depois'];
-        const commentB = ['Sim, curti demais', 'Me manda sim!', 'Boa! Combinado', 'Fechou!'];
-        const inviteA = ['Bora sair final de semana?', 'Vamos marcar uma call depois?', 'Topa um café amanhã?', 'Vamos nos falando!'];
-        const acceptB = ['Bora! Chama o pessoal', 'Claro, só me dar um toque', 'Super topo! Te aviso o horário', 'Beleza, um abraço!'];
+        // Arrays grandemente expandidos para evitar repetição massiva de mensagens
+        const greetingsA = [
+            'E aí, tudo bem?', 'Opa, como estão as coisas?', 'Fala! Tudo certo?', 'Bom dia, tranquilo?', 
+            'Boa tarde! Como vc ta?', 'E ai sumido, tudo bem?', 'Opa joia?', 'Oi! Td bem por aí?',
+            'Fala meu querido, beleza?', 'Opa, bão?', 'E ai cara, tranquilo?', 'Boa noite, tudo certo?'
+        ];
+        const responsesB = [
+            'Tudo ótimo! E vc?', 'Correndo por aqui, mas bem. E aí?', 'Tudo na paz! Novidades?', 
+            'Tranquilo! Trabalhando muito?', 'De boa aqui, e contigo?', 'Tudo joia! Como andam as coisas?',
+            'Na correria, mas td bem', 'Tudo certo por aqui', 'Tranquilão, e com você?', 'Tudo ótimo, graças a Deus'
+        ];
+        const topicsA = [
+            'De boa, trabalhando aqui', 'Tudo certo, resolvendo umas coisas', 'Tranquilo também.', 
+            'Correria de sempre rs', 'Muitos pepinos pra resolver kkk', 'De boa na lagoa',
+            'Só trabalhando muito', 'Aqui tá tranquilo demais hoje', 'Cansado, mas vamos que vamos',
+            'Na mesma rotina de sempre'
+        ];
+        const reactB = [
+            'Sei como é haha', 'Pois é, não tá fácil!', 'Faz parte né', 'Verdade!',
+            'Nossa, nem me fale', 'É a vida né', 'Kkkkkk boto fé', 'Complicado...',
+            'Pelo menos tá fluindo', 'Kkkkk nossa senhora'
+        ];
+        const questionA = [
+            'Viu o jogo ontem?', 'Assistiu aquele filme novo?', 'Como foi o final de semana?', 
+            'Ficou sabendo daquela notícia?', 'Tem feito algo de bom?', 'Tá acompanhando a série?',
+            'Viu que doideira que rolou hoje?', 'Já almoçou?', 'Vai fazer o que hoje à noite?',
+            'Como tá a família?'
+        ];
+        const answerB = [
+            'Vi sim, que jogo!', 'Ainda não, é bom?', 'Foi massa, descansei bastante', 
+            'Nem vi, estava por fora', 'Pior que não tive tempo', 'Sim, mt bom!',
+            'Fiquei sabendo sim, loucura né', 'Ainda vou, tô enrolado aqui', 'Acho que vou ficar em casa',
+            'Tudo ótimo por lá'
+        ];
+        const commentA = [
+            'Demais né, gostei bastante', 'Aham, recomendo muito', 'Que bom! Precisava disso', 
+            'Te mando o link depois', 'Pois é, bizarro', 'Kkkkk depois a gente fala disso',
+            'Boa, vai na fé', 'Aham, vou fazer isso tb', 'Legal! Depois me conta',
+            'Show de bola'
+        ];
+        const commentB = [
+            'Sim, curti demais', 'Me manda sim!', 'Boa! Combinado', 'Fechou!',
+            'Pode deixar', 'Anotado aqui', 'Demorou', 'Massa!',
+            'Isso aí', 'Valeu!'
+        ];
+        const inviteA = [
+            'Bora sair final de semana?', 'Vamos marcar uma call depois?', 'Topa um café amanhã?', 
+            'Vamos nos falando!', 'Vou dar uma saída aqui, dps a gente se fala', 'Qualquer coisa me grita',
+            'Abração, se cuida', 'Bora almoçar um dia desses', 'Vou focar aqui agora, abraço'
+        ];
+        const acceptB = [
+            'Bora! Chama o pessoal', 'Claro, só me dar um toque', 'Super topo! Te aviso o horário', 
+            'Beleza, um abraço!', 'Falou, bom trabalho aí', 'Abraço, fica com Deus',
+            'Demorou, abraço!', 'Pode deixar. Falou!', 'Bora, depois combinamos certinho'
+        ];
 
         // Pick random items to build a unique flow
         const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
@@ -441,12 +486,12 @@ export class AiService {
             { role: 'B', content: pick(responsesB), isAudio: false },
             { role: 'A', content: pick(topicsA), isAudio: false },
             { role: 'B', content: pick(reactB), isAudio: false },
-            { role: 'A', content: pick(questionA), isAudio: Math.random() > 0.7 },
+            { role: 'A', content: pick(questionA), isAudio: Math.random() > 0.85 },
             { role: 'B', content: pick(answerB), isAudio: false },
             { role: 'A', content: pick(commentA), isAudio: false },
             { role: 'B', content: pick(commentB), isAudio: false },
             { role: 'A', content: pick(inviteA), isAudio: false },
-            { role: 'B', content: pick(acceptB), isAudio: Math.random() > 0.7 },
+            { role: 'B', content: pick(acceptB), isAudio: Math.random() > 0.85 },
         ];
 
         for (let i = 0; i < messageCount; i++) {

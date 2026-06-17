@@ -287,11 +287,22 @@ export class WarmupService {
                     const key = [chip.id, partner.id].sort().join(':');
                     
                     // We also need a probability check to distribute messages across the day.
-                    // If it runs every 5 mins, that's 288 times a day.
-                    // If a chip needs to send 50 messages, the probability per 5 mins is 50 / 288 ≈ 17%.
-                    const remainingLimit = (chip.dailyLimit || 50) - (chip.dailySent || 0);
-                    // Assume 16 hours of active day (96 slots of 5 mins)
-                    const probability = Math.min(1.0, remainingLimit / 96);
+                    const remainingLimit = Math.max(0, (chip.dailyLimit || 50) - (chip.dailySent || 0));
+                    
+                    // Se o limite restante for nulo, pular
+                    if (remainingLimit <= 0) continue;
+                    
+                    // Assumindo sessões curtas de em média 4 mensagens
+                    const messagesPerSession = 4;
+                    const sessionsNeeded = remainingLimit / messagesPerSession;
+                    
+                    // 16 horas de atividade por dia divididas em slots de 5 minutos = 192 slots
+                    const slotsInDay = 192;
+                    
+                    // Limitar a probabilidade de entrar em sessão em cada slot a um máximo (ex: 20%) 
+                    // para evitar filas contínuas e envio sem parar.
+                    const rawProbability = sessionsNeeded / slotsInDay;
+                    const probability = Math.min(0.20, rawProbability);
                     
                     if (Math.random() > probability) {
                         // Skip this pair for now to distribute traffic
@@ -389,7 +400,7 @@ export class WarmupService {
             conversation = await this.aiService.generateWarmupConversation(
                 tenantId,
                 {
-                    messageCount: Math.floor(Math.random() * 8) + 8, // 8-15 messages (more than before)
+                    messageCount: Math.floor(Math.random() * 3) + 3, // 3-5 mensagens (conversas curtas e naturais)
                     topics: randomTopics,
                     niche: niche || undefined,
                 }
@@ -430,8 +441,8 @@ export class WarmupService {
                 const timing = this.humanBehavior.generateTimingMetadata(msg.content);
                 accumulatedDelay += timing.totalWaitMs;
 
-                // Add extra buffer (random 10-45s) for more natural pacing
-                accumulatedDelay += Math.floor(Math.random() * 35000) + 10000;
+                // Add extra buffer (random 30-90s) for more natural pacing and to break robotic patterns
+                accumulatedDelay += Math.floor(Math.random() * 60000) + 30000;
 
                 await this.warmupQueue.add(
                     'execute-warmup-message',
