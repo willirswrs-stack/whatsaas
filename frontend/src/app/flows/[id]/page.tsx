@@ -1038,11 +1038,7 @@ function MediaUploadArea({
         formData.append('file', file);
 
         try {
-            const response = await api.post('/uploads/media', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
+            const response = await api.post('/uploads/media', formData);
 
             return response.data.url;
         } catch (error: any) {

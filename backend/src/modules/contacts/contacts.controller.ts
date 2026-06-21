@@ -78,12 +78,13 @@ export class ContactsController {
     async importFromWhatsApp(
         @Request() req, 
         @Body('instanceId') instanceId: string,
-        @Body('includeGroups') includeGroups?: boolean
+        @Body('includeGroups') includeGroups?: boolean,
+        @Body('tagIds') tagIds?: string[]
     ) {
         if (!instanceId) {
             throw new BadRequestException('ID da instância é obrigatório');
         }
-        return this.contactsService.importFromWhatsApp(req.user.tenantId, instanceId, includeGroups);
+        return this.contactsService.importFromWhatsApp(req.user.tenantId, instanceId, includeGroups, tagIds);
     }
 
     @Post('import/file')

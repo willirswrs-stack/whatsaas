@@ -310,10 +310,12 @@ export default function ContactsPage() {
     const [instances, setInstances] = useState<any[]>([]);
     const [isLoadingInstances, setIsLoadingInstances] = useState(false);
     const [importIncludeGroups, setImportIncludeGroups] = useState(false);
+    const [importTagIds, setImportTagIds] = useState<string[]>([]);
 
     const handleOpenInstanceModal = async () => {
         setIsLoadingInstances(true);
         setShowInstanceModal(true);
+        setImportTagIds([]);
         try {
             // Import instancesService dynamically
             const { instancesService } = await import('@/lib/instances');
@@ -337,7 +339,7 @@ export default function ContactsPage() {
         try {
             setIsImportingWA(true);
             setShowInstanceModal(false);
-            const result = await contactsApi.importFromWhatsApp(instanceId, importIncludeGroups);
+            const result = await contactsApi.importFromWhatsApp(instanceId, importIncludeGroups, importTagIds);
             alert(`Importação Concluída!\n\nNovos contatos: ${result.imported}\nContatos já existentes ignorados: ${result.skipped || 0}\nErros: ${result.errors?.length || 0}`);
             loadContacts();
             loadStats();
@@ -1063,7 +1065,7 @@ export default function ContactsPage() {
                             </div>
 
                             <div className="mt-4 p-4 bg-[var(--bg-secondary)] rounded-lg border border-[var(--border-color)]">
-                                <label className="flex items-start gap-3 cursor-pointer">
+                                <label className="flex items-start gap-3 cursor-pointer mb-4">
                                     <div className="pt-1">
                                         <input 
                                             type="checkbox" 
@@ -1079,6 +1081,47 @@ export default function ContactsPage() {
                                         </div>
                                     </div>
                                 </label>
+
+                                <div className="border-t border-[var(--border-color)] pt-4">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <div className="font-medium text-sm">Adicionar Tags aos Importados</div>
+                                        <button
+                                            type="button"
+                                            onClick={handleCreateTag}
+                                            className="text-xs text-[var(--primary)] hover:underline"
+                                        >
+                                            + Nova Tag
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2 max-h-[120px] overflow-y-auto">
+                                        {tags.map(tag => {
+                                            const isSelected = importTagIds.includes(tag.id);
+                                            return (
+                                                <button
+                                                    key={tag.id}
+                                                    onClick={() => {
+                                                        setImportTagIds(prev =>
+                                                            isSelected
+                                                                ? prev.filter(id => id !== tag.id)
+                                                                : [...prev, tag.id]
+                                                        );
+                                                    }}
+                                                    className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${isSelected ? 'ring-2 ring-offset-1' : 'opacity-60'}`}
+                                                    style={{
+                                                        backgroundColor: `${tag.color}20`,
+                                                        color: tag.color,
+                                                        borderColor: tag.color
+                                                    }}
+                                                >
+                                                    {tag.name}
+                                                </button>
+                                            );
+                                        })}
+                                        {tags.length === 0 && (
+                                            <span className="text-xs text-[var(--text-muted)]">Nenhuma tag cadastrada.</span>
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div className="flex justify-end gap-3 mt-6">

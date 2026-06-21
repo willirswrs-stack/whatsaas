@@ -190,9 +190,7 @@ export const campaignsService = {
     async importContacts(file: File): Promise<{ imported: number; failed: number }> {
         const formData = new FormData();
         formData.append('file', file);
-        const response = await api.post<{ imported: number; failed: number }>('/campaigns/contacts/import', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        const response = await api.post<{ imported: number; failed: number }>('/campaigns/contacts/import', formData);
         return response.data;
     },
 

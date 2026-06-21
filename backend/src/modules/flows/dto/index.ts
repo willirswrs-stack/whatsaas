@@ -12,6 +12,10 @@ export class CreateFlowDto {
 
     @IsString()
     @IsOptional()
+    category?: string;
+
+    @IsString()
+    @IsOptional()
     channel?: string;
 
     @IsArray()
@@ -32,6 +36,10 @@ export class UpdateFlowDto {
     @IsString()
     @IsOptional()
     description?: string;
+
+    @IsString()
+    @IsOptional()
+    category?: string;
 
     @IsString()
     @IsOptional()

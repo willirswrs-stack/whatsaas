@@ -132,17 +132,13 @@ export const contactsApi = {
     async importContactsFile(file: File): Promise<{ imported: number; skipped: number; errors: string[] }> {
         const formData = new FormData();
         formData.append('file', file);
-        const response = await api.post('/contacts/import/file', formData, {
-            headers: {
-                'Content-Type': 'multipart/form-data',
-            },
-        });
+        const response = await api.post('/contacts/import/file', formData);
         return response.data;
     },
 
-    async importFromWhatsApp(instanceId: string, includeGroups?: boolean): Promise<{ imported: number; skipped: number; errors: string[] }> {
+    async importFromWhatsApp(instanceId: string, includeGroups?: boolean, tagIds?: string[]): Promise<{ imported: number; skipped: number; errors: string[] }> {
         try {
-            const response = await api.post('/contacts/import/whatsapp', { instanceId, includeGroups }, { timeout: 300000 });
+            const response = await api.post('/contacts/import/whatsapp', { instanceId, includeGroups, tagIds }, { timeout: 300000 });
             return response.data;
         } catch (error) {
             throw error;

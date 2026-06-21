@@ -491,7 +491,7 @@ export class ContactsService {
         return results;
     }
 
-    async importFromWhatsApp(tenantId: string, instanceId: string, includeGroups?: boolean) {
+    async importFromWhatsApp(tenantId: string, instanceId: string, includeGroups?: boolean, tagIds?: string[]) {
         const instance = await this.instanceRepository.findOne({ where: { id: instanceId, tenantId } });
         if (!instance) {
             throw new NotFoundException('Instância não encontrada');
@@ -523,6 +523,7 @@ export class ContactsService {
                     contactsToImport.push({
                         phone: phone,
                         name: name,
+                        tagIds: tagIds && tagIds.length > 0 ? [...tagIds] : []
                     });
                 }
             }
@@ -567,10 +568,14 @@ export class ContactsService {
                         contactsToImport[existingIndex].tagIds.push(tagId);
                     }
                 } else {
+                    const allTags = tagIds ? [...tagIds] : [];
+                    if (tagId && !allTags.includes(tagId)) {
+                        allTags.push(tagId);
+                    }
                     contactsToImport.push({
                         phone: phone,
                         name: participant.name,
-                        tagIds: tagId ? [tagId] : []
+                        tagIds: allTags
                     });
                 }
             }
