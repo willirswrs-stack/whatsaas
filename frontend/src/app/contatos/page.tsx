@@ -202,6 +202,23 @@ export default function ContactsPage() {
         }
     };
 
+    const handleBulkDeleteByTags = async () => {
+        if (selectedTagIds.length === 0) return;
+        const tagNames = tags.filter(t => selectedTagIds.includes(t.id)).map(t => t.name).join(', ');
+        if (!confirm(`TEM CERTEZA?\n\nIsso excluirá TODOS os contatos (de todas as páginas) que possuam qualquer uma destas tags:\n${tagNames}`)) return;
+        
+        try {
+            const res = await contactsApi.bulkDeleteByTags(selectedTagIds);
+            alert(res.message || 'Contatos excluídos com sucesso.');
+            setSelectedContacts(new Set());
+            setSelectedTagIds([]);
+            loadContacts();
+            loadStats();
+        } catch (err: any) {
+            alert(err.response?.data?.message || 'Erro ao excluir contatos por tag');
+        }
+    };
+
     const handleCreateTag = () => {
         setEditingTag(null);
         setTagFormData({ name: '', color: '#a855f7', description: '' });
@@ -545,24 +562,39 @@ export default function ContactsPage() {
             </div>
 
             {/* Bulk Actions */}
-            {selectedContacts.size > 0 && (
+            {(selectedContacts.size > 0 || selectedTagIds.length > 0) && (
                 <div className="glass-card p-4 mb-4 flex items-center justify-between">
                     <span className="text-sm">
-                        <strong>{selectedContacts.size}</strong> contatos selecionados
+                        {selectedContacts.size > 0 ? (
+                            <><strong className="text-white">{selectedContacts.size}</strong> contatos selecionados</>
+                        ) : (
+                            <><strong className="text-white">Filtro de Tags ativo</strong> ({selectedTagIds.length} selecionada(s))</>
+                        )}
                     </span>
                     <div className="flex gap-2">
-                        <button
-                            onClick={() => setShowBulkTagModal(true)}
-                            className="btn btn-secondary text-sm py-2"
-                        >
-                            Adicionar Tags
-                        </button>
-                        <button
-                            onClick={handleBulkDelete}
-                            className="btn btn-ghost text-sm py-2 text-[var(--accent-danger)]"
-                        >
-                            Excluir Selecionados
-                        </button>
+                        {selectedContacts.size > 0 ? (
+                            <>
+                                <button
+                                    onClick={() => setShowBulkTagModal(true)}
+                                    className="btn btn-secondary text-sm py-2"
+                                >
+                                    Adicionar Tags
+                                </button>
+                                <button
+                                    onClick={handleBulkDelete}
+                                    className="btn btn-ghost text-sm py-2 text-[var(--accent-danger)]"
+                                >
+                                    Excluir Selecionados
+                                </button>
+                            </>
+                        ) : (
+                            <button
+                                onClick={handleBulkDeleteByTags}
+                                className="btn btn-ghost text-sm py-2 text-[var(--accent-danger)]"
+                            >
+                                Excluir Todos Desta Tag
+                            </button>
+                        )}
                     </div>
                 </div>
             )}

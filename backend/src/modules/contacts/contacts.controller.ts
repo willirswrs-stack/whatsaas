@@ -128,6 +128,12 @@ export class ContactsController {
         return this.contactsService.bulkDeleteContacts(req.user.tenantId, ids);
     }
 
+    @Post('bulk/delete-by-tags')
+    @HttpCode(HttpStatus.OK)
+    async bulkDeleteByTags(@Request() req, @Body('tagIds') tagIds: string[]) {
+        return this.contactsService.bulkDeleteContactsByTags(req.user.tenantId, tagIds);
+    }
+
     @Post('verify')
     @HttpCode(HttpStatus.OK)
     async verifyContacts(@Request() req, @Body() dto: VerifyContactsDto) {

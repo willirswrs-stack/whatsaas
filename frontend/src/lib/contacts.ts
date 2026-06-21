@@ -124,6 +124,11 @@ export const contactsApi = {
         await api.post('/contacts/bulk/delete', { ids });
     },
 
+    async bulkDeleteByTags(tagIds: string[]): Promise<{ message: string }> {
+        const response = await api.post('/contacts/bulk/delete-by-tags', { tagIds });
+        return response.data;
+    },
+
     async importContacts(contacts: CreateContactDto[]): Promise<{ imported: number; skipped: number; errors: string[] }> {
         const response = await api.post('/contacts/import', { contacts });
         return response.data;

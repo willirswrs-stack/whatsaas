@@ -307,6 +307,40 @@ export class ContactsService {
         return { message: `${ids.length} contatos excluídos` };
     }
 
+    async bulkDeleteContactsByTags(tenantId: string, tagIds: string[]) {
+        if (!tagIds || tagIds.length === 0) {
+            throw new BadRequestException('Nenhuma tag fornecida para exclusão em massa');
+        }
+
+        // Encontrar os contatos que possuem as tags selecionadas (qualquer uma delas)
+        const contactTags = await this.contactTagRepository.find({
+            where: { tagId: In(tagIds) },
+            select: ['contactId']
+        });
+
+        if (contactTags.length === 0) {
+            return { message: 'Nenhum contato encontrado com as tags informadas' };
+        }
+
+        // Extrair IDs únicos
+        const uniqueContactIds = [...new Set(contactTags.map(ct => ct.contactId))];
+
+        // Garantir que pertencem ao tenant correto
+        const contactsToDelete = await this.contactRepository.find({
+            where: { id: In(uniqueContactIds), tenantId },
+            select: ['id']
+        });
+
+        const idsToDelete = contactsToDelete.map(c => c.id);
+
+        if (idsToDelete.length === 0) {
+             return { message: 'Nenhum contato encontrado com as tags informadas neste tenant' };
+        }
+
+        // Chama a exclusão padrão e retorna a contagem
+        return this.bulkDeleteContacts(tenantId, idsToDelete);
+    }
+
     async importContacts(tenantId: string, contacts: CreateContactDto[]) {
         const results = { imported: 0, skipped: 0, errors: [] as string[] };
 
