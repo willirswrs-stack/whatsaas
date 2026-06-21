@@ -14,11 +14,11 @@ async function deploy() {
         console.log('Conectado via SSH!');
 
         console.log('\n--- ATUALIZANDO CODIGO ---');
-        let res = await ssh.execCommand('cd /root/whatsaas && git pull origin main');
+        let res = await ssh.execCommand('cd /var/www/whatsaas && git pull origin main');
         console.log(res.stdout || res.stderr);
 
         console.log('\n--- REBUILDANDO E REINICIANDO ---');
-        res = await ssh.execCommand('cd /root/whatsaas && docker compose -f docker-compose.prod.yml build && docker compose -f docker-compose.prod.yml up -d');
+        res = await ssh.execCommand('cd /var/www/whatsaas && docker compose -f docker-compose.prod.yml build frontend backend && docker compose -f docker-compose.prod.yml up -d');
         console.log(res.stdout || res.stderr);
 
         ssh.dispose();
