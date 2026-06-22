@@ -295,7 +295,7 @@ export default function CampaignsPage() {
                 flowId: newCampaign.flowId || undefined,
                 instanceId: newCampaign.instanceId || undefined,
                 contactIds: newCampaign.contactIds,
-                tagIds: selectedTagId ? [selectedTagId] : [],
+                tagIds: [],
                 aiSpinEnabled: newCampaign.aiSpinEnabled,
                 variationCount: newCampaign.variationCount,
                 minDelaySec: newCampaign.minDelaySec,
