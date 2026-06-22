@@ -9,6 +9,8 @@ export interface LLMApiKeys {
     geminiKey?: string;
     groqKey?: string;
     elevenLabsKey?: string;
+    customLlmKey?: string;
+    customLlmUrl?: string;
 }
 
 export interface GlobalConfig {
@@ -32,6 +34,8 @@ export interface GlobalConfig {
     geminiKey?: string;
     groqKey?: string;
     elevenLabsKey?: string;
+    customLlmKey?: string;
+    customLlmUrl?: string;
 }
 
 /** Tenant virtual usado para armazenar configurações globais da plataforma */
@@ -50,6 +54,8 @@ const GLOBAL_DEFAULTS: GlobalConfig = {
     agentPromptMain: 'Você é um assistente especialista em Marketing Digital e automação via WhatsApp. Ajude o usuário a configurar campanhas, criar fluxos e evitar banimentos.',
     agentPromptSpinner: 'Reescreva o texto fornecido de {count} formas diferentes, mantendo o significado original mas variando vocabulário e estrutura. Retorne apenas as variações, separadas por "---".',
     agentPromptAntiban: 'Você analisa mensagens de WhatsApp e reescreve de forma mais natural e humana, evitando padrões que podem ser detectados como spam. Mantenha o tom e a intenção original.',
+    customLlmKey: '',
+    customLlmUrl: '',
 };
 
 @Injectable()
@@ -76,8 +82,10 @@ export class SettingsService {
             geminiKey: settings.geminiKey ? this.maskKey(settings.geminiKey) : '',
             groqKey: settings.groqKey ? this.maskKey(settings.groqKey) : '',
             elevenLabsKey: settings.extraSettings?.elevenLabsKey ? this.maskKey(settings.extraSettings.elevenLabsKey) : '',
+            customLlmKey: settings.extraSettings?.customLlmKey ? this.maskKey(settings.extraSettings.customLlmKey) : '',
+            customLlmUrl: settings.extraSettings?.customLlmUrl || '',
             extraSettings: settings.extraSettings,
-        } as Partial<TenantSettings> & { elevenLabsKey?: string };
+        } as Partial<TenantSettings> & { elevenLabsKey?: string; customLlmKey?: string; customLlmUrl?: string };
     }
 
     async updateSettings(tenantId: string, data: {
@@ -86,6 +94,8 @@ export class SettingsService {
         geminiKey?: string;
         groqKey?: string;
         elevenLabsKey?: string;
+        customLlmKey?: string;
+        customLlmUrl?: string;
         extraSettings?: Record<string, any>;
     }): Promise<void> {
         let settings = await this.settingsRepo.findOne({ where: { tenantId } });
@@ -108,11 +118,17 @@ export class SettingsService {
             settings.groqKey = data.groqKey;
         }
 
-        // Tratar elevenLabsKey dentro de extraSettings
-        if (data.elevenLabsKey !== undefined) {
+        // Tratar elevenLabsKey e customLLM dentro de extraSettings
+        if (data.elevenLabsKey !== undefined || data.customLlmKey !== undefined || data.customLlmUrl !== undefined) {
             if (!settings.extraSettings) settings.extraSettings = {};
-            if (!data.elevenLabsKey.includes('*')) {
+            if (data.elevenLabsKey !== undefined && !data.elevenLabsKey.includes('*')) {
                 settings.extraSettings.elevenLabsKey = data.elevenLabsKey;
+            }
+            if (data.customLlmKey !== undefined && !data.customLlmKey.includes('*')) {
+                settings.extraSettings.customLlmKey = data.customLlmKey;
+            }
+            if (data.customLlmUrl !== undefined) {
+                settings.extraSettings.customLlmUrl = data.customLlmUrl;
             }
         }
 
@@ -149,6 +165,8 @@ export class SettingsService {
             geminiKey: config.geminiKey ? this.maskKey(config.geminiKey) : '',
             groqKey: config.groqKey ? this.maskKey(config.groqKey) : '',
             elevenLabsKey: config.elevenLabsKey ? this.maskKey(config.elevenLabsKey) : '',
+            customLlmKey: config.customLlmKey ? this.maskKey(config.customLlmKey) : '',
+            customLlmUrl: config.customLlmUrl || '',
         };
     }
 
@@ -186,6 +204,8 @@ export class SettingsService {
         if (data.geminiKey && !data.geminiKey.includes('*')) updated.geminiKey = data.geminiKey;
         if (data.groqKey && !data.groqKey.includes('*')) updated.groqKey = data.groqKey;
         if (data.elevenLabsKey && !data.elevenLabsKey.includes('*')) updated.elevenLabsKey = data.elevenLabsKey;
+        if (data.customLlmKey && !data.customLlmKey.includes('*')) updated.customLlmKey = data.customLlmKey;
+        if (data.customLlmUrl !== undefined) updated.customLlmUrl = data.customLlmUrl;
 
         systemSettings.globalConfig = updated;
         await this.settingsRepo.save(systemSettings);
@@ -201,13 +221,15 @@ export class SettingsService {
         const systemSettings = await this.settingsRepo.findOne({ where: { tenantId: SYSTEM_TENANT_ID } });
         const globalConfig = systemSettings?.globalConfig || {};
 
-        if (globalConfig.openaiKey || globalConfig.anthropicKey || globalConfig.geminiKey || globalConfig.groqKey) {
+        if (globalConfig.openaiKey || globalConfig.anthropicKey || globalConfig.geminiKey || globalConfig.groqKey || globalConfig.customLlmKey) {
             return {
                 openaiKey: globalConfig.openaiKey || undefined,
                 anthropicKey: globalConfig.anthropicKey || undefined,
                 geminiKey: globalConfig.geminiKey || undefined,
                 groqKey: globalConfig.groqKey || undefined,
                 elevenLabsKey: globalConfig.elevenLabsKey || undefined,
+                customLlmKey: globalConfig.customLlmKey || undefined,
+                customLlmUrl: globalConfig.customLlmUrl || undefined,
             };
         }
 
@@ -219,6 +241,8 @@ export class SettingsService {
             geminiKey: settings?.geminiKey || undefined,
             groqKey: settings?.groqKey || undefined,
             elevenLabsKey: settings?.extraSettings?.elevenLabsKey || undefined,
+            customLlmKey: settings?.extraSettings?.customLlmKey || undefined,
+            customLlmUrl: settings?.extraSettings?.customLlmUrl || undefined,
         };
     }
 

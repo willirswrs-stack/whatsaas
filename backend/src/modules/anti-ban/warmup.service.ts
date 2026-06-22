@@ -241,8 +241,42 @@ export class WarmupService {
             return { sessionsCreated: 0, reason: 'min_instances' };
         }
 
-        const clientChips = candidates.filter(i => !i.isSystemSeed);
-        const seedChips = candidates.filter(i => i.isSystemSeed);
+        // --- FILTRO DE MADRUGADA (EFEITO SONO) ---
+        // Calcula horário de dormir único por chip baseado no ID
+        const now = new Date();
+        const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+        const getSleepSchedule = (id: string) => {
+            // Usa o ID para gerar um número determinístico
+            let hash = 0;
+            for (let i = 0; i < id.length; i++) hash = Math.imul(31, hash) + id.charCodeAt(i) | 0;
+            hash = Math.abs(hash);
+            
+            // Dormir entre 22:00 (1320m) e 23:50 (1430m) = 110 min window
+            const sleepStart = 1320 + (hash % 110);
+            
+            // Acordar entre 07:00 (420m) e 08:30 (510m) = 90 min window
+            // Usa uma variação do hash para não ser exatamente o mesmo do dormir
+            const wakeUp = 420 + ((hash >> 2) % 90); 
+            
+            return { sleepStart, wakeUp };
+        };
+
+        const activeCandidates = candidates.filter(i => {
+            const { sleepStart, wakeUp } = getSleepSchedule(i.id);
+            // Verifica se está no período de sono
+            // (currentMinutes >= sleepStart) OU (currentMinutes < wakeUp)
+            const isSleeping = currentMinutes >= sleepStart || currentMinutes < wakeUp;
+            return !isSleeping;
+        });
+
+        if (activeCandidates.length < 2) {
+            this.logger.log(`A maioria das instâncias está dormindo. Ativas: ${activeCandidates.length}`);
+            return { sessionsCreated: 0, reason: 'sleeping' };
+        }
+
+        const clientChips = activeCandidates.filter(i => !i.isSystemSeed);
+        const seedChips = activeCandidates.filter(i => i.isSystemSeed);
 
         this.logger.log(`🔄 Gerando rede de conversação global: ${clientChips.length} Clientes, ${seedChips.length} Sementes`);
 

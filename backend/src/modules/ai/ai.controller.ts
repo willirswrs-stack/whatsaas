@@ -60,6 +60,14 @@ class SupportChatDto {
     history?: { role: 'user' | 'assistant'; content: string }[];
 }
 
+class CustomModelsDto {
+    @IsString()
+    baseUrl: string;
+
+    @IsString()
+    apiKey: string;
+}
+
 @ApiTags('ai')
 @ApiBearerAuth()
 @Controller('ai')
@@ -180,5 +188,37 @@ export class AiController {
             success: true,
             response
         };
+    }
+
+    @Post('custom-models')
+    @ApiOperation({ summary: 'Fetch available models from a custom OpenAI compatible endpoint' })
+    async fetchCustomModels(@Body() dto: CustomModelsDto) {
+        try {
+            // Utilizamos a biblioteca do OpenAI para pingar o endpoint customizado
+            // Instanciamos rapidamente sem passar pelo adapter factory
+            const OpenAI = require('openai').default || require('openai');
+            const client = new OpenAI({
+                baseURL: dto.baseUrl,
+                apiKey: dto.apiKey,
+                dangerouslyAllowBrowser: false,
+                timeout: 10000 // 10 seconds timeout
+            });
+
+            const models = await client.models.list();
+            
+            // Retorna a lista mapeada de forma simples para o frontend
+            return {
+                success: true,
+                models: models.data.map((m: any) => ({
+                    value: m.id,
+                    label: m.id
+                }))
+            };
+        } catch (error) {
+            return {
+                success: false,
+                error: error.message || 'Falha ao conectar na API Customizada'
+            };
+        }
     }
 }

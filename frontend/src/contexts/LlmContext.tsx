@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { authService } from '@/lib/auth';
 import api from '@/lib/api';
 
-export type LlmProvider = 'openai' | 'anthropic' | 'gemini' | 'groq';
+export type LlmProvider = 'openai' | 'anthropic' | 'gemini' | 'groq' | 'custom';
 
 export interface GlobalLlmConfig {
     provider: LlmProvider;
@@ -33,6 +33,7 @@ export const PROVIDER_LABELS: Record<LlmProvider, string> = {
     anthropic: 'Anthropic (Claude)',
     gemini: 'Google Gemini',
     groq: 'Groq',
+    custom: 'Custom API (OpenAI Compatible)',
 };
 
 /** Modelos disponíveis por provider */
@@ -58,6 +59,9 @@ export const PROVIDER_MODELS: Record<LlmProvider, { value: string; label: string
         { value: 'llama-3.1-8b-instant', label: 'LLaMA 3.1 8B (Ultra-rápido)' },
         { value: 'mixtral-8x7b-32768', label: 'Mixtral 8x7B' },
     ],
+    custom: [
+        { value: 'default', label: 'Carregando Modelos...' }
+    ]
 };
 
 const LlmContext = createContext<LlmContextType>({

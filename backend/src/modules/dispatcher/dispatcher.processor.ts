@@ -1169,12 +1169,21 @@ export class DispatcherProcessor extends WorkerHost {
         }
 
         if (this.eventsGateway) {
-            this.eventsGateway.emitToTenant(tenantId, 'dispatch.completed', {
-                campaignId,
-                success: job.returnvalue?.success ?? false,
-                result: job.returnvalue,
-                contact: contactDetails,
-            });
+            const success = job.returnvalue?.success ?? false;
+            if (success) {
+                this.eventsGateway.emitToTenant(tenantId, 'dispatch.completed', {
+                    campaignId,
+                    success,
+                    result: job.returnvalue,
+                    contact: contactDetails,
+                });
+            } else {
+                this.eventsGateway.emitToTenant(tenantId, 'dispatch.failed', {
+                    campaignId,
+                    error: job.returnvalue?.error || 'Unknown error',
+                    contact: contactDetails,
+                });
+            }
         }
     }
 

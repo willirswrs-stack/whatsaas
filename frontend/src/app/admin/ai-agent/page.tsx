@@ -29,6 +29,8 @@ interface GlobalSettings {
     geminiKey: string;
     groqKey: string;
     elevenLabsKey: string;
+    customLlmKey: string;
+    customLlmUrl: string;
 }
 
 const DEFAULT_SETTINGS: GlobalSettings = {
@@ -48,6 +50,8 @@ const DEFAULT_SETTINGS: GlobalSettings = {
     geminiKey: '',
     groqKey: '',
     elevenLabsKey: '',
+    customLlmKey: '',
+    customLlmUrl: '',
 };
 
 const WARMUP_PROFILES = [
@@ -63,7 +67,9 @@ export default function SuperAdminConfigPage() {
     const [settings, setSettings] = useState<GlobalSettings>(DEFAULT_SETTINGS);
     const [isSaving, setIsSaving] = useState(false);
     const [successMsg, setSuccessMsg] = useState('');
-    const [showKeys, setShowKeys] = useState({ openai: false, anthropic: false, gemini: false, groq: false, elevenLabs: false });
+    const [showKeys, setShowKeys] = useState({ openai: false, anthropic: false, gemini: false, groq: false, elevenLabs: false, customLlm: false });
+    const [customModels, setCustomModels] = useState<{value: string, label: string}[]>([]);
+    const [isLoadingModels, setIsLoadingModels] = useState(false);
 
     const loadSettings = useCallback(async () => {
         try {
@@ -81,8 +87,44 @@ export default function SuperAdminConfigPage() {
         }
     }, [successMsg]);
 
+    const fetchCustomModels = async () => {
+        if (!settings.customLlmUrl || !settings.customLlmKey) {
+            setSuccessMsg('❌ Preencha a URL Base e a API Key customizada primeiro.');
+            return;
+        }
+        setIsLoadingModels(true);
+        try {
+            const res = await api.post('/ai/custom-models', {
+                baseUrl: settings.customLlmUrl,
+                apiKey: settings.customLlmKey
+            });
+            if (res.data.success && res.data.models) {
+                setCustomModels(res.data.models);
+                setSuccessMsg('✅ Modelos carregados com sucesso!');
+                if (res.data.models.length > 0 && (!settings.globalLlmModel || settings.globalLlmModel === 'default')) {
+                    setSettings(s => ({ ...s, globalLlmModel: res.data.models[0].value }));
+                }
+            } else {
+                setSuccessMsg('❌ ' + (res.data.error || 'Erro ao carregar modelos'));
+            }
+        } catch (e: any) {
+            setSuccessMsg('❌ Falha na conexão com a API Customizada');
+        } finally {
+            setIsLoadingModels(false);
+        }
+    };
+
     // When provider changes, reset model to first option
     useEffect(() => {
+        if (settings.globalLlmProvider === 'custom') {
+            if (customModels.length > 0) {
+                setSettings(prev => ({ ...prev, globalLlmModel: customModels[0].value }));
+            } else {
+                setSettings(prev => ({ ...prev, globalLlmModel: 'default' }));
+            }
+            return;
+        }
+        
         const models = PROVIDER_MODELS[settings.globalLlmProvider];
         if (models && !models.find(m => m.value === settings.globalLlmModel)) {
             setSettings(prev => ({ ...prev, globalLlmModel: models[0].value }));
@@ -191,7 +233,11 @@ export default function SuperAdminConfigPage() {
                                     value={settings.globalLlmModel}
                                     onChange={e => setSettings(s => ({ ...s, globalLlmModel: e.target.value }))}
                                 >
-                                    {PROVIDER_MODELS[settings.globalLlmProvider]?.map(m => (
+                                    {settings.globalLlmProvider === 'custom' 
+                                        ? (customModels.length > 0 ? customModels.map(m => (
+                                            <option key={m.value} value={m.value}>{m.label}</option>
+                                          )) : <option value="default">Carregue os modelos primeiro...</option>)
+                                        : PROVIDER_MODELS[settings.globalLlmProvider]?.map(m => (
                                         <option key={m.value} value={m.value}>{m.label}</option>
                                     ))}
                                 </select>
@@ -241,6 +287,7 @@ export default function SuperAdminConfigPage() {
                             { key: 'geminiKey' as const, label: 'Google Gemini', icon: '✨', show: 'gemini' as const, hint: 'aistudio.google.com/app/apikey' },
                             { key: 'groqKey' as const, label: 'Groq', icon: '⚡', show: 'groq' as const, hint: 'console.groq.com/keys' },
                             { key: 'elevenLabsKey' as const, label: 'ElevenLabs (Voz)', icon: '🎙️', show: 'elevenLabs' as const, hint: 'elevenlabs.io/app/settings/api-keys' },
+                            { key: 'customLlmKey' as const, label: 'Custom API Key (OpenAI Compatible)', icon: '🔌', show: 'customLlm' as const, hint: 'Ex: OpenRouter, DeepSeek, TogetherAI' },
                         ].map(({ key, label, icon, show, hint }) => (
                             <div key={key}>
                                 <label className="flex items-center gap-2 text-sm font-medium mb-1.5">
@@ -269,6 +316,32 @@ export default function SuperAdminConfigPage() {
                                 </p>
                             </div>
                         ))}
+                        
+                        <div>
+                            <label className="flex items-center gap-2 text-sm font-medium mb-1.5">
+                                <span>🔗</span> Custom API Base URL
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="https://api.deepseek.com/v1"
+                                    className="input flex-1 font-mono text-sm"
+                                    value={settings.customLlmUrl}
+                                    onChange={e => setSettings(s => ({ ...s, customLlmUrl: e.target.value }))}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={fetchCustomModels}
+                                    disabled={isLoadingModels || !settings.customLlmUrl || !settings.customLlmKey}
+                                    className="px-4 py-2 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors text-sm font-medium disabled:opacity-50"
+                                >
+                                    {isLoadingModels ? 'Carregando...' : 'Carregar Modelos'}
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-[var(--text-muted)] mt-1">
+                                Opcional: Apenas para a Custom API. Adicione `/v1` no final se necessário.
+                            </p>
+                        </div>
                     </div>
                 </div>
             )}

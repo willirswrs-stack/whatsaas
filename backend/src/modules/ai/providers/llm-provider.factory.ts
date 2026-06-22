@@ -3,6 +3,7 @@ import { OpenAIAdapter } from './openai.adapter';
 import { AnthropicAdapter } from './anthropic.adapter';
 import { GeminiAdapter } from './gemini.adapter';
 import { GroqAdapter } from './groq.adapter';
+import { CustomOpenAIAdapter } from './custom-openai.adapter';
 import { ILLMProvider, LLMProviderInfo, LLMProviderType, LLMOptions, LLMResponse } from './llm-provider.interface';
 
 export interface TenantLLMKeys {
@@ -10,6 +11,8 @@ export interface TenantLLMKeys {
     anthropicKey?: string | null;
     geminiKey?: string | null;
     groqKey?: string | null;
+    customLlmKey?: string | null;
+    customLlmUrl?: string | null;
 }
 
 @Injectable()
@@ -20,12 +23,14 @@ export class LLMProviderFactory {
     private anthropicAdapter: AnthropicAdapter;
     private geminiAdapter: GeminiAdapter;
     private groqAdapter: GroqAdapter;
+    private customAdapter: CustomOpenAIAdapter;
 
     constructor() {
         this.openaiAdapter = new OpenAIAdapter();
         this.anthropicAdapter = new AnthropicAdapter();
         this.geminiAdapter = new GeminiAdapter();
         this.groqAdapter = new GroqAdapter();
+        this.customAdapter = new CustomOpenAIAdapter();
     }
 
     /**
@@ -44,6 +49,9 @@ export class LLMProviderFactory {
         if (keys.groqKey) {
             this.groqAdapter.configure(keys.groqKey);
         }
+        if (keys.customLlmKey && keys.customLlmUrl) {
+            this.customAdapter.configure(keys.customLlmKey, keys.customLlmUrl);
+        }
     }
 
     /**
@@ -60,6 +68,8 @@ export class LLMProviderFactory {
             case 'groq':
             case 'llama': // Llama é servido via Groq
                 return this.groqAdapter;
+            case 'custom':
+                return this.customAdapter;
             default:
                 throw new Error(`Provider ${type} não suportado`);
         }
@@ -86,24 +96,24 @@ export class LLMProviderFactory {
             this.logger.warn(`Provider preferencial '${preferredType}' não está configurado. Iniciando fallbacks em cascata...`);
         }
 
-        // Tentar fallbacks na ordem de segurança/estabilidade
-        const fallbackOrder: LLMProviderType[] = ['openai', 'gemini', 'anthropic', 'groq'];
-        for (const type of fallbackOrder) {
-            if (type === preferredType) continue; // Já tentou ou pulou
+        // Tentar fallbacks na ordem de segurança/estabilidade (Efeito Dominó dinâmico)
+        const allProviders = this.getAllProviders();
+        
+        for (const fallbackProvider of allProviders) {
+            if (fallbackProvider.id === preferredType) continue; // Já tentou ou pulou
 
-            try {
-                const fallbackProvider = this.getProvider(type);
-                if (fallbackProvider && fallbackProvider.isConfigured()) {
-                    this.logger.log(`Tentando fallback com o provedor: ${type}...`);
+            if (fallbackProvider.isConfigured()) {
+                try {
+                    this.logger.log(`Tentando fallback com o provedor: ${fallbackProvider.id}...`);
                     // Removemos a opção 'model' porque os provedores têm nomes de modelo diferentes
                     // e deixar o model do preferencial faria o fallback quebrar.
                     const fallbackOptions = { ...options };
                     delete fallbackOptions.model;
                     
                     return await fallbackProvider.generate(prompt, fallbackOptions);
+                } catch (fallbackError) {
+                    this.logger.warn(`Fallback '${fallbackProvider.id}' falhou: ${fallbackError.message}`);
                 }
-            } catch (fallbackError) {
-                this.logger.warn(`Fallback '${type}' falhou: ${fallbackError.message}`);
             }
         }
 
@@ -119,6 +129,7 @@ export class LLMProviderFactory {
             this.anthropicAdapter,
             this.geminiAdapter,
             this.groqAdapter,
+            this.customAdapter,
         ];
     }
 
@@ -165,6 +176,7 @@ export class LLMProviderFactory {
             anthropic: 'Claude 3.5 Sonnet, Opus - Raciocínio avançado',
             gemini: 'Gemini Pro, Flash - Grande contexto (2M tokens)',
             groq: 'Llama, Mixtral, Gemma - API ultra-rápida',
+            custom: 'URL customizada (OpenAI Compatible)',
         };
         return descriptions[id] || '';
     }
