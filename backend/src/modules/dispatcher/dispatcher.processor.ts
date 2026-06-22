@@ -580,6 +580,25 @@ export class DispatcherProcessor extends WorkerHost {
                     sendError.message
                 );
 
+                // ✅ FIX: Se a instância não existe mais na Evolution, marcar como desconectada no banco
+                // e NÃO re-throw (evita loop infinito de retentativas no BullMQ)
+                const isInstanceNotFound = sendError?.response?.status === 404
+                    || sendError?.message?.includes('404')
+                    || sendError?.message?.toLowerCase().includes('instance not found')
+                    || sendError?.message?.toLowerCase().includes('does not exist')
+                    || sendError?.message?.toLowerCase().includes('bad session')
+                    || sendError?.message?.toLowerCase().includes('no session');
+
+                if (isInstanceNotFound) {
+                    this.logger.warn(
+                        `🗑️ Instance ${instance.instanceName} returned "not found" during sendText. ` +
+                        `Marking as disconnected in DB. Contact ${campaignContactId} will be marked as failed (no retry).`
+                    );
+                    await this.instanceRepo.update(instance.id, { status: 'disconnected' as any });
+                    // Retorna failure sem re-throw para evitar retentativas infinitas
+                    return { success: false, error: 'INSTANCE_NOT_FOUND_IN_EVOLUTION' };
+                }
+
                 throw sendError;
             }
 
@@ -627,7 +646,47 @@ export class DispatcherProcessor extends WorkerHost {
         } catch (error) {
             this.logger.error(`❌ Failed to process ${campaignContactId}: ${error.message}`);
 
-            // Atualizar como falha
+            // ✅ FIX CRÍTICO: NO_AVAILABLE_INSTANCE não deve marcar contatos como failed.
+            // Significa que todos os chips estão offline/órfãos neste momento.
+            // A campanha deve ser PAUSADA e os contatos permanecem 'queued' para retomada posterior.
+            if (error.message === 'NO_AVAILABLE_INSTANCE') {
+                this.logger.warn(
+                    `⚠️ NO_AVAILABLE_INSTANCE para campanha ${campaignId}. ` +
+                    `Pausando campanha para evitar flood de falhas. Contato ${campaignContactId} permanece em fila.`
+                );
+
+                // Pausar a campanha automaticamente
+                try {
+                    await this.campaignRepo.update(campaignId, {
+                        status: 'paused',
+                        settings: {
+                            ...(await this.campaignRepo.findOne({ where: { id: campaignId }, select: ['settings'] }))?.settings,
+                            pausedReason: 'NO_AVAILABLE_INSTANCE',
+                            pausedAt: new Date().toISOString(),
+                        } as any,
+                    });
+
+                    // Emitir evento WebSocket para avisar o frontend
+                    if (this.eventsGateway) {
+                        const camp = await this.campaignRepo.findOne({ where: { id: campaignId }, select: ['tenantId', 'name'] });
+                        if (camp) {
+                            this.eventsGateway.emitToTenant(camp.tenantId, 'campaign.updated', {
+                                id: campaignId,
+                                status: 'paused',
+                                pausedReason: 'NO_AVAILABLE_INSTANCE',
+                                message: `Campanha "${camp.name}" pausada automaticamente: nenhum chip disponível ou conectado.`,
+                            });
+                        }
+                    }
+                } catch (pauseErr) {
+                    this.logger.error(`Falha ao pausar campanha ${campaignId}: ${pauseErr.message}`);
+                }
+
+                // NÃO re-throw — retornar sem marcar como failed para não poluir as métricas
+                return { success: false, error: 'NO_AVAILABLE_INSTANCE' };
+            }
+
+            // Para outros erros, marcar como falha normalmente
             await this.campaignContactRepo.update(campaignContactId, {
                 status: 'failed',
                 errorMessage: error.message,
@@ -647,11 +706,6 @@ export class DispatcherProcessor extends WorkerHost {
 
             // Verificar conclusão mesmo em caso de erro
             await this.checkCampaignCompletion(campaignId);
-
-            // Re-throw para BullMQ gerenciar retry
-            if (error.message === 'NO_AVAILABLE_INSTANCE') {
-                throw error;
-            }
 
             return {
                 success: false,
@@ -806,7 +860,7 @@ export class DispatcherProcessor extends WorkerHost {
                 });
 
                 if (!instance) {
-                    this.logger.warn(`🔄 Round-Robin: Instance ${candidateId} not found, skipping...`);
+                    this.logger.warn(`🔄 Round-Robin: Instance ${candidateId} not found in DB, skipping...`);
                     continue;
                 }
 
@@ -919,7 +973,7 @@ export class DispatcherProcessor extends WorkerHost {
         });
 
         if (!instance) {
-            this.logger.error(`Instance ${targetInstanceId} not found for tenant ${tenantId}`);
+            this.logger.error(`Instance ${targetInstanceId} not found in DB for tenant ${tenantId}`);
             return null;
         }
 
@@ -927,6 +981,7 @@ export class DispatcherProcessor extends WorkerHost {
             this.logger.warn(`Instance ${instance.instanceName} is not connected (status: ${instance.status})`);
             return null;
         }
+
 
         // === WARMUP LIMIT ENFORCEMENT (single instance) ===
         const { limit: effectiveLimit, isWarmupLimit } = this.getEffectiveLimit(instance);

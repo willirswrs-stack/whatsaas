@@ -27,6 +27,7 @@ const statusConfig: Record<string, { color: string; label: string; bg: string }>
     draft: { color: 'var(--text-muted)', label: 'Rascunho', bg: 'rgba(107, 101, 128, 0.15)' },
     paused: { color: '#fb923c', label: 'Pausada', bg: 'rgba(251, 146, 60, 0.15)' },
     cancelled: { color: 'var(--accent-danger)', label: 'Cancelada', bg: 'rgba(239, 68, 68, 0.15)' },
+    split: { color: '#a78bfa', label: 'Dividida', bg: 'rgba(167, 139, 250, 0.12)' },
 };
 
 export default function CampaignsPage() {
@@ -76,6 +77,13 @@ export default function CampaignsPage() {
     const [scheduleModal, setScheduleModal] = useState<{ campaignId: string; campaignName: string } | null>(null);
     const [scheduleDateTime, setScheduleDateTime] = useState('');
     const [isScheduling, setIsScheduling] = useState(false);
+    const [splitModal, setSplitModal] = useState<{ campaignId: string; campaignName: string; totalContacts: number } | null>(null);
+    const [splitBatchSize, setSplitBatchSize] = useState<number>(100);
+    const [splitCustomSize, setSplitCustomSize] = useState<string>('');
+    const [splitScheduleEnabled, setSplitScheduleEnabled] = useState(false);
+    const [splitFirstBatchAt, setSplitFirstBatchAt] = useState('');
+    const [splitIntervalHours, setSplitIntervalHours] = useState<number>(24);
+    const [isSplitting, setIsSplitting] = useState(false);
     const [metaVariables, setMetaVariables] = useState<Record<string, string>>({});
     const [metaMediaUrl, setMetaMediaUrl] = useState<string>('');
     const [contactSearch, setContactSearch] = useState('');
@@ -425,6 +433,37 @@ export default function CampaignsPage() {
         }
     };
 
+    const splitCampaign = async () => {
+        if (!splitModal) return;
+        const effectiveBatchSize = splitCustomSize ? parseInt(splitCustomSize, 10) : splitBatchSize;
+        if (!effectiveBatchSize || effectiveBatchSize < 10) {
+            setError('Tamanho do batch deve ser no mínimo 10.');
+            return;
+        }
+        try {
+            setIsSplitting(true);
+            setError('');
+            const body: any = { batchSize: effectiveBatchSize };
+            if (splitScheduleEnabled && splitFirstBatchAt) {
+                body.firstBatchAt = new Date(splitFirstBatchAt).toISOString();
+                body.intervalHours = splitIntervalHours;
+            }
+            const result = await api.post(`/campaigns/${splitModal.campaignId}/split`, body);
+            setSplitModal(null);
+            setSplitCustomSize('');
+            setSplitBatchSize(100);
+            setSplitScheduleEnabled(false);
+            setSplitFirstBatchAt('');
+            setSplitIntervalHours(24);
+            setSuccessMessage(`Campanha dividida em ${result.data.totalBatches} batches com sucesso!`);
+            await loadData();
+        } catch (err) {
+            setError(getErrorMessage(err));
+        } finally {
+            setIsSplitting(false);
+        }
+    };
+
     const scheduleCampaign = async () => {
         if (!scheduleModal || !scheduleDateTime) return;
         try {
@@ -657,6 +696,7 @@ export default function CampaignsPage() {
                     <option value="completed">Concluídas</option>
                     <option value="draft">Rascunhos</option>
                     <option value="cancelled">Canceladas</option>
+                    <option value="split">Divididas</option>
                 </select>
             </div>
 
@@ -733,6 +773,11 @@ export default function CampaignsPage() {
                                                             ? `Agendada: ${new Date(campaign.scheduledAt).toLocaleDateString()}`
                                                             : `Criada: ${new Date(campaign.createdAt).toLocaleDateString()}`}
                                                     </p>
+                                                    {campaign.status === 'paused' && campaign.settings?.pausedReason === 'NO_AVAILABLE_INSTANCE' && (
+                                                        <span className="inline-flex items-center gap-1 mt-1 text-[10px] font-medium px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-400 border border-orange-500/25">
+                                                            ⚠️ Pausada: sem chip conectado
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td>
@@ -902,6 +947,29 @@ export default function CampaignsPage() {
                                                             <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                                                 <path d="M3 3v18h18" />
                                                                 <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+                                                            </svg>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Split button - for draft campaigns with enough contacts */}
+                                                    {campaign.status === 'draft' && (campaign.totalContacts || 0) >= 50 && (
+                                                        <button
+                                                            className="p-2 rounded-lg hover:bg-violet-500/10 text-violet-400"
+                                                            title="Dividir em Batches"
+                                                            onClick={() => {
+                                                                const d = new Date();
+                                                                d.setDate(d.getDate() + 1);
+                                                                d.setHours(9, 0, 0, 0);
+                                                                const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+                                                                setSplitFirstBatchAt(iso);
+                                                                setSplitModal({ campaignId: campaign.id, campaignName: campaign.name, totalContacts: campaign.totalContacts || 0 });
+                                                            }}
+                                                        >
+                                                            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                                <path d="M16 3h5v5" />
+                                                                <path d="M8 3H3v5" />
+                                                                <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3" />
+                                                                <path d="m15 9 6-6" />
                                                             </svg>
                                                         </button>
                                                     )}
@@ -2034,6 +2102,239 @@ export default function CampaignsPage() {
                     </div>
                 </div>
             )}
+
+            {/* ── Modal de Split em Batches ── */}
+            {splitModal && (() => {
+                const effectiveBatchSize = splitCustomSize ? (parseInt(splitCustomSize, 10) || 0) : splitBatchSize;
+                const totalBatches = effectiveBatchSize >= 10 ? Math.ceil(splitModal.totalContacts / effectiveBatchSize) : 0;
+                const lastBatchSize = effectiveBatchSize >= 10 ? (splitModal.totalContacts % effectiveBatchSize || effectiveBatchSize) : 0;
+
+                // Gerar preview do agendamento
+                const schedulePreview: { batch: number; dateStr: string }[] = [];
+                if (splitScheduleEnabled && splitFirstBatchAt && totalBatches > 0) {
+                    for (let i = 0; i < Math.min(totalBatches, 6); i++) {
+                        const d = new Date(splitFirstBatchAt);
+                        d.setTime(d.getTime() + i * splitIntervalHours * 3600 * 1000);
+                        schedulePreview.push({
+                            batch: i + 1,
+                            dateStr: d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }),
+                        });
+                    }
+                }
+
+                return (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                        <div className="glass-card p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                            {/* Header */}
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="w-12 h-12 rounded-full bg-violet-500/20 flex items-center justify-center shrink-0">
+                                    <svg className="w-6 h-6 text-violet-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                        <path d="M16 3h5v5" />
+                                        <path d="M8 3H3v5" />
+                                        <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3" />
+                                        <path d="m15 9 6-6" />
+                                    </svg>
+                                </div>
+                                <div className="min-w-0">
+                                    <h2 className="text-lg font-bold text-[var(--text-primary)]">Dividir em Batches</h2>
+                                    <p className="text-sm text-[var(--text-muted)] truncate">{splitModal.campaignName}</p>
+                                    <p className="text-xs text-violet-400 mt-0.5">{splitModal.totalContacts.toLocaleString()} contatos no total</p>
+                                </div>
+                            </div>
+
+                            {/* Quick sizes */}
+                            <div className="mb-5">
+                                <label className="label mb-3 block">Tamanho do Batch</label>
+                                <div className="flex gap-2 mb-3">
+                                    {[50, 100, 250].map(size => (
+                                        <button
+                                            key={size}
+                                            onClick={() => { setSplitBatchSize(size); setSplitCustomSize(''); }}
+                                            className={`flex-1 py-2.5 rounded-lg text-sm font-semibold border transition-all ${
+                                                !splitCustomSize && splitBatchSize === size
+                                                    ? 'bg-violet-500/20 border-violet-500/60 text-violet-300'
+                                                    : 'bg-[var(--bg-tertiary)] border-[var(--border)] text-[var(--text-secondary)] hover:border-violet-500/40'
+                                            }`}
+                                        >
+                                            {size}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-[var(--text-muted)] shrink-0">Ou personalizado:</span>
+                                    <input
+                                        type="number"
+                                        min={10}
+                                        max={splitModal.totalContacts}
+                                        placeholder="Ex: 75"
+                                        className="input flex-1 py-2 text-sm"
+                                        value={splitCustomSize}
+                                        onChange={e => setSplitCustomSize(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Preview */}
+                            {effectiveBatchSize >= 10 && totalBatches > 0 && (
+                                <div className="mb-5 p-4 rounded-xl bg-violet-500/8 border border-violet-500/25">
+                                    <p className="text-sm font-semibold text-violet-300 mb-1">
+                                        📊 Prévia da Divisão
+                                    </p>
+                                    <p className="text-sm text-[var(--text-secondary)]">
+                                        Serão criados <strong className="text-violet-300">{totalBatches} batch{totalBatches !== 1 ? 'es' : ''}</strong>:
+                                    </p>
+                                    <ul className="mt-2 space-y-0.5">
+                                        {totalBatches <= 5 ? (
+                                            Array.from({ length: totalBatches }, (_, i) => {
+                                                const size = i === totalBatches - 1 ? lastBatchSize : effectiveBatchSize;
+                                                return (
+                                                    <li key={i} className="text-xs text-[var(--text-muted)] flex items-center gap-2">
+                                                        <span className="w-5 h-5 rounded-full bg-violet-500/20 flex items-center justify-center text-[10px] text-violet-400 font-bold shrink-0">{i + 1}</span>
+                                                        Batch {i + 1}: {size.toLocaleString()} contato{size !== 1 ? 's' : ''}
+                                                    </li>
+                                                );
+                                            })
+                                        ) : (
+                                            <>
+                                                <li className="text-xs text-[var(--text-muted)] flex items-center gap-2">
+                                                    <span className="w-5 h-5 rounded-full bg-violet-500/20 flex items-center justify-center text-[10px] text-violet-400 font-bold shrink-0">1</span>
+                                                    Batch 1 ao {totalBatches - 1}: {effectiveBatchSize.toLocaleString()} contatos cada
+                                                </li>
+                                                <li className="text-xs text-[var(--text-muted)] flex items-center gap-2">
+                                                    <span className="w-5 h-5 rounded-full bg-violet-500/20 flex items-center justify-center text-[10px] text-violet-400 font-bold shrink-0">{totalBatches}</span>
+                                                    Batch {totalBatches} (último): {lastBatchSize.toLocaleString()} contato{lastBatchSize !== 1 ? 's' : ''}
+                                                </li>
+                                            </>
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+
+                            {/* Auto-schedule toggle */}
+                            <div className="mb-4">
+                                <button
+                                    type="button"
+                                    onClick={() => setSplitScheduleEnabled(v => !v)}
+                                    className={`flex items-center gap-3 w-full p-3 rounded-xl border transition-all ${
+                                        splitScheduleEnabled
+                                            ? 'bg-amber-500/10 border-amber-500/40'
+                                            : 'bg-[var(--bg-tertiary)] border-[var(--border)] hover:border-amber-500/30'
+                                    }`}
+                                >
+                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+                                        splitScheduleEnabled ? 'bg-amber-500 border-amber-500' : 'border-[var(--border)]'
+                                    }`}>
+                                        {splitScheduleEnabled && (
+                                            <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                                                <polyline points="20 6 9 17 4 12" />
+                                            </svg>
+                                        )}
+                                    </div>
+                                    <div className="text-left">
+                                        <p className="text-sm font-medium text-[var(--text-primary)]">Agendar batches automaticamente</p>
+                                        <p className="text-xs text-[var(--text-muted)]">Define data/hora para cada batch com intervalo fixo</p>
+                                    </div>
+                                </button>
+                            </div>
+
+                            {/* Schedule options (conditional) */}
+                            {splitScheduleEnabled && (
+                                <div className="mb-5 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-4">
+                                    <div>
+                                        <label className="label mb-1.5 block text-xs">📅 Data/hora do Batch 1</label>
+                                        <input
+                                            type="datetime-local"
+                                            className="input w-full text-sm"
+                                            value={splitFirstBatchAt}
+                                            min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                                            onChange={e => setSplitFirstBatchAt(e.target.value)}
+                                            style={{ colorScheme: 'dark' }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="label mb-1.5 block text-xs">⏱ Intervalo entre batches (horas)</label>
+                                        <div className="flex gap-2">
+                                            {[12, 24, 48].map(h => (
+                                                <button
+                                                    key={h}
+                                                    onClick={() => setSplitIntervalHours(h)}
+                                                    className={`flex-1 py-2 rounded-lg text-xs font-semibold border transition-all ${
+                                                        splitIntervalHours === h
+                                                            ? 'bg-amber-500/20 border-amber-500/60 text-amber-300'
+                                                            : 'bg-[var(--bg-tertiary)] border-[var(--border)] text-[var(--text-secondary)]'
+                                                    }`}
+                                                >
+                                                    {h}h
+                                                </button>
+                                            ))}
+                                            <input
+                                                type="number"
+                                                min={1}
+                                                max={720}
+                                                className="input flex-1 py-1.5 text-xs text-center"
+                                                value={splitIntervalHours}
+                                                onChange={e => setSplitIntervalHours(parseInt(e.target.value) || 24)}
+                                                placeholder="hrs"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Timeline preview */}
+                                    {schedulePreview.length > 0 && (
+                                        <div>
+                                            <p className="text-xs text-amber-400 font-medium mb-2">📆 Cronograma:</p>
+                                            <div className="space-y-1.5">
+                                                {schedulePreview.map(({ batch, dateStr }) => (
+                                                    <div key={batch} className="flex items-center gap-2 text-xs">
+                                                        <span className="w-16 text-amber-300/80 font-medium shrink-0">Batch {batch}</span>
+                                                        <div className="flex-1 h-px bg-amber-500/20" />
+                                                        <span className="text-[var(--text-muted)] font-mono shrink-0">{dateStr}</span>
+                                                    </div>
+                                                ))}
+                                                {totalBatches > 6 && (
+                                                    <p className="text-xs text-[var(--text-muted)] text-center pt-1">
+                                                        ... e mais {totalBatches - 6} batch{totalBatches - 6 !== 1 ? 'es' : ''}
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Warning */}
+                            <div className="mb-6 p-3 rounded-lg bg-[var(--bg-tertiary)] border border-[var(--border)]">
+                                <p className="text-xs text-[var(--text-muted)]">
+                                    ⚠️ Após dividir, a campanha original ficará com status <strong className="text-violet-400">Dividida</strong> e não poderá ser disparada diretamente. Cada batch é uma campanha independente.
+                                </p>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="flex gap-3">
+                                <button
+                                    className="btn btn-secondary flex-1"
+                                    onClick={() => { setSplitModal(null); setSplitCustomSize(''); setSplitBatchSize(100); setSplitScheduleEnabled(false); }}
+                                    disabled={isSplitting}
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    className="btn flex-1 text-white font-semibold"
+                                    style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
+                                    onClick={splitCampaign}
+                                    disabled={isSplitting || !totalBatches || totalBatches < 2}
+                                >
+                                    {isSplitting
+                                        ? '✂️ Dividindo...'
+                                        : totalBatches >= 2
+                                            ? `✂️ Criar ${totalBatches} Batches`
+                                            : 'Defina um tamanho válido'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
         </div>
     );
 }

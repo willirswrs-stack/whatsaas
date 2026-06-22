@@ -21,7 +21,6 @@ import { AiService } from '../ai/ai.service';
 import { DispatcherService } from '../dispatcher/dispatcher.service';
 import { SettingsService } from '../settings/settings.service';
 import { SCHEDULER_QUEUE } from '../../config/bull.config';
-import { WhatsAppProviderFactory } from '../whatsapp/whatsapp-provider.factory';
 
 @Injectable()
 export class CampaignsService {
@@ -46,7 +45,6 @@ export class CampaignsService {
         @Inject(forwardRef(() => SettingsService))
         private settingsService: SettingsService,
         private readonly contactsService: ContactsService,
-        private whatsAppFactory: WhatsAppProviderFactory,
     ) { }
 
     async findAll(tenantId: string, query?: PaginationQueryDto) {
@@ -239,45 +237,23 @@ export class CampaignsService {
             }
         }
 
-        // Verificar se pelo menos uma instância está conectada (com validação real no provedor)
+        // Verificar se pelo menos uma instância está conectada (usando status do banco, sincronizado pelo monitor)
         const instanceIds = campaign.instanceIds?.length > 0 ? campaign.instanceIds : (campaign.instanceId ? [campaign.instanceId] : []);
         if (instanceIds.length > 0) {
-            let connectedCount = 0;
             const instances = await this.campaignRepo.manager.getRepository(Instance).find({
                 where: { id: In(instanceIds) }
             });
 
-            for (const instance of instances) {
-                try {
-                    const provider = this.whatsAppFactory.getProvider(instance.provider as any);
-                    const status = await provider.getStatus(instance.instanceName);
-                    
-                    const mappedStatus = status.status as unknown as InstanceStatus;
-                    if (instance.status !== mappedStatus) {
-                        instance.status = mappedStatus;
-                        if (mappedStatus === InstanceStatus.CONNECTED) {
-                            instance.connectedAt = new Date();
-                        }
-                        await this.campaignRepo.manager.getRepository(Instance).save(instance);
-                    }
-                    
-                    if (mappedStatus === InstanceStatus.CONNECTED) {
-                        connectedCount++;
-                    }
-                } catch (err) {
-                    this.logger.warn(`Falha ao obter status real da instância ${instance.instanceName}: ${err.message}`);
-                    // Fallback para o status atual no banco
-                    if (instance.status === InstanceStatus.CONNECTED) {
-                        connectedCount++;
-                    }
-                }
+            const connectedInstances = instances.filter(i => i.status === InstanceStatus.CONNECTED);
+
+            if (connectedInstances.length === 0) {
+                throw new BadRequestException(
+                    'Nenhum chip/número configurado para esta campanha está conectado. ' +
+                    'Por favor, conecte o chip antes de iniciar o disparo.'
+                );
             }
 
-            if (connectedCount === 0) {
-                throw new BadRequestException('Nenhum chip/número configurado para esta campanha está conectado. Por favor, conecte o chip antes de iniciar o disparo.');
-            } else {
-                this.logger.log(`✅ ${connectedCount}/${instanceIds.length} instâncias conectadas para campanha ${id}`);
-            }
+            this.logger.log(`✅ ${connectedInstances.length}/${instanceIds.length} instâncias conectadas para campanha ${id}`);
         }
 
         // Se não tem variações, criar variações (APENAS se não for campanha de fluxo)
@@ -483,6 +459,168 @@ export class CampaignsService {
         this.logger.log(`📋 Campaign ${id} duplicated as ${savedCampaign.id} with ${originalContacts.length} contacts`);
 
         return savedCampaign;
+    }
+
+    /**
+     * Subdivide uma campanha em batches (sub-campanhas) menores.
+     * A campanha original é marcada como 'split' e não pode mais ser disparada diretamente.
+     * Cada batch é uma campanha independente com todos os mesmos settings.
+     *
+     * @param batchSize - Número de contatos por batch (mínimo 10)
+     * @param scheduleOptions - Agendamento automático dos batches (opcional)
+     */
+    async splitIntoBatches(
+        id: string,
+        tenantId: string,
+        batchSize: number,
+        scheduleOptions?: {
+            firstBatchAt: string;   // ISO date/time do primeiro batch
+            intervalHours: number;  // Horas entre cada batch
+        }
+    ) {
+        if (batchSize < 10) {
+            throw new BadRequestException('O tamanho do batch deve ser no mínimo 10 contatos.');
+        }
+
+        const campaign = await this.findOne(id, tenantId);
+
+        if (campaign.status !== 'draft') {
+            throw new BadRequestException(
+                `Apenas campanhas em rascunho (draft) podem ser divididas em batches. ` +
+                `Status atual: "${campaign.status}".`
+            );
+        }
+
+        // Buscar todos os contatos pendentes
+        const allContacts = await this.campaignContactRepo.find({
+            where: { campaignId: id, status: 'queued' },
+            select: ['contactId'],
+            order: { createdAt: 'ASC' },
+        });
+
+        if (allContacts.length === 0) {
+            throw new BadRequestException('Campanha não tem contatos para dividir.');
+        }
+
+        // Dividir em chunks
+        const chunks: string[][] = [];
+        for (let i = 0; i < allContacts.length; i += batchSize) {
+            chunks.push(allContacts.slice(i, i + batchSize).map(cc => cc.contactId));
+        }
+
+        const totalBatches = chunks.length;
+        this.logger.log(
+            `✂️ Dividindo campanha "${campaign.name}" (${allContacts.length} contatos) em ` +
+            `${totalBatches} batches de ~${batchSize} contatos.`
+        );
+
+        // Calcular datas de agendamento se solicitado
+        let firstBatchDate: Date | null = null;
+        if (scheduleOptions?.firstBatchAt) {
+            firstBatchDate = new Date(scheduleOptions.firstBatchAt);
+            if (isNaN(firstBatchDate.getTime())) {
+                throw new BadRequestException('Data de agendamento inválida para o primeiro batch.');
+            }
+            if (firstBatchDate <= new Date()) {
+                throw new BadRequestException('A data do primeiro batch deve estar no futuro.');
+            }
+        }
+
+        const createdBatches: Campaign[] = [];
+
+        for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+            const contactIds = chunks[batchIndex];
+            const batchNumber = batchIndex + 1;
+            const batchName = `${campaign.name} – Batch ${batchNumber}/${totalBatches}`;
+
+            // Calcular scheduledAt para este batch
+            let scheduledAt: Date | null = null;
+            if (firstBatchDate && scheduleOptions) {
+                scheduledAt = new Date(firstBatchDate);
+                scheduledAt.setTime(
+                    scheduledAt.getTime() + batchIndex * (scheduleOptions.intervalHours || 24) * 3600 * 1000
+                );
+            }
+
+            // Criar a sub-campanha
+            const batchCampaign = this.campaignRepo.create({
+                tenantId,
+                name: batchName,
+                templateId: campaign.templateId,
+                flowId: campaign.flowId,
+                instanceId: campaign.instanceId,
+                instanceIds: campaign.instanceIds,
+                status: scheduledAt ? 'scheduled' : 'draft',
+                aiSpinEnabled: campaign.aiSpinEnabled,
+                variationCount: campaign.variationCount,
+                minDelayMs: campaign.minDelayMs,
+                maxDelayMs: campaign.maxDelayMs,
+                settings: campaign.settings,
+                targetingRules: campaign.targetingRules,
+                totalContacts: contactIds.length,
+                parentCampaignId: id,
+                scheduledAt: scheduledAt ?? undefined,
+            });
+
+            const savedBatch = await this.campaignRepo.save(batchCampaign);
+
+            // Criar campaign_contacts para este batch (em chunks de 500 para evitar query gigante)
+            const insertChunkSize = 500;
+            for (let j = 0; j < contactIds.length; j += insertChunkSize) {
+                const contactChunk = contactIds.slice(j, j + insertChunkSize);
+                const campaignContacts = contactChunk.map(contactId =>
+                    this.campaignContactRepo.create({
+                        campaignId: savedBatch.id,
+                        contactId,
+                        status: 'queued',
+                    })
+                );
+                await this.campaignContactRepo.save(campaignContacts);
+            }
+
+            // Se agendado, enfileirar no scheduler
+            if (scheduledAt) {
+                const delay = scheduledAt.getTime() - Date.now();
+                if (delay > 0) {
+                    await this.schedulerQueue.add(
+                        'start-campaign',
+                        { campaignId: savedBatch.id, tenantId },
+                        { delay, jobId: `schedule-campaign-${savedBatch.id}` }
+                    );
+                    this.logger.log(
+                        `⏰ Batch ${batchNumber}/${totalBatches} agendado para ${scheduledAt.toISOString()}`
+                    );
+                }
+            }
+
+            createdBatches.push(savedBatch);
+            this.logger.log(
+                `✅ Batch ${batchNumber}/${totalBatches} criado: "${batchName}" ` +
+                `(${contactIds.length} contatos, ID: ${savedBatch.id})`
+            );
+        }
+
+        // Marcar campanha original como 'split' para impedir disparo direto
+        await this.campaignRepo.update(id, { status: 'split' });
+
+        this.logger.log(
+            `🎉 Campanha "${campaign.name}" dividida em ${totalBatches} batches com sucesso!`
+        );
+
+        return {
+            originalCampaignId: id,
+            totalBatches,
+            totalContacts: allContacts.length,
+            batchSize,
+            batches: createdBatches.map((b, i) => ({
+                id: b.id,
+                name: b.name,
+                totalContacts: b.totalContacts,
+                status: b.status,
+                scheduledAt: b.scheduledAt ?? null,
+                batchNumber: i + 1,
+            })),
+        };
     }
 
     // Templates

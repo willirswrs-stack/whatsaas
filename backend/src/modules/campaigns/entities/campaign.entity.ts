@@ -72,7 +72,10 @@ export class Campaign {
     instanceIds: string[];
 
     @Column({ default: 'draft' })
-    status: string; // 'draft', 'scheduled', 'running', 'paused', 'completed', 'cancelled'
+    status: string; // 'draft', 'scheduled', 'running', 'paused', 'completed', 'cancelled', 'split'
+
+    @Column({ name: 'parent_campaign_id', nullable: true })
+    parentCampaignId: string;
 
     @Column({ name: 'ai_spin_enabled', default: true })
     aiSpinEnabled: boolean;

@@ -4,7 +4,7 @@ import api from './api';
 export interface Campaign {
     id: string;
     name: string;
-    status: 'draft' | 'scheduled' | 'running' | 'paused' | 'completed' | 'cancelled';
+    status: 'draft' | 'scheduled' | 'running' | 'paused' | 'completed' | 'cancelled' | 'split';
     templateId?: string;
     flowId?: string;
     instanceId?: string;

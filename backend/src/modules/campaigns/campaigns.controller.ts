@@ -281,6 +281,30 @@ export class CampaignsController {
         return this.campaignsService.duplicate(id, tenantId);
     }
 
+    @Post(':id/split')
+    @ApiOperation({ summary: 'Split campaign into batches' })
+    async split(
+        @Param('id') id: string,
+        @Body() body: {
+            batchSize: number;
+            firstBatchAt?: string;
+            intervalHours?: number;
+        },
+        @CurrentTenant() tenantId: string,
+    ) {
+        if (!body.batchSize || body.batchSize < 10) {
+            throw new BadRequestException('batchSize deve ser um número maior ou igual a 10.');
+        }
+        return this.campaignsService.splitIntoBatches(
+            id,
+            tenantId,
+            body.batchSize,
+            body.firstBatchAt
+                ? { firstBatchAt: body.firstBatchAt, intervalHours: body.intervalHours || 24 }
+                : undefined,
+        );
+    }
+
     @Delete(':id')
     @ApiOperation({ summary: 'Delete campaign' })
     async delete(
