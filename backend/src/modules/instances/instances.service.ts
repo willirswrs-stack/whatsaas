@@ -389,6 +389,13 @@ export class InstancesService {
             if (!instance.chipDetail) {
                 instance.chipDetail = new ChipDetail();
             }
+            // Sanitize empty strings for dates
+            if (data.chipDetails.rechargeDate === '') {
+                data.chipDetails.rechargeDate = null;
+            }
+            if (data.chipDetails.expirationDate === '') {
+                data.chipDetails.expirationDate = null;
+            }
             Object.assign(instance.chipDetail, data.chipDetails);
             delete data.chipDetails;
         }
