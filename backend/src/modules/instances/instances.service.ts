@@ -6,6 +6,7 @@ import { SocksProxyAgent } from 'socks-proxy-agent';
 import { HttpsProxyAgent } from 'https-proxy-agent';
 
 import { Instance } from './entities/instance.entity';
+import { ChipDetail } from './entities/chip-detail.entity';
 import { Tenant } from '../tenants/entities/tenant.entity';
 import { WhatsAppProviderFactory, ProviderType } from '../whatsapp';
 import { InstanceStatus } from '../../common/enums/instance-status.enum';
@@ -357,7 +358,7 @@ export class InstancesService {
         }
     }
 
-    async update(id: string, tenantId: string, data: Partial<Instance>) {
+    async update(id: string, tenantId: string, data: Partial<Instance> & { chipDetails?: any }) {
         const instance = await this.findOne(id, tenantId);
         
         // Manter integridade de metadados anteriores e mesclar novos configurações
@@ -367,6 +368,15 @@ export class InstancesService {
                 ...currentMeta,
                 ...data.metaConfig
             };
+        }
+
+        // Atualizar ou criar detalhes do chip
+        if (data.chipDetails) {
+            if (!instance.chipDetail) {
+                instance.chipDetail = new ChipDetail();
+            }
+            Object.assign(instance.chipDetail, data.chipDetails);
+            delete data.chipDetails;
         }
 
         Object.assign(instance, data);

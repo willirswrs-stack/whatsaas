@@ -270,8 +270,11 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     }
 
     async sendText(instanceName: string, to: string, text: string): Promise<SendMessageResult> {
+        const resolvedNumber = await this.resolveAndValidateNumber(instanceName, to);
+        if (!resolvedNumber) throw new Error(`Number ${to} is not registered on WhatsApp`);
+
         const response = await this.request('POST', `/message/sendText/${instanceName}`, {
-            number: this.formatPhone(to),
+            number: resolvedNumber,
             text,
         });
 
@@ -289,9 +292,12 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     }): Promise<SendMessageResult> {
         // 🔥 CRÍTICO: Para Evolution v2, áudios reais (PTT/Mensagem de Voz) 
         // DEVEM usar o endpoint específico /message/sendWhatsAppAudio
+        const resolvedNumber = await this.resolveAndValidateNumber(instanceName, to);
+        if (!resolvedNumber) throw new Error(`Number ${to} is not registered on WhatsApp`);
+
         if (media.type === 'audio') {
             const response = await this.request('POST', `/message/sendWhatsAppAudio/${instanceName}`, {
-                number: this.formatPhone(to),
+                number: resolvedNumber,
                 audio: media.url,
                 options: {
                     delay: 1000, // Pequena simulação nativa
@@ -312,7 +318,7 @@ export class EvolutionAdapter implements IWhatsAppProvider {
         const extension = media.url.split('.').pop()?.split('?')[0] || (media.type === 'video' ? 'mp4' : media.type === 'image' ? 'jpg' : 'pdf');
 
         const response = await this.request('POST', `/message/sendMedia/${instanceName}`, {
-            number: this.formatPhone(to),
+            number: resolvedNumber,
             mediatype: media.type,
             media: media.url,
             caption: media.caption || '',
@@ -334,15 +340,18 @@ export class EvolutionAdapter implements IWhatsAppProvider {
         durationMs: number,
     ): Promise<void> {
         try {
+            const resolvedNumber = await this.resolveAndValidateNumber(instanceName, to);
+            if (!resolvedNumber) return;
+
             await this.request('POST', `/chat/presenceUpdate/${instanceName}`, {
-                number: this.formatPhone(to),
+                number: resolvedNumber,
                 presence: presence === 'paused' ? 'paused' : presence,
             });
 
             if (presence !== 'paused' && durationMs > 0) {
                 await this.sleep(durationMs);
                 await this.request('POST', `/chat/presenceUpdate/${instanceName}`, {
-                    number: this.formatPhone(to),
+                    number: resolvedNumber,
                     presence: 'paused',
                 });
             }
@@ -352,25 +361,73 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     }
 
     async isOnWhatsApp(instanceName: string, phone: string): Promise<boolean> {
+        const resolved = await this.resolveAndValidateNumber(instanceName, phone);
+        return !!resolved;
+    }
+
+    private async resolveAndValidateNumber(instanceName: string, phone: string): Promise<string | null> {
         try {
             const formatted = this.formatPhone(phone);
-            // Evolution API v2: POST /chat/whatsappNumbers/{instance} with body { numbers: ["55..."] }
+            
             const response = await this.request('POST', `/chat/whatsappNumbers/${instanceName}`, {
                 numbers: [formatted]
             });
 
-            // Response is array of objects: [{ number: '...', exists: true, jid: '...' }]
             if (Array.isArray(response) && response.length > 0) {
-                return response[0].exists === true;
+                const info = response[0];
+                if (info.exists === true) {
+                    // Extract the exact jid without @s.whatsapp.net to ensure delivery
+                    if (info.jid) {
+                        return info.jid.replace('@s.whatsapp.net', '');
+                    }
+                    return info.number || formatted;
+                }
+                
+                // --- 9TH DIGIT FALLBACK FOR BRAZILIAN NUMBERS ---
+                // Se a API disse que não existe, pode ser porque o WhatsApp removeu/adicionou o 9º dígito.
+                if (formatted.startsWith('55')) {
+                    let fallbackNumber: string | null = null;
+                    
+                    // Se tem 13 dígitos (com o 9), tenta sem o 9
+                    if (formatted.length === 13 && formatted[4] === '9') {
+                        fallbackNumber = formatted.substring(0, 4) + formatted.substring(5);
+                    } 
+                    // Se tem 12 dígitos (sem o 9), tenta com o 9
+                    else if (formatted.length === 12) {
+                        fallbackNumber = formatted.substring(0, 4) + '9' + formatted.substring(4);
+                    }
+
+                    if (fallbackNumber) {
+                        this.logger.log(`Number ${formatted} not found on WhatsApp. Trying fallback format ${fallbackNumber}...`);
+                        try {
+                            const fallbackResponse = await this.request('POST', `/chat/whatsappNumbers/${instanceName}`, {
+                                numbers: [fallbackNumber]
+                            });
+                            if (Array.isArray(fallbackResponse) && fallbackResponse.length > 0) {
+                                const fallbackInfo = fallbackResponse[0];
+                                if (fallbackInfo.exists === true) {
+                                    this.logger.log(`Fallback successful! Using ${fallbackInfo.number || fallbackNumber}`);
+                                    if (fallbackInfo.jid) {
+                                        return fallbackInfo.jid.replace('@s.whatsapp.net', '');
+                                    }
+                                    return fallbackInfo.number || fallbackNumber;
+                                }
+                            }
+                        } catch (fallbackError) {
+                            // Ignorar erro do fallback e retornar null
+                        }
+                    }
+                }
+                
+                return null; // Doesn't exist
             }
 
-            return false;
-        } catch (error) {
-            this.logger.error(`Error checking if ${phone} is on WhatsApp: ${error.message}`);
-            // If API fails, we assume true to allow trying to send (false negative is worse than false positive here?)
-            // OR we assume false to be safe? 
-            // Better to return false if we want strict filtering as requested by user.
-            return false;
+            // Fallback just in case endpoint fails to return expected array
+            return null;
+        } catch (error: any) {
+            this.logger.error(`Error resolving number ${phone} on ${instanceName}: ${error.message}`);
+            // If the Evolution API check fails (e.g. timeout), fallback to formatted to avoid blocking sends
+            return this.formatPhone(phone);
         }
     }
 
@@ -452,7 +509,26 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     }
 
     private formatPhone(phone: string): string {
-        return phone.replace(/\D/g, '');
+        let clean = phone.replace(/\D/g, '');
+        
+        // Se não tem DDI (ex: 11999999999), assume Brasil (55)
+        if (clean.length === 10 || clean.length === 11) {
+            clean = '55' + clean;
+        }
+
+        // Se tem DDI do Brasil (55), vamos checar o nono dígito
+        if (clean.startsWith('55')) {
+            const ddd = parseInt(clean.substring(2, 4));
+            
+            // Brasil: Se tem 12 dígitos (55 + DDD + 8 dígitos), adicionar o 9
+            if (clean.length === 12 && ddd >= 11 && ddd <= 99) {
+                const prefix = clean.substring(0, 4); // 55 + DDD
+                const suffix = clean.substring(4); // os 8 dígitos
+                clean = prefix + '9' + suffix;
+            }
+        }
+        
+        return clean;
     }
 
     private mapStatus(evolutionState: string): EnumInstanceStatus {

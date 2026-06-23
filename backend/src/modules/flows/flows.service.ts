@@ -1572,6 +1572,19 @@ export class FlowsService implements OnModuleInit {
                 data: { error: error.message }
             });
             await this.executionRepository.save(execution);
+
+            // Se for uma campanha, marca o contato como falho no DB
+            if (execution.variables?.campaignContactId) {
+                try {
+                    await this.campaignContactRepository.update(
+                        execution.variables.campaignContactId,
+                        { status: 'failed', errorMessage: error.message }
+                    );
+                    console.log(`[Flow] Campaign contact ${execution.variables.campaignContactId} marked as failed.`);
+                } catch (updateErr) {
+                    console.error(`[Flow] Failed to update campaign contact status:`, updateErr.message);
+                }
+            }
         }
     }
 

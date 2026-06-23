@@ -354,10 +354,19 @@ export class DispatcherProcessor extends WorkerHost {
                     warmupDelays.minSeconds,
                     warmupDelays.maxSeconds
                 );
-                const delayMs = Math.round(delaySeconds * 1000);
+                const baseDelayMs = Math.round(delaySeconds * 1000);
 
-                this.logger.log(`⏳ Flow Campaign: Waiting ${delayMs}ms (${(delayMs / 1000).toFixed(1)}s) before starting flow for contact ${contact.id} (Warmup Day: ${warmupDay}, Range: ${warmupDelays.minSeconds}s-${warmupDelays.maxSeconds}s)`);
-                await new Promise(resolve => setTimeout(resolve, delayMs));
+                const now = Date.now();
+                const lastPlannedTime = this.lastInstanceSendTime.get(instance.id) || 0;
+                const plannedTime = Math.max(now, lastPlannedTime + baseDelayMs);
+                this.lastInstanceSendTime.set(instance.id, plannedTime);
+                
+                const spacingDelayMs = plannedTime - now;
+
+                if (spacingDelayMs > 0) {
+                    this.logger.log(`⏳ Flow Campaign Spacing Delay: Instância ${instance.instanceName} ativa. Aguardando ${(spacingDelayMs / 1000).toFixed(1)}s antes de iniciar flow para ${contact.id} (Warmup Day: ${warmupDay})`);
+                    await new Promise(resolve => setTimeout(resolve, spacingDelayMs));
+                }
 
                 this.logger.log(`🌀 Executing Flow ${campaign.flowId} for contact ${contact.id}`);
 
@@ -372,13 +381,12 @@ export class DispatcherProcessor extends WorkerHost {
                         }
                     });
 
-                    // Atualizar status para sent (delegado para o fluxo) + salvar timing metadata
+                    // Atualizar status para processing (o fluxo se encarrega de setar sent ou failed) + salvar timing metadata
                     await this.campaignContactRepo.update(campaignContactId, {
-                        status: 'sent',
+                        status: 'processing',
                         instanceId: instance.id,
-                        sentAt: new Date(),
                         timingMetadata: {
-                            delayBeforeSendMs: delayMs,
+                            delayBeforeSendMs: spacingDelayMs,
                             warmupDay,
                             warmupDelayRange: `${warmupDelays.minSeconds}s-${warmupDelays.maxSeconds}s`,
                             stackUsed: instance.provider,
@@ -582,21 +590,27 @@ export class DispatcherProcessor extends WorkerHost {
 
                 // ✅ FIX: Se a instância não existe mais na Evolution, marcar como desconectada no banco
                 // e NÃO re-throw (evita loop infinito de retentativas no BullMQ)
-                const isInstanceNotFound = sendError?.response?.status === 404
-                    || sendError?.message?.includes('404')
-                    || sendError?.message?.toLowerCase().includes('instance not found')
-                    || sendError?.message?.toLowerCase().includes('does not exist')
-                    || sendError?.message?.toLowerCase().includes('bad session')
-                    || sendError?.message?.toLowerCase().includes('no session');
+                const msgLower = sendError?.message?.toLowerCase() || '';
 
-                if (isInstanceNotFound) {
-                    this.logger.warn(
-                        `🗑️ Instance ${instance.instanceName} returned "not found" during sendText. ` +
-                        `Marking as disconnected in DB. Contact ${campaignContactId} will be marked as failed (no retry).`
-                    );
+                // Evolution retorna "The \"X\" instance does not exist" quando o remetente não existe
+                const isSenderMissing = 
+                    msgLower.includes('instance does not exist') ||
+                    msgLower.includes('instance not found') ||
+                    msgLower.includes('bad session') ||
+                    msgLower.includes('no session');
+
+                if (isSenderMissing) {
+                    this.logger.warn(`🗑️ Instance ${instance.instanceName} returned "not found". Marking as disconnected in DB. Retrying contact with another chip...`);
                     await this.instanceRepo.update(instance.id, { status: 'disconnected' as any });
-                    // Retorna failure sem re-throw para evitar retentativas infinitas
-                    return { success: false, error: 'INSTANCE_NOT_FOUND_IN_EVOLUTION' };
+                    
+                    // Lança erro para o BullMQ retentar este contato (ele usará outro chip na próxima tentativa)
+                    throw new Error('SENDER_INSTANCE_NOT_FOUND');
+                }
+
+                // Evolution retorna 404 com outras mensagens (ex: "Not Found") quando o número de destino não tem WhatsApp
+                if (msgLower.includes('404')) {
+                    this.logger.warn(`🚫 Destinatário ${contact.phone} falhou com 404 (número inválido ou sem WhatsApp).`);
+                    throw new Error('DESTINATION_NUMBER_NOT_FOUND');
                 }
 
                 throw sendError;
@@ -686,6 +700,16 @@ export class DispatcherProcessor extends WorkerHost {
                 return { success: false, error: 'NO_AVAILABLE_INSTANCE' };
             }
 
+            // Se o chip morreu no meio do envio, reverter o contato para 'queued' para que outro chip assuma
+            if (error.message === 'SENDER_INSTANCE_NOT_FOUND') {
+                this.logger.warn(`♻️ Remetente indisponível. Revertendo contato ${campaignContactId} para 'queued'.`);
+                await this.campaignContactRepo.update(campaignContactId, {
+                    status: 'queued',
+                    instanceId: null as any,
+                });
+                return { success: false, error: 'SENDER_INSTANCE_NOT_FOUND' };
+            }
+
             // Para outros erros, marcar como falha normalmente
             await this.campaignContactRepo.update(campaignContactId, {
                 status: 'failed',
@@ -769,7 +793,7 @@ export class DispatcherProcessor extends WorkerHost {
      * Otherwise uses the configured dailyLimit.
      */
     private getEffectiveLimit(instance: Instance): { limit: number; isWarmupLimit: boolean } {
-        if (instance.warmupEnabled && instance.warmupDay !== undefined && instance.warmupDay > 0) {
+        if (instance.warmupEnabled && instance.warmupDay !== undefined && instance.warmupDay > 0 && instance.warmupDay <= 14) {
             const hasOverride = this.warmupOverrides.has(instance.id);
             if (!hasOverride) {
                 const warmupLimit = this.getWarmupDailyLimit(instance.warmupDay);

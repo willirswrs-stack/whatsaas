@@ -6,11 +6,13 @@ import {
     CreateDateColumn,
     ManyToOne,
     OneToMany,
+    OneToOne,
     JoinColumn,
     Index,
 } from 'typeorm';
 
 import { ProxyEntity } from '../../proxies/entities/proxy.entity';
+import { ChipDetail } from './chip-detail.entity';
 
 @Entity('instances')
 @Index(['tenantId', 'status'])
@@ -107,6 +109,12 @@ export class Instance {
 
     @OneToMany(() => WarmupSchedule, (schedule) => schedule.instance)
     warmupSchedules: WarmupSchedule[];
+
+    @OneToOne(() => ChipDetail, (chipDetail) => chipDetail.instance, {
+        cascade: true,
+        eager: true
+    })
+    chipDetail: ChipDetail;
 
     // Helper: Check if has capacity
     hasCapacity(): boolean {

@@ -1,9 +1,9 @@
-import { IsString, IsBoolean, IsOptional, IsObject } from 'class-validator';
-
+import { IsString, IsBoolean, IsOptional, IsObject, ValidateIf } from 'class-validator';
 export class UpdateInstanceDto {
     @IsOptional()
+    @ValidateIf((object, value) => value !== null)
     @IsString()
-    proxyId?: string;
+    proxyId?: string | null;
 
     @IsOptional()
     @IsBoolean()
@@ -23,6 +23,10 @@ export class UpdateInstanceDto {
 
     @IsOptional()
     warmupDay?: number;
+
+    @IsOptional()
+    @IsObject()
+    chipDetails?: Record<string, any>;
 }
 
 export class ToggleWarmupDto {

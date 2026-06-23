@@ -54,7 +54,7 @@ export class GroqAdapter implements ILLMProvider {
 
         const model = options.model || 'llama-3.3-70b-versatile';
 
-        try {
+        const doRequest = async (modelToUse: string): Promise<LLMResponse> => {
             const messages: Array<{ role: string; content: string }> = [];
 
             if (options.systemPrompt) {
@@ -69,7 +69,7 @@ export class GroqAdapter implements ILLMProvider {
                     'Authorization': `Bearer ${this.apiKey}`,
                 },
                 body: JSON.stringify({
-                    model,
+                    model: modelToUse,
                     messages,
                     temperature: options.temperature ?? 0.7,
                     max_tokens: options.maxTokens ?? 4096,
@@ -79,25 +79,37 @@ export class GroqAdapter implements ILLMProvider {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.error?.message || 'Erro na API Groq');
+                const err = new Error(data.error?.message || 'Erro na API Groq') as any;
+                err.statusCode = response.status;
+                throw err;
             }
 
             const content = data.choices?.[0]?.message?.content || '';
             const tokensUsed = data.usage?.total_tokens || 0;
 
-            this.logger.log(`✅ Groq gerou resposta (${tokensUsed} tokens)`);
+            this.logger.log(`✅ Groq gerou resposta com ${modelToUse} (${tokensUsed} tokens)`);
 
-            return {
-                content,
-                tokensUsed,
-                model,
-                provider: this.id,
-            };
-        } catch (error) {
+            return { content, tokensUsed, model: modelToUse, provider: this.id };
+        };
+
+        try {
+            return await doRequest(model);
+        } catch (error: any) {
+            // Se for rate limit (429) e o modelo preferencial não for o leve, tenta fallback interno
+            if (error.statusCode === 429 && model !== 'llama-3.1-8b-instant') {
+                this.logger.warn(`Groq rate limit atingido no modelo '${model}'. Tentando fallback com 'llama-3.1-8b-instant'...`);
+                try {
+                    return await doRequest('llama-3.1-8b-instant');
+                } catch (fallbackError: any) {
+                    this.logger.error(`Groq fallback também falhou: ${fallbackError.message}`);
+                    throw fallbackError;
+                }
+            }
             this.logger.error(`Groq Error: ${error.message}`);
             throw error;
         }
     }
+
 
     async generateVariations(text: string, count: number, options: LLMOptions = {}): Promise<string[]> {
         const systemPrompt = `Você é um especialista em copywriting. Gere ${count} variações únicas do texto fornecido, mantendo o significado original mas variando a estrutura e palavras. Responda APENAS com um JSON no formato: {"variations": ["var1", "var2", ...]}`;

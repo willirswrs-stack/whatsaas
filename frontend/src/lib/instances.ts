@@ -3,6 +3,21 @@ import api from './api';
 // Tipos
 export type ProviderType = 'waha' | 'evolution';  // WWebJS removido por instabilidade
 
+export interface ChipDetail {
+    id?: string;
+    carrier?: string;
+    deviceName?: string;
+    planType?: string;
+    rechargeDate?: string;
+    rechargeValue?: number;
+    expirationDate?: string;
+    healthScore?: number;
+    tags?: string[];
+    physicalLocation?: string;
+    iccid?: string;
+    profileStatus?: Record<string, boolean>;
+}
+
 export interface Instance {
     id: string;
     instanceName: string;  // Backend field name
@@ -27,6 +42,7 @@ export interface Instance {
     metaConfig?: Record<string, any>;
     qrCode?: string;
     createdAt: string;
+    chipDetail?: ChipDetail;
 }
 
 export interface CreateInstanceDto {
@@ -36,6 +52,7 @@ export interface CreateInstanceDto {
     warmupProfile?: 'inbound' | 'warm_outbound' | 'cold_outbound' | 'groups';
     warmupDay?: number;
     config?: any;
+    chipDetails?: Partial<ChipDetail>;
 }
 
 export interface Proxy {

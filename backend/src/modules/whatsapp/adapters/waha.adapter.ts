@@ -239,7 +239,26 @@ export class WahaAdapter implements IWhatsAppProvider {
     }
 
     private formatPhone(phone: string): string {
-        return phone.replace(/\D/g, '');
+        let clean = phone.replace(/\D/g, '');
+        
+        // Se não tem DDI (ex: 11999999999), assume Brasil (55)
+        if (clean.length === 10 || clean.length === 11) {
+            clean = '55' + clean;
+        }
+
+        // Se tem DDI do Brasil (55), vamos checar o nono dígito
+        if (clean.startsWith('55')) {
+            const ddd = parseInt(clean.substring(2, 4));
+            
+            // Brasil: Se tem 12 dígitos (55 + DDD + 8 dígitos), adicionar o 9
+            if (clean.length === 12 && ddd >= 11 && ddd <= 99) {
+                const prefix = clean.substring(0, 4); // 55 + DDD
+                const suffix = clean.substring(4); // os 8 dígitos
+                clean = prefix + '9' + suffix;
+            }
+        }
+        
+        return clean;
     }
 
     private mapStatus(wahaStatus: string): EnumInstanceStatus {

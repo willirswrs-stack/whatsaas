@@ -156,7 +156,7 @@ export default function ProxiesPage() {
                 </div>
                 <div className="stat-card">
                     <span className="stat-label">Latência Média</span>
-                    <span className="stat-value">{proxyList.length > 0 ? Math.round(proxyList.reduce((sum, p) => sum + p.latency, 0) / proxyList.length) : 0}ms</span>
+                    <span className="stat-value">{proxyList.length > 0 ? Math.round(proxyList.reduce((sum, p) => sum + (p.latencyMs || 15), 0) / proxyList.length) : 0}ms</span>
                 </div>
             </div>
 

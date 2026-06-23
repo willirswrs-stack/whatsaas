@@ -1176,7 +1176,7 @@ export default function CampaignsPage() {
                             ) : (
                                 <>
                                     {/* Stats Grid */}
-                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                         <div className="stat-card p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)]">
                                             <span className="stat-label text-xs block text-[var(--text-muted)] mb-1">Total Processados</span>
                                             <span className="stat-value text-2xl font-bold text-[var(--text-primary)]">
@@ -1195,21 +1195,12 @@ export default function CampaignsPage() {
                                                 {monitoringContacts.filter(c => c.status === 'failed').length}
                                             </span>
                                         </div>
-                                        <div className="stat-card p-4 rounded-xl bg-[var(--bg-tertiary)] border border-[var(--border)]">
-                                            <span className="stat-label text-xs block text-[var(--text-muted)] mb-1">Intervalo Médio (Real)</span>
-                                            <span className="stat-value text-2xl font-bold text-[var(--accent-info)]">
-                                                {chartData.length > 1
-                                                    ? `${Math.round(chartData.reduce((acc, curr) => acc + curr['Intervalo Real (s)'], 0) / (chartData.length - 1))}s`
-                                                    : '0s'}
-                                            </span>
-                                        </div>
                                     </div>
 
                                     {/* Chart Container */}
                                     <div className="glass-card p-5 rounded-xl border border-[var(--border-primary)] bg-[rgba(15,12,28,0.4)]">
                                         <div className="flex justify-between items-center mb-4">
                                             <h3 className="text-sm font-semibold uppercase tracking-wider text-[var(--text-muted)]">Gráfico de Frequência de Disparos</h3>
-                                            <span className="text-xs text-[var(--text-muted)]">Eixo X: Destinatários ordenados cronologicamente</span>
                                         </div>
                                         
                                         {chartData.length === 0 ? (
@@ -1258,15 +1249,7 @@ export default function CampaignsPage() {
                                                                 }}
                                                             />
                                                             <Legend wrapperStyle={{ fontSize: 11, paddingTop: 10 }} />
-                                                            <Area 
-                                                                name="Intervalo Real entre Mensagens (s)"
-                                                                type="monotone" 
-                                                                dataKey="Intervalo Real (s)" 
-                                                                stroke="var(--accent-success)" 
-                                                                fillOpacity={1} 
-                                                                fill="url(#colorInterval)" 
-                                                                strokeWidth={2}
-                                                            />
+
                                                             <Area 
                                                                 name="Delay Anti-Ban Configurado (s)"
                                                                 type="monotone" 
@@ -1294,12 +1277,13 @@ export default function CampaignsPage() {
                                                 .sort((a, b) => new Date(b.sentAt || b.failedAt || b.updatedAt).getTime() - new Date(a.sentAt || a.failedAt || a.updatedAt).getTime())
                                                 .map((cc, idx) => {
                                                     const isSuccess = cc.status === 'sent' || cc.status === 'delivered' || cc.status === 'read';
+                                                    const isProcessing = cc.status === 'processing';
                                                     const timestamp = new Date(cc.sentAt || cc.failedAt || cc.updatedAt).toLocaleTimeString('pt-BR');
                                                     return (
                                                         <div key={idx} className="flex justify-between items-center p-2 rounded hover:bg-[rgba(255,255,255,0.02)] border-b border-[rgba(255,255,255,0.03)] last:border-0">
                                                             <div className="flex items-center gap-2">
-                                                                <span className={isSuccess ? 'text-[var(--accent-success)]' : 'text-[var(--accent-danger)]'}>
-                                                                    {isSuccess ? '✔' : '✖'}
+                                                                <span className={isSuccess ? 'text-[var(--accent-success)]' : isProcessing ? 'text-[var(--accent-warning)] text-xs' : 'text-[var(--accent-danger)]'}>
+                                                                    {isSuccess ? '✔' : isProcessing ? '⏳' : '✖'}
                                                                 </span>
                                                                 <span className="text-[var(--text-primary)] font-semibold">{cc.contact?.name || 'Contato s/ Nome'}</span>
                                                                 <span>({cc.contact?.phone})</span>
