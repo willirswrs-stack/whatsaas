@@ -85,6 +85,7 @@ export function ChipCard({
     const [groupWarmup, setGroupWarmup] = useState(!!metaConfig?.groupWarmupEnabled);
     const [groupDay, setGroupDay] = useState(Number(metaConfig?.groupWarmupDay) || 5);
     const [customLinks, setCustomLinks] = useState<string>((metaConfig?.customGroupLinks || []).join('\n'));
+    const [customDailyLimit, setCustomDailyLimit] = useState(Number(metaConfig?.customDailyLimit) || 0);
     const [isSavingAdvanced, setIsSavingAdvanced] = useState(false);
 
     const voices = [
@@ -153,7 +154,8 @@ export function ChipCard({
                     warmupNiche: nicheText,
                     groupWarmupEnabled: groupWarmup,
                     groupWarmupDay: groupDay,
-                    customGroupLinks: parsedLinks
+                    customGroupLinks: parsedLinks,
+                    customDailyLimit: customDailyLimit
                 }
             } as any);
         } catch (err) {
@@ -330,7 +332,31 @@ export function ChipCard({
                             />
                         </div>
 
-                        <div className="flex items-center justify-between pt-1">
+                        {/* Custom Daily Limit Slider */}
+                        <div className="mt-1 border-t border-orange-500/10 pt-2">
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="text-[9px] font-medium text-orange-300">Limite Máximo de Envios/Dia</label>
+                                <span className="text-[10px] text-[var(--text-primary)] font-bold bg-orange-500/20 px-1.5 py-0.5 rounded">
+                                    {customDailyLimit === 0 ? 'Auto' : customDailyLimit}
+                                </span>
+                            </div>
+                            <input
+                                type="range"
+                                min="0"
+                                max="5000"
+                                step="50"
+                                value={customDailyLimit}
+                                onChange={(e) => setCustomDailyLimit(Number(e.target.value))}
+                                className="w-full accent-orange-500 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer mt-1"
+                            />
+                            <p className="text-[8px] text-[var(--text-muted)] mt-1.5 leading-tight">
+                                {customDailyLimit === 0 
+                                    ? "O sistema aumentará o limite gradualmente de acordo com a maturação." 
+                                    : "Este limite terá ±15% de variação orgânica diária para evitar banimento por padrão robótico."}
+                            </p>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1 border-t border-orange-500/10 mt-1">
                             <span className="text-[9px] text-[var(--text-muted)]">Automação de Grupos</span>
                             <button
                                 onClick={() => setGroupWarmup(!groupWarmup)}

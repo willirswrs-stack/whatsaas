@@ -368,6 +368,20 @@ export class InstancesService {
                 ...currentMeta,
                 ...data.metaConfig
             };
+
+            // Se o customDailyLimit mudou agora, aplique instantaneamente
+            if ('customDailyLimit' in data.metaConfig) {
+                const customLimit = Number(data.metaConfig.customDailyLimit);
+                if (!isNaN(customLimit) && customLimit > 0) {
+                    // Aleatoriza imediatamente ao salvar
+                    const variation = (Math.random() * 0.3) - 0.15;
+                    data.dailyLimit = Math.max(5, Math.round(customLimit * (1 + variation)));
+                } else if (customLimit === 0) {
+                    // Retorna para algum padrão para o dia atual ou deixa a CRON arrumar na madruga
+                    // Vamos tentar puxar do histórico da cron se possível, ou pelo menos um valor seguro
+                    data.dailyLimit = Math.max(50, instance.dailyLimit || 50);
+                }
+            }
         }
 
         // Atualizar ou criar detalhes do chip

@@ -194,29 +194,38 @@ export class WarmupService {
         if (!schedule) {
             // Reached end of schedule -> Graduate but keep it warm
             this.logger.log(`🎓 Instance ${instance.instanceName} has graduated from warmup (but keeping it warm)!`);
-
-            await this.instanceRepo.update(instance.id, {
-                warmupDay: nextDay,
-                dailyLimit: MATURE_LIMIT,
-                dailySent: 0,
-            });
-
-            return 'completed';
         }
 
-        // Advance to next stage
+        let baseLimit = schedule ? schedule.limit : MATURE_LIMIT;
+
+        // Se o usuário definiu um limite customizado, ele se torna a base
+        if (instance.metaConfig && instance.metaConfig.customDailyLimit) {
+            const customLimit = Number(instance.metaConfig.customDailyLimit);
+            if (!isNaN(customLimit) && customLimit > 0) {
+                baseLimit = customLimit;
+            }
+        }
+
+        // Aleatorização ±15% (Para quebrar o padrão robótico exato)
+        const variation = (Math.random() * 0.3) - 0.15; // -0.15 a 0.15
+        let randomizedLimit = Math.round(baseLimit * (1 + variation));
+        
+        // Garante limite mínimo razoável
+        if (randomizedLimit < 5) randomizedLimit = 5;
+
+        // Advance to next stage (or stay on graduate stage but reset daily)
         await this.instanceRepo.update(instance.id, {
             warmupDay: nextDay,
-            dailyLimit: schedule.limit,
+            dailyLimit: randomizedLimit,
             dailySent: 0,
         });
 
         this.logger.log(
             `📈 Instance ${instance.instanceName} advanced to Day ${nextDay} ` +
-            `(Limit: ${schedule.limit}, Interval: ${schedule.interval}s)`
+            `(Limit: ${randomizedLimit} [Base: ${baseLimit}], Interval: ${schedule?.interval || 5}s)`
         );
 
-        return 'advanced';
+        return schedule ? 'advanced' : 'completed';
     }
 
     /**
