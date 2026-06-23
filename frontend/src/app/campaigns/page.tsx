@@ -61,7 +61,7 @@ export default function CampaignsPage() {
         templateId: '',
         metaTemplateId: '',
         flowId: '',
-        instanceId: '',
+        instanceIds: [] as string[],
         contactIds: [] as string[],
         aiSpinEnabled: true,
         variationCount: 10,
@@ -301,7 +301,7 @@ export default function CampaignsPage() {
                 name: newCampaign.name,
                 templateId: newCampaign.templateId || undefined,
                 flowId: newCampaign.flowId || undefined,
-                instanceId: newCampaign.instanceId || undefined,
+                instanceIds: newCampaign.instanceIds.length > 0 ? newCampaign.instanceIds : undefined,
                 contactIds: newCampaign.contactIds,
                 tagIds: [],
                 aiSpinEnabled: newCampaign.aiSpinEnabled,
@@ -323,7 +323,7 @@ export default function CampaignsPage() {
             });
             setCampaigns([campaign, ...campaigns]);
             setShowModal(false);
-            setNewCampaign({ name: '', templateId: '', metaTemplateId: '', flowId: '', instanceId: '', contactIds: [], aiSpinEnabled: true, variationCount: 10, minDelaySec: 5, maxDelaySec: 15, greetingStyle: 'random', activeHoursStart: '08:00', activeHoursEnd: '20:00' });
+            setNewCampaign({ name: '', templateId: '', metaTemplateId: '', flowId: '', instanceIds: [], contactIds: [], aiSpinEnabled: true, variationCount: 10, minDelaySec: 5, maxDelaySec: 15, greetingStyle: 'random', activeHoursStart: '08:00', activeHoursEnd: '20:00' });
             setSelectedWabaAccountId('');
             setMetaTemplates([]);
             setContactSearch('');
@@ -1400,22 +1400,27 @@ export default function CampaignsPage() {
                                         </p>
                                     </div>
                                 ) : (
-                                    <select
-                                        className="input w-full"
-                                        value={newCampaign.instanceId}
-                                        onChange={(e) => setNewCampaign({ ...newCampaign, instanceId: e.target.value })}
-                                        required={!newCampaign.metaTemplateId}
-                                    >
-                                        <option value="">Selecione o chip para disparo...</option>
+                                    <div className="flex flex-col gap-2 max-h-48 overflow-y-auto p-2 border border-[var(--border-primary)] rounded-lg bg-[var(--bg-primary)] [color-scheme:dark]">
                                         {instances.map(inst => (
-                                            <option key={inst.id} value={inst.id}>
-                                                📱 {inst.phone || inst.instanceName} — {
-                                                    inst.provider === 'evolution' ? '⚡ Evolution API' :
-                                                        '🔵 WAHA'
-                                                }
-                                            </option>
+                                            <label key={inst.id} className="flex items-center gap-3 cursor-pointer p-2 hover:bg-[var(--bg-secondary)] rounded-md transition-colors">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="checkbox checkbox-sm checkbox-primary"
+                                                    checked={newCampaign.instanceIds.includes(inst.id)}
+                                                    onChange={(e) => {
+                                                        const newIds = e.target.checked 
+                                                            ? [...newCampaign.instanceIds, inst.id]
+                                                            : newCampaign.instanceIds.filter(id => id !== inst.id);
+                                                        setNewCampaign({ ...newCampaign, instanceIds: newIds });
+                                                    }}
+                                                />
+                                                <span className="text-sm font-medium text-white flex-1 truncate">📱 {inst.phone || inst.instanceName}</span>
+                                                <span className="text-xs px-2 py-0.5 rounded-full bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-muted)]">
+                                                    {inst.provider === 'evolution' ? '⚡ Evolution' : '🔵 WAHA'}
+                                                </span>
+                                            </label>
                                         ))}
-                                    </select>
+                                    </div>
                                 )}
                                 <p className="text-xs text-[var(--text-muted)] mt-1">
                                     Selecione qual número WhatsApp será usado para enviar as mensagens

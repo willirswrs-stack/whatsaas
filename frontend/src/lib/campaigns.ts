@@ -31,6 +31,7 @@ export interface CreateCampaignDto {
     templateId?: string;
     flowId?: string;
     instanceId?: string;
+    instanceIds?: string[];
     contactIds?: string[];
     tagIds?: string[];
     segmentId?: string;
