@@ -344,7 +344,7 @@ export function ChipCard({
                                 type="range"
                                 min="0"
                                 max="5000"
-                                step="50"
+                                step="10"
                                 value={customDailyLimit}
                                 onChange={(e) => setCustomDailyLimit(Number(e.target.value))}
                                 className="w-full accent-orange-500 h-1 bg-[var(--bg-tertiary)] rounded-lg appearance-none cursor-pointer mt-1"

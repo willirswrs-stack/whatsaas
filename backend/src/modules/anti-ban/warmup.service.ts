@@ -769,7 +769,7 @@ export class WarmupService {
         else if (profile === 'warm_outbound' || profile === 'groups') maxDays = 30;
         
         const clampedProgress = Math.min(1, (day - 1) / Math.max(1, maxDays - 1));
-        const limit = day > maxDays ? MATURE_LIMIT : Math.floor(50 + clampedProgress * (3000 - 50));
+        const limit = day > maxDays ? MATURE_LIMIT : Math.floor(10 + clampedProgress * (3000 - 10));
         const interval = Math.max(5, Math.floor(120 - clampedProgress * (120 - 5)));
         const maxPartners = Math.floor(1 + Math.pow(clampedProgress, 1.5) * (30 - 1));
 
