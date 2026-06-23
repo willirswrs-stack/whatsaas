@@ -94,12 +94,21 @@ export class EvolutionWebhookController {
 
         const s = (state || '').toLowerCase();
 
+        // Verifica statusCode do Evolution API para identificar BANS
+        const statusCode = data.statusCode || data.error || data.reasonCode;
+        const reasonStr = (data.reason || data.statusReason || '').toString().toLowerCase();
+
         if (s === 'open' || s === 'connected') {
             status = InstanceStatus.CONNECTED;
         } else if (s === 'connecting') {
             status = InstanceStatus.CONNECTING;
         } else if (s === 'close' || s === 'disconnected') {
-            status = InstanceStatus.DISCONNECTED;
+            // Erro 403 (Forbidden) e 401 (Unauthorized) na Baileys/Evolution geralmente significam BAN ou Logged Out
+            if (statusCode === 403 || statusCode === 401 || reasonStr.includes('ban') || reasonStr.includes('forbidden')) {
+                status = InstanceStatus.BANNED;
+            } else {
+                status = InstanceStatus.DISCONNECTED;
+            }
         } else if (s === 'qrcode') {
             status = InstanceStatus.QR_PENDING;
         }
@@ -116,26 +125,49 @@ export class EvolutionWebhookController {
             updateData.phone = data.me.id.replace('@s.whatsapp.net', '');
         }
 
-        // 🔥 FALLBACK: Se o status for CONNECTED, mas não temos o telefone vindo no payload,
-        // ou se o banco de dados tem o telefone nulo, tentamos buscar diretamente da API do Provedor.
-        if (status === InstanceStatus.CONNECTED && !updateData.phone) {
-            try {
-                const existingInstance = await this.instanceRepo.findOne({ where: { instanceName } });
-                if (existingInstance && !existingInstance.phone) {
+        try {
+            const existingInstance = await this.instanceRepo.findOne({ where: { instanceName }, relations: ['chipDetail'] });
+            if (existingInstance) {
+                // Lógica de BAN e DESBAN (Voltas)
+                if (existingInstance.status !== status) {
+                    if (status === InstanceStatus.BANNED && existingInstance.status === InstanceStatus.CONNECTED) {
+                        this.logger.warn(`🚨 INSTÂNCIA BANIDA: ${instanceName} (Status Code: ${statusCode})`);
+                        if (existingInstance.chipDetail) {
+                            existingInstance.chipDetail.banCount = (existingInstance.chipDetail.banCount || 0) + 1;
+                        }
+                    } else if (status === InstanceStatus.CONNECTED && existingInstance.status === InstanceStatus.BANNED) {
+                        this.logger.log(`🎉 INSTÂNCIA DESBANIDA (VOLTOU): ${instanceName}`);
+                        if (existingInstance.chipDetail) {
+                            existingInstance.chipDetail.unbanCount = (existingInstance.chipDetail.unbanCount || 0) + 1;
+                        }
+                    }
+                    
+                    if (existingInstance.chipDetail) {
+                        // O save na instance faz o cascade do chipDetail se tiver sido alterado
+                        Object.assign(existingInstance, updateData);
+                        await this.instanceRepo.save(existingInstance);
+                    } else {
+                        await this.instanceRepo.update({ instanceName }, updateData);
+                    }
+                } else {
+                    await this.instanceRepo.update({ instanceName }, updateData);
+                }
+
+                // 🚀 FALLBACK: Se o status for CONNECTED, mas não temos o telefone vindo no payload
+                if (status === InstanceStatus.CONNECTED && !updateData.phone && !existingInstance.phone) {
                     this.logger.log(`Phone number missing for connected instance ${instanceName} in DB/webhook. Querying provider...`);
                     const provider = this.providerFactory.getProvider((existingInstance.provider as any) || 'evolution');
                     const providerStatus = await provider.getStatus(instanceName);
                     if (providerStatus?.phoneNumber) {
                         updateData.phone = providerStatus.phoneNumber.replace('@s.whatsapp.net', '');
                         this.logger.log(`Phone number successfully recovered from provider: ${updateData.phone}`);
+                        await this.instanceRepo.update({ instanceName }, { phone: updateData.phone });
                     }
                 }
-            } catch (err) {
-                this.logger.warn(`Failed to recover phone number from provider for ${instanceName}: ${err.message}`);
             }
+        } catch (err) {
+            this.logger.error(`Error updating instance ${instanceName}: ${err.message}`);
         }
-
-        await this.instanceRepo.update({ instanceName }, updateData);
 
         this.logger.log(`Instance ${instanceName} status updated to: ${status}`);
     }
