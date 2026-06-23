@@ -1976,7 +1976,7 @@ export default function CampaignsPage() {
                                 className="btn btn-secondary flex-1"
                                 onClick={() => {
                                     setShowModal(false);
-                                    setNewCampaign({ name: '', templateId: '', metaTemplateId: '', flowId: '', instanceId: '', contactIds: [], aiSpinEnabled: true, variationCount: 10, minDelaySec: 5, maxDelaySec: 15, greetingStyle: 'random', activeHoursStart: '08:00', activeHoursEnd: '20:00' });
+                                    setNewCampaign({ name: '', templateId: '', metaTemplateId: '', flowId: '', instanceIds: [], contactIds: [], aiSpinEnabled: true, variationCount: 10, minDelaySec: 5, maxDelaySec: 15, greetingStyle: 'random', activeHoursStart: '08:00', activeHoursEnd: '20:00' });
                                     setSelectedWabaAccountId('');
                                     setMetaTemplates([]);
                                 }}
@@ -1986,7 +1986,7 @@ export default function CampaignsPage() {
                             <button
                                 className="btn btn-primary flex-1"
                                 onClick={createCampaign}
-                                disabled={isCreating || !newCampaign.name.trim() || (!newCampaign.instanceId && !newCampaign.metaTemplateId)}
+                                disabled={isCreating || !newCampaign.name.trim() || ((!newCampaign.instanceIds || newCampaign.instanceIds.length === 0) && !newCampaign.metaTemplateId)}
                             >
                                 {isCreating ? 'Criando...' : 'Criar Campanha'}
                             </button>
