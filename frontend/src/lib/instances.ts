@@ -16,6 +16,7 @@ export interface ChipDetail {
     physicalLocation?: string;
     iccid?: string;
     profileStatus?: Record<string, boolean>;
+    isInDrawer?: boolean;
 }
 
 export interface Instance {

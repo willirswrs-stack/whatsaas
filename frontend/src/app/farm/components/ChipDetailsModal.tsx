@@ -21,13 +21,19 @@ export function ChipDetailsModal({ instance, onClose, onSave }: ChipDetailsModal
         rechargeValue: defaultDetails.rechargeValue || 0,
         rechargeDate: defaultDetails.rechargeDate ? defaultDetails.rechargeDate.split('T')[0] : '',
         expirationDate: defaultDetails.expirationDate ? defaultDetails.expirationDate.split('T')[0] : '',
+        isInDrawer: defaultDetails.isInDrawer || false,
     });
 
     const [isSaving, setIsSaving] = useState(false);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+        const { name, value, type } = e.target;
+        if (type === 'checkbox') {
+            const checked = (e.target as HTMLInputElement).checked;
+            setFormData(prev => ({ ...prev, [name]: checked }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -88,6 +94,19 @@ export function ChipDetailsModal({ instance, onClose, onSave }: ChipDetailsModal
                                 placeholder="Ex: Moto G8, iPhone 11"
                                 className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg px-4 py-2 text-white focus:border-[var(--primary)] outline-none"
                             />
+                            <div className="flex items-center gap-2 mt-2 pt-1">
+                                <input 
+                                    type="checkbox" 
+                                    id="isInDrawer"
+                                    name="isInDrawer"
+                                    checked={formData.isInDrawer}
+                                    onChange={handleChange}
+                                    className="w-4 h-4 rounded bg-[var(--bg-primary)] border border-[var(--border-color)] accent-[var(--primary)] cursor-pointer"
+                                />
+                                <label htmlFor="isInDrawer" className="text-xs text-[var(--text-secondary)] cursor-pointer select-none">
+                                    Chip está na gaveta (fora do aparelho)
+                                </label>
+                            </div>
                         </div>
 
                         <div className="space-y-2">

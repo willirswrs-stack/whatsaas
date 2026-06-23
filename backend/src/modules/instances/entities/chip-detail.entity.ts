@@ -29,6 +29,9 @@ export class ChipDetail {
     @Column({ name: 'device_name', nullable: true })
     deviceName: string;
 
+    @Column({ name: 'is_in_drawer', type: 'boolean', default: false })
+    isInDrawer: boolean;
+
     @Column({ name: 'plan_type', nullable: true })
     planType: string;
 

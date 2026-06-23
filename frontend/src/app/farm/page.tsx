@@ -127,7 +127,10 @@ export default function FarmDashboard() {
                                         </td>
                                         <td className="p-4">
                                             <div className="flex flex-col">
-                                                <span className="text-sm">{details.deviceName || 'Não definido'}</span>
+                                                <span className="text-sm flex items-center gap-2">
+                                                    {details.deviceName || 'Não definido'}
+                                                    {details.isInDrawer && <span className="px-1.5 py-0.5 text-[10px] font-bold bg-amber-500/20 text-amber-500 rounded border border-amber-500/30">GAVETA</span>}
+                                                </span>
                                                 <span className="text-xs text-[var(--text-muted)]">{details.physicalLocation || '-'}</span>
                                             </div>
                                         </td>
