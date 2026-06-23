@@ -47,6 +47,12 @@ export class ChipDetail {
     @Column({ name: 'health_score', type: 'int', default: 100 })
     healthScore: number;
 
+    @Column({ name: 'ban_count', type: 'int', default: 0 })
+    banCount: number;
+
+    @Column({ name: 'unban_count', type: 'int', default: 0 })
+    unbanCount: number;
+
     @Column('text', { array: true, default: [] })
     tags: string[];
 

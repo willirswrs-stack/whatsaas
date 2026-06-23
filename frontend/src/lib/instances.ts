@@ -17,6 +17,8 @@ export interface ChipDetail {
     iccid?: string;
     profileStatus?: Record<string, boolean>;
     isInDrawer?: boolean;
+    banCount?: number;
+    unbanCount?: number;
 }
 
 export interface Instance {

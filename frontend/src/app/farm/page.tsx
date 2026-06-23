@@ -172,10 +172,16 @@ export default function FarmDashboard() {
                                             </div>
                                         </td>
                                         <td className="p-4">
-                                            <div className="flex justify-center items-center">
+                                            <div className="flex flex-col items-center gap-1.5">
                                                 <div className="relative w-10 h-10 flex items-center justify-center rounded-full bg-[var(--bg-tertiary)] border-2 border-emerald-500/50">
                                                     <span className="text-xs font-bold text-emerald-400">{details.healthScore || 100}%</span>
                                                 </div>
+                                                {(details.banCount > 0 || details.unbanCount > 0) && (
+                                                    <div className="flex gap-2 text-[10px] font-medium px-2 py-0.5 bg-[var(--bg-tertiary)] rounded-md border border-[var(--border-color)]">
+                                                        <span className="text-red-400" title="Banimentos">B:{details.banCount || 0}</span>
+                                                        <span className="text-emerald-400" title="Desbanimentos">V:{details.unbanCount || 0}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </td>
                                         <td className="p-4 text-right">

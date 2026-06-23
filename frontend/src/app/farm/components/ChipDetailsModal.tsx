@@ -22,6 +22,8 @@ export function ChipDetailsModal({ instance, onClose, onSave }: ChipDetailsModal
         rechargeDate: defaultDetails.rechargeDate ? defaultDetails.rechargeDate.split('T')[0] : '',
         expirationDate: defaultDetails.expirationDate ? defaultDetails.expirationDate.split('T')[0] : '',
         isInDrawer: defaultDetails.isInDrawer || false,
+        banCount: defaultDetails.banCount || 0,
+        unbanCount: defaultDetails.unbanCount || 0,
     });
 
     const [isSaving, setIsSaving] = useState(false);
@@ -42,7 +44,9 @@ export function ChipDetailsModal({ instance, onClose, onSave }: ChipDetailsModal
         try {
             await onSave({
                 ...formData,
-                rechargeValue: Number(formData.rechargeValue)
+                rechargeValue: Number(formData.rechargeValue),
+                banCount: Number(formData.banCount),
+                unbanCount: Number(formData.unbanCount)
             });
         } finally {
             setIsSaving(false);
@@ -178,6 +182,30 @@ export function ChipDetailsModal({ instance, onClose, onSave }: ChipDetailsModal
                                 value={formData.expirationDate} 
                                 onChange={handleChange}
                                 className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg px-4 py-2 text-white focus:border-[var(--primary)] outline-none [color-scheme:dark]"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-[var(--text-secondary)]">Qtd. Banimentos</label>
+                            <input 
+                                type="number" 
+                                min="0"
+                                name="banCount" 
+                                value={formData.banCount} 
+                                onChange={handleChange}
+                                className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg px-4 py-2 text-white focus:border-[var(--primary)] outline-none"
+                            />
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-[var(--text-secondary)]">Qtd. Voltas (Desbanimentos)</label>
+                            <input 
+                                type="number" 
+                                min="0"
+                                name="unbanCount" 
+                                value={formData.unbanCount} 
+                                onChange={handleChange}
+                                className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-lg px-4 py-2 text-white focus:border-[var(--primary)] outline-none"
                             />
                         </div>
 
