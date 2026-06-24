@@ -371,7 +371,7 @@ export class DispatcherProcessor extends WorkerHost {
                 this.logger.log(`🌀 Executing Flow ${campaign.flowId} for contact ${contact.id}`);
 
                 try {
-                    await this.flowsService.startExecution(tenantId, {
+                    const execution = await this.flowsService.startExecution(tenantId, {
                         flowId: campaign.flowId,
                         contactId: contact.id,
                         instanceId: instance.id,
@@ -380,6 +380,10 @@ export class DispatcherProcessor extends WorkerHost {
                             campaignContactId: campaignContactId
                         }
                     });
+
+                    if (!execution) {
+                        throw new Error('OUTSIDE_BUSINESS_HOURS');
+                    }
 
                     // Atualizar status para processing (o fluxo se encarrega de setar sent ou failed) + salvar timing metadata
                     await this.campaignContactRepo.update(campaignContactId, {
@@ -663,10 +667,14 @@ export class DispatcherProcessor extends WorkerHost {
             // ✅ FIX CRÍTICO: NO_AVAILABLE_INSTANCE não deve marcar contatos como failed.
             // Significa que todos os chips estão offline/órfãos neste momento.
             // A campanha deve ser PAUSADA e os contatos permanecem 'queued' para retomada posterior.
-            if (error.message === 'NO_AVAILABLE_INSTANCE') {
+            if (error.message === 'NO_AVAILABLE_INSTANCE' || error.message === 'OUTSIDE_BUSINESS_HOURS') {
+                const reason = error.message === 'OUTSIDE_BUSINESS_HOURS'
+                    ? 'Campanha pausada: Fora do horário comercial configurado no fluxo.'
+                    : 'Campanha pausada automaticamente: nenhum chip disponível ou conectado.';
+
                 this.logger.warn(
-                    `⚠️ NO_AVAILABLE_INSTANCE para campanha ${campaignId}. ` +
-                    `Pausando campanha para evitar flood de falhas. Contato ${campaignContactId} permanece em fila.`
+                    `⚠️ ${error.message} para campanha ${campaignId}. ` +
+                    `Pausando campanha. Contato ${campaignContactId} permanece em fila.`
                 );
 
                 // Pausar a campanha automaticamente
@@ -675,7 +683,7 @@ export class DispatcherProcessor extends WorkerHost {
                         status: 'paused',
                         settings: {
                             ...(await this.campaignRepo.findOne({ where: { id: campaignId }, select: ['settings'] }))?.settings,
-                            pausedReason: 'NO_AVAILABLE_INSTANCE',
+                            pausedReason: error.message,
                             pausedAt: new Date().toISOString(),
                         } as any,
                     });
@@ -687,8 +695,8 @@ export class DispatcherProcessor extends WorkerHost {
                             this.eventsGateway.emitToTenant(camp.tenantId, 'campaign.updated', {
                                 id: campaignId,
                                 status: 'paused',
-                                pausedReason: 'NO_AVAILABLE_INSTANCE',
-                                message: `Campanha "${camp.name}" pausada automaticamente: nenhum chip disponível ou conectado.`,
+                                pausedReason: error.message,
+                                message: reason,
                             });
                         }
                     }
@@ -697,7 +705,7 @@ export class DispatcherProcessor extends WorkerHost {
                 }
 
                 // NÃO re-throw — retornar sem marcar como failed para não poluir as métricas
-                return { success: false, error: 'NO_AVAILABLE_INSTANCE' };
+                return { success: false, error: error.message };
             }
 
             // Se o chip morreu no meio do envio, reverter o contato para 'queued' para que outro chip assuma
