@@ -120,9 +120,10 @@ export class WahaAdapter implements IWhatsAppProvider {
                 status: this.mapStatus(response.status),
                 phoneNumber: response.me?.id,
                 name: response.me?.pushname,
+                exists: true,
             };
         } catch (error) {
-            return { status: EnumInstanceStatus.DISCONNECTED };
+            return { status: EnumInstanceStatus.DISCONNECTED, exists: false };
         }
     }
 

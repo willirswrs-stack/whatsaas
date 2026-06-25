@@ -433,6 +433,7 @@ export class CampaignsService {
             templateId: original.templateId,
             flowId: original.flowId,
             instanceId: original.instanceId,
+            instanceIds: original.instanceIds,
             status: 'draft',
             aiSpinEnabled: original.aiSpinEnabled,
             variationCount: original.variationCount,

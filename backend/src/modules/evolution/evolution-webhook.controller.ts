@@ -102,6 +102,8 @@ export class EvolutionWebhookController {
             status = InstanceStatus.CONNECTED;
         } else if (s === 'connecting') {
             status = InstanceStatus.CONNECTING;
+        } else if (s === 'reconnecting') {
+            status = InstanceStatus.RECONNECTING;
         } else if (s === 'close' || s === 'disconnected') {
             // Erro 403 (Forbidden) e 401 (Unauthorized) na Baileys/Evolution geralmente significam BAN ou Logged Out
             if (statusCode === 403 || statusCode === 401 || reasonStr.includes('ban') || reasonStr.includes('forbidden')) {

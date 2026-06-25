@@ -18,6 +18,7 @@ export interface InstanceStatus {
     status: EnumInstanceStatus;
     phoneNumber?: string;
     name?: string;
+    exists?: boolean;
 }
 
 export interface SendMessageResult {

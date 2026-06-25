@@ -96,19 +96,22 @@ export class WarmupService {
             }
         }
 
-        // Add continuous job (runs every 5 minutes)
+        // Add continuous job (runs every 15 minutes)
+        // NOTA: Reduzido de 5min → 15min para evitar stream:error 515.
+        // Muitas sessões simultâneas em curto espaço de tempo fazem o WhatsApp
+        // detectar automação em escala e derrubar as sessões (código 515).
         await this.warmupQueue.add(
             'continuous-warmup-routine',
             {},
             {
                 repeat: {
-                    pattern: '*/5 * * * *', // Every 5 minutes
+                    pattern: '*/15 * * * *', // Every 15 minutes (was 5)
                 },
                 jobId: 'continuous-warmup-routine-job'
             }
         );
 
-        this.logger.log('⏰ Continuous Warmup Routine scheduled for every 5 minutes');
+        this.logger.log('⏰ Continuous Warmup Routine scheduled for every 15 minutes (anti-ban protection)');
     }
 
     // =========================================================================
@@ -369,10 +372,19 @@ export class WarmupService {
 
         this.logger.log(`🔗 Gerados ${selectedPairs.length} pares únicos globalmente`);
 
+        // ⚠️ LIMITE DE SEGURANÇA ANTI-BAN: Máximo de 10 pares por ciclo de 15 minutos.
+        // Exceder isso gera tráfego de sessão que o WhatsApp interpreta como automação
+        // em escala e responde com stream:error 515 (derruba as sessões).
+        const MAX_PAIRS_PER_CYCLE = 10;
+        const limitedPairs = selectedPairs.slice(0, MAX_PAIRS_PER_CYCLE);
+        if (selectedPairs.length > MAX_PAIRS_PER_CYCLE) {
+            this.logger.warn(`⚠️ [ANTI-BAN] Limitando pares de ${selectedPairs.length} → ${MAX_PAIRS_PER_CYCLE} por ciclo para segurança`);
+        }
+
         let sessionsCreated = 0;
         let baseDelay = 0;
 
-        for (const [instA, instB] of selectedPairs) {
+        for (const [instA, instB] of limitedPairs) {
             try {
                 // Use the tenantId of instA for the context (or default to 'system' if somehow missing)
                 const result = await this.createWarmupSession(instA.tenantId || 'system', instA, instB, baseDelay);
@@ -385,7 +397,7 @@ export class WarmupService {
             }
         }
 
-        return { sessionsCreated, totalPairs: selectedPairs.length };
+        return { sessionsCreated, totalPairs: limitedPairs.length };
     }
 
     /**

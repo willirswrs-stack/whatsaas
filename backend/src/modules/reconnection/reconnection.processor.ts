@@ -22,20 +22,9 @@ export class ReconnectionProcessor extends WorkerHost {
     }
 
     async process(job: Job): Promise<any> {
-        const isEnabled = this.configService.get('AUTO_RECONNECT_ENABLED', 'true') === 'true';
-
-        if (!isEnabled && job.name === 'trigger-check') {
-            return { skipped: true, reason: 'Disabled via ENV' };
-        }
-
-        switch (job.name) {
-            case 'trigger-check':
-                return this.handleTriggerCheck(job);
-            case 'check-instance':
-                return this.handleCheckInstance(job);
-            default:
-                this.logger.warn(`Unknown job name: ${job.name}`);
-        }
+        // Migrado para o novo ReconnectionService integrado em instances.module
+        // Evita concorrência e conflitos de reconexão
+        return { skipped: true, reason: 'Migrated to new reconnection service' };
     }
 
     private async handleTriggerCheck(job: Job) {

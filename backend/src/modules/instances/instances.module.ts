@@ -10,6 +10,7 @@ import { EvolutionModule } from '../evolution/evolution.module';
 import { ChipHealthService } from '../anti-ban/chip-health.service';
 
 import { AndroidService } from './services/android.service';
+import { ReconnectionService } from './services/reconnection.service';
 import { MobileFarmController } from './mobile-farm.controller';
 import { ProxiesModule } from '../proxies/proxies.module';
 
@@ -20,8 +21,8 @@ import { ProxiesModule } from '../proxies/proxies.module';
         ProxiesModule,
     ],
     controllers: [InstancesController, MobileFarmController],
-    providers: [InstancesService, ChipHealthService, AndroidService],
-    exports: [InstancesService, AndroidService],
+    providers: [InstancesService, ChipHealthService, AndroidService, ReconnectionService],
+    exports: [InstancesService, AndroidService, ReconnectionService],
 })
 export class InstancesModule { }
 

@@ -246,10 +246,15 @@ export class EvolutionAdapter implements IWhatsAppProvider {
                 status: this.mapStatus(state),
                 phoneNumber,
                 name: response.instance?.profileName,
+                exists: true,
             };
         } catch (error: any) {
             this.logger.warn(`Failed to get status for ${instanceName}: ${error.message}`);
-            return { status: EnumInstanceStatus.DISCONNECTED };
+            const isNotFound = error.message?.includes('404') || error.message?.includes('not exist');
+            return { 
+                status: EnumInstanceStatus.DISCONNECTED,
+                exists: !isNotFound,
+            };
         }
     }
 
@@ -536,8 +541,9 @@ export class EvolutionAdapter implements IWhatsAppProvider {
 
         const s = evolutionState.toLowerCase();
 
-        if (s === 'open') return EnumInstanceStatus.CONNECTED;
+        if (s === 'open' || s === 'connected') return EnumInstanceStatus.CONNECTED;
         if (s === 'connecting') return EnumInstanceStatus.CONNECTING;
+        if (s === 'reconnecting') return EnumInstanceStatus.RECONNECTING;
         if (s === 'close') return EnumInstanceStatus.DISCONNECTED;
         if (s === 'qrcode') return EnumInstanceStatus.QR_PENDING;
 

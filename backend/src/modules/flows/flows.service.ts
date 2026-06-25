@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException, Inject, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CampaignContact } from '../campaigns/entities/campaign.entity';
+import { Campaign, CampaignContact } from '../campaigns/entities/campaign.entity';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -376,6 +376,57 @@ export class FlowsService implements OnModuleInit {
         }
     }
 
+    async markCampaignContactAsSent(execution: any) {
+        const campaignContactId = execution.variables?.campaignContactId;
+        if (campaignContactId) {
+            try {
+                const contact = await this.campaignContactRepository.findOne({ where: { id: campaignContactId } });
+                if (contact && contact.status === 'processing') {
+                    await this.campaignContactRepository.update(campaignContactId, {
+                        status: 'sent',
+                        sentAt: new Date()
+                    });
+                    
+                    await this.checkCampaignCompletion(contact.campaignId);
+                }
+            } catch (err) {
+                console.error(`[Flow] Error updating campaign contact ${campaignContactId} to sent:`, err.message);
+            }
+        }
+    }
+
+    private async checkCampaignCompletion(campaignId: string) {
+        try {
+            const campaignRepo = this.campaignContactRepository.manager.getRepository(Campaign);
+            const campaign = await campaignRepo.findOne({
+                where: { id: campaignId },
+                select: ['id', 'tenantId', 'totalContacts', 'sentCount', 'failedCount', 'status']
+            });
+
+            if (!campaign || campaign.status !== 'running') return;
+
+            const processedCount = await this.campaignContactRepository.count({
+                where: [
+                    { campaignId, status: 'sent' },
+                    { campaignId, status: 'delivered' },
+                    { campaignId, status: 'read' },
+                    { campaignId, status: 'failed' },
+                ]
+            });
+
+            if (processedCount >= campaign.totalContacts) {
+                console.log(`[Flow] 🏁 Campanha ${campaignId} concluída! (${processedCount}/${campaign.totalContacts})`);
+
+                await campaignRepo.update(campaignId, {
+                    status: 'completed',
+                    completedAt: new Date()
+                });
+            }
+        } catch (err) {
+            console.error(`[Flow] Erro ao verificar conclusão da campanha ${campaignId}:`, err.message);
+        }
+    }
+
     /**
      * Helper to get instance and contact for a given execution
      */
@@ -397,15 +448,29 @@ export class FlowsService implements OnModuleInit {
             const parsed = new URL(url);
             const hostname = parsed.hostname;
 
-            // Check if host is a private/local IP or localhost
+            const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === 'host.docker.internal';
             const isPrivateIp = /^(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(hostname);
-            const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
 
-            if (isPrivateIp || isLocalhost) {
+            if (isLocalhost || isPrivateIp) {
                 const port = this.configService.get('PORT', 3333);
-                // Only rewrite if it's pointing to our backend port
                 if (parsed.port === String(port) || (!parsed.port && port === 80)) {
-                    parsed.hostname = 'host.docker.internal';
+                    const isProd = this.configService.get('NODE_ENV') === 'production';
+                    if (isProd) {
+                        const uploadsBase = this.configService.get<string>('UPLOADS_BASE_URL');
+                        if (uploadsBase) {
+                            try {
+                                const baseParsed = new URL(uploadsBase);
+                                parsed.protocol = baseParsed.protocol;
+                                parsed.host = baseParsed.host;
+                            } catch (_) {
+                                parsed.hostname = 'whatsaas-backend';
+                            }
+                        } else {
+                            parsed.hostname = 'whatsaas-backend';
+                        }
+                    } else {
+                        parsed.hostname = 'host.docker.internal';
+                    }
                     const resolved = parsed.toString();
                     console.log(`[Flow] URL rewrite: ${url} → ${resolved}`);
                     return resolved;
@@ -455,6 +520,7 @@ export class FlowsService implements OnModuleInit {
             execution.status = 'completed';
             execution.completedAt = new Date();
             await this.executionRepository.save(execution);
+            await this.markCampaignContactAsSent(execution);
             return;
         }
 
@@ -464,6 +530,7 @@ export class FlowsService implements OnModuleInit {
             execution.status = 'completed';
             execution.completedAt = new Date();
             await this.executionRepository.save(execution);
+            await this.markCampaignContactAsSent(execution);
             return;
         }
 
@@ -698,6 +765,7 @@ export class FlowsService implements OnModuleInit {
                     if (url) {
                         const res = await provider.sendText(instance.instanceName, contact.phone, fullMessage);
                         if (res?.messageId) {
+                            await this.updateCampaignContactMessageId(execution, res.messageId);
                             await this.inboxService.saveMessage({
                                 tenantId,
                                 instanceId: instance.id,
@@ -1581,6 +1649,14 @@ export class FlowsService implements OnModuleInit {
                         { status: 'failed', errorMessage: error.message }
                     );
                     console.log(`[Flow] Campaign contact ${execution.variables.campaignContactId} marked as failed.`);
+
+                    const contact = await this.campaignContactRepository.findOne({
+                        where: { id: execution.variables.campaignContactId },
+                        select: ['campaignId']
+                    });
+                    if (contact) {
+                        await this.checkCampaignCompletion(contact.campaignId);
+                    }
                 } catch (updateErr) {
                     console.error(`[Flow] Failed to update campaign contact status:`, updateErr.message);
                 }

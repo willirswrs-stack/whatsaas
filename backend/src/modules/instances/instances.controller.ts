@@ -19,6 +19,7 @@ import { CurrentTenant } from '../auth/decorators/current-tenant.decorator';
 import { ChipHealthService } from '../anti-ban/chip-health.service';
 import type { ProviderType } from '../whatsapp';
 import { UpdateInstanceDto, ToggleWarmupDto, PairingCodeDto } from './dto/instances.dto';
+import { ReconnectionService } from './services/reconnection.service';
 
 class CreateInstanceDto {
     @IsString()
@@ -52,6 +53,7 @@ export class InstancesController {
     constructor(
         private readonly instancesService: InstancesService,
         private readonly chipHealthService: ChipHealthService,
+        private readonly reconnectionService: ReconnectionService,
     ) { }
 
     @Get()
@@ -177,5 +179,18 @@ export class InstancesController {
     ) {
         return this.instancesService.delete(id, tenantId);
     }
-}
 
+    @Post(':id/reconnect')
+    @ApiOperation({ summary: 'Force reconnect a specific instance' })
+    async forceReconnect(
+        @Param('id') id: string,
+    ) {
+        return this.reconnectionService.forceReconnect(id);
+    }
+
+    @Post('reconnect-all/action')
+    @ApiOperation({ summary: 'Force reconnect all disconnected/reconnecting instances' })
+    async reconnectAll() {
+        return this.reconnectionService.reconnectAll();
+    }
+}
