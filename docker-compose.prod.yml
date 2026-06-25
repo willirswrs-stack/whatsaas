@@ -67,6 +67,8 @@ services:
     depends_on:
       - postgres
       - redis
+    volumes:
+      - backend_uploads:/app/uploads
     networks:
       - whatsaas-network
 
@@ -89,6 +91,7 @@ volumes:
   postgres_data:
   redis_data:
   evolution_instances:
+  backend_uploads:
 
 networks:
   whatsaas-network:

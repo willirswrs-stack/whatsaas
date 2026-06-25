@@ -370,6 +370,20 @@ export class FlowsService implements OnModuleInit {
                     status: 'sent',
                     sentAt: new Date()
                 });
+
+                let campaignId = execution.variables?.campaignId;
+                if (!campaignId) {
+                    const contact = await this.campaignContactRepository.findOne({
+                        where: { id: campaignContactId },
+                        select: ['campaignId']
+                    });
+                    if (contact) {
+                        campaignId = contact.campaignId;
+                    }
+                }
+                if (campaignId) {
+                    await this.checkCampaignCompletion(campaignId);
+                }
             } catch (err) {
                 console.error(`[Flow] Error updating campaign contact ${campaignContactId}:`, err.message);
             }
@@ -381,12 +395,13 @@ export class FlowsService implements OnModuleInit {
         if (campaignContactId) {
             try {
                 const contact = await this.campaignContactRepository.findOne({ where: { id: campaignContactId } });
-                if (contact && contact.status === 'processing') {
-                    await this.campaignContactRepository.update(campaignContactId, {
-                        status: 'sent',
-                        sentAt: new Date()
-                    });
-                    
+                if (contact) {
+                    if (contact.status === 'processing') {
+                        await this.campaignContactRepository.update(campaignContactId, {
+                            status: 'sent',
+                            sentAt: new Date()
+                        });
+                    }
                     await this.checkCampaignCompletion(contact.campaignId);
                 }
             } catch (err) {
@@ -421,6 +436,15 @@ export class FlowsService implements OnModuleInit {
                     status: 'completed',
                     completedAt: new Date()
                 });
+
+                if (this.eventsGateway) {
+                    this.eventsGateway.emitToTenant(campaign.tenantId, 'campaign.updated', {
+                        id: campaignId,
+                        status: 'completed',
+                        sentCount: campaign.sentCount,
+                        failedCount: campaign.failedCount
+                    });
+                }
             }
         } catch (err) {
             console.error(`[Flow] Erro ao verificar conclusão da campanha ${campaignId}:`, err.message);
@@ -1028,6 +1052,7 @@ export class FlowsService implements OnModuleInit {
                     execution.status = 'completed';
                     execution.completedAt = new Date();
                     await this.executionRepository.save(execution);
+                    await this.markCampaignContactAsSent(execution);
                 }
                 return;
             }
@@ -1080,6 +1105,7 @@ export class FlowsService implements OnModuleInit {
                     execution.status = 'completed';
                     execution.completedAt = new Date();
                     await this.executionRepository.save(execution);
+                    await this.markCampaignContactAsSent(execution);
                 }
                 return;
             }
@@ -1309,6 +1335,7 @@ export class FlowsService implements OnModuleInit {
                         data: { maxExecutions, period, executionCount }
                     });
                     await this.executionRepository.save(execution);
+                    await this.markCampaignContactAsSent(execution);
                     console.log(`[Flow] ⛔ Execution stopped by limitExecution: ${executionCount}/${maxExecutions} (${period})`);
                     return;
                 }
@@ -1514,6 +1541,7 @@ export class FlowsService implements OnModuleInit {
                     execution.status = 'completed';
                     execution.completedAt = new Date();
                     await this.executionRepository.save(execution);
+                    await this.markCampaignContactAsSent(execution);
                 }
                 return;
             }
@@ -1622,6 +1650,7 @@ export class FlowsService implements OnModuleInit {
                 execution.status = 'completed';
                 execution.completedAt = new Date();
                 await this.executionRepository.save(execution);
+                await this.markCampaignContactAsSent(execution);
                 console.log(`[Flow] [${executionId.slice(0, 8)}] ✅ Flow completed at end node ${nextNode.id}`);
                 return;
             }
