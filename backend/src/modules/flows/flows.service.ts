@@ -16,6 +16,7 @@ import { MetaGraphApiService } from '../meta-templates/meta-graph-api.service';
 import { ActivePreventionService } from '../anti-ban/active-prevention.service';
 import { HumanBehaviorService } from '../anti-ban/human-behavior.service';
 import { InboxService } from '../inbox/inbox.service';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class FlowsService implements OnModuleInit {
@@ -39,6 +40,7 @@ export class FlowsService implements OnModuleInit {
         private activePrevention: ActivePreventionService,
         private humanBehavior: HumanBehaviorService,
         private inboxService: InboxService,
+        private eventsGateway: EventsGateway,
     ) { }
 
     // ============ FLOWS ============
