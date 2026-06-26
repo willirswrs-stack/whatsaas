@@ -420,7 +420,7 @@ export class FlowsService implements OnModuleInit {
                 select: ['id', 'tenantId', 'totalContacts', 'sentCount', 'failedCount', 'status']
             });
 
-            if (!campaign || campaign.status !== 'running') return;
+            if (!campaign || (campaign.status !== 'running' && campaign.status !== 'paused')) return;
 
             const processedCount = await this.campaignContactRepository.count({
                 where: [

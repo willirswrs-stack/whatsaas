@@ -758,7 +758,7 @@ export class DispatcherProcessor extends WorkerHost {
                 select: ['id', 'tenantId', 'totalContacts', 'sentCount', 'failedCount', 'status']
             });
 
-            if (!campaign || campaign.status !== 'running') return;
+            if (!campaign || (campaign.status !== 'running' && campaign.status !== 'paused')) return;
 
             // Contar diretamente dos campaign_contacts (fonte da verdade)
             const processedCount = await this.campaignContactRepo.count({

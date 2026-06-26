@@ -237,7 +237,7 @@ export class EvolutionWebhookController {
     }
 
     private async checkCampaignCompletion(campaign: Campaign) {
-        if (campaign.status !== 'running') return;
+        if (campaign.status !== 'running' && campaign.status !== 'paused') return;
 
         const processed = (campaign.sentCount || 0) + (campaign.failedCount || 0);
         if (processed >= campaign.totalContacts) {
