@@ -3,10 +3,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 
 import {
-    Campaign,
-    CampaignContact,
-    MessageVariation,
-    Template,
+  Campaign,
+  CampaignContact,
+  MessageVariation,
+  Template,
 } from './entities/campaign.entity';
 import { Contact } from '../contacts/entities/contact.entity';
 import { ContactsModule } from '../contacts/contacts.module';
@@ -21,26 +21,26 @@ import { Flow } from '../flows/entities';
 import { Tenant } from '../tenants/entities/tenant.entity';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            Campaign,
-            CampaignContact,
-            MessageVariation,
-            Contact,
-            Template,
-            Flow,
-            Tenant,
-        ]),
-        BullModule.registerQueue({
-            name: SCHEDULER_QUEUE,
-        }),
-        AiModule,
-        DispatcherModule,
-        forwardRef(() => SettingsModule),
-        ContactsModule,
-    ],
-    controllers: [CampaignsController],
-    providers: [CampaignsService, CampaignSchedulerProcessor],
-    exports: [CampaignsService],
+  imports: [
+    TypeOrmModule.forFeature([
+      Campaign,
+      CampaignContact,
+      MessageVariation,
+      Contact,
+      Template,
+      Flow,
+      Tenant,
+    ]),
+    BullModule.registerQueue({
+      name: SCHEDULER_QUEUE,
+    }),
+    AiModule,
+    DispatcherModule,
+    forwardRef(() => SettingsModule),
+    ContactsModule,
+  ],
+  controllers: [CampaignsController],
+  providers: [CampaignsService, CampaignSchedulerProcessor],
+  exports: [CampaignsService],
 })
-export class CampaignsModule { }
+export class CampaignsModule {}

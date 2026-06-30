@@ -11,32 +11,36 @@ import { GoogleStrategy } from './strategies/google.strategy';
 import { FacebookStrategy } from './strategies/facebook.strategy';
 import { GithubStrategy } from './strategies/github.strategy';
 import { TenantGuard } from './guards/tenant.guard';
-import { Tenant, User, SubscriptionPlan } from '../tenants/entities/tenant.entity';
+import {
+  Tenant,
+  User,
+  SubscriptionPlan,
+} from '../tenants/entities/tenant.entity';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Tenant, User, SubscriptionPlan]),
-        PassportModule.register({ defaultStrategy: 'jwt' }),
-        JwtModule.registerAsync({
-            imports: [ConfigModule],
-            useFactory: (configService: ConfigService) => ({
-                secret: configService.get('JWT_SECRET', 'wathsaas_jwt_secret'),
-                signOptions: {
-                    expiresIn: configService.get('JWT_EXPIRES_IN', '7d'),
-                },
-            }),
-            inject: [ConfigService],
-        }),
-    ],
-    controllers: [AuthController],
-    providers: [
-        AuthService, 
-        JwtStrategy, 
-        GoogleStrategy, 
-        FacebookStrategy, 
-        GithubStrategy, 
-        TenantGuard
-    ],
-    exports: [AuthService, JwtStrategy, TenantGuard, JwtModule],
+  imports: [
+    TypeOrmModule.forFeature([Tenant, User, SubscriptionPlan]),
+    PassportModule.register({ defaultStrategy: 'jwt' }),
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      useFactory: (configService: ConfigService) => ({
+        secret: configService.get('JWT_SECRET', 'wathsaas_jwt_secret'),
+        signOptions: {
+          expiresIn: configService.get('JWT_EXPIRES_IN', '7d'),
+        },
+      }),
+      inject: [ConfigService],
+    }),
+  ],
+  controllers: [AuthController],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleStrategy,
+    FacebookStrategy,
+    GithubStrategy,
+    TenantGuard,
+  ],
+  exports: [AuthService, JwtStrategy, TenantGuard, JwtModule],
 })
-export class AuthModule { }
+export class AuthModule {}

@@ -7,14 +7,14 @@ import { InboxService } from './inbox.service';
  */
 @Injectable()
 export class InboxCleanupService {
-    private readonly logger = new Logger(InboxCleanupService.name);
+  private readonly logger = new Logger(InboxCleanupService.name);
 
-    constructor(private readonly inboxService: InboxService) {}
+  constructor(private readonly inboxService: InboxService) {}
 
-    @Cron(CronExpression.EVERY_DAY_AT_3AM)
-    async handleDailyCleanup() {
-        this.logger.log('🗑️ Running daily inbox cleanup (90-day retention)...');
-        const deleted = await this.inboxService.cleanupExpiredMessages();
-        this.logger.log(`✅ Inbox cleanup complete: ${deleted} messages removed`);
-    }
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async handleDailyCleanup() {
+    this.logger.log('🗑️ Running daily inbox cleanup (90-day retention)...');
+    const deleted = await this.inboxService.cleanupExpiredMessages();
+    this.logger.log(`✅ Inbox cleanup complete: ${deleted} messages removed`);
+  }
 }

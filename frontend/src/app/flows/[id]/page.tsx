@@ -594,6 +594,128 @@ function QuestionNode({ data, selected, id }: CustomNodeProps) {
     );
 }
 
+// ============ NÓ DE FLOW DO WHATSAPP (Nativo) ============
+function WhatsAppFlowNode({ data, selected, id }: CustomNodeProps) {
+    const { updateConfig, deleteNode, duplicateNode } = useNodeConfig(id, data.config || {});
+    const config = data.config || {};
+    const [flowId, setFlowId] = useState(config?.flowId || '');
+    const [flowButtonText, setFlowButtonText] = useState(config?.flowButtonText || 'Preencher');
+    const [messageText, setMessageText] = useState(config?.messageText || 'Por favor, preencha o formulário abaixo');
+    const [flowScreen, setFlowScreen] = useState(config?.flowScreen || 'UNION');
+
+    useEffect(() => {
+        const timeout = setTimeout(() => {
+            updateConfig({ flowId, flowButtonText, messageText, flowScreen });
+        }, 500);
+        return () => clearTimeout(timeout);
+    }, [flowId, flowButtonText, messageText, flowScreen]);
+
+    return (
+        <div className={`group ${nodeStyles.wrapper} ${selected ? 'ring-2 ring-[var(--primary)] ring-offset-2' : ''}`}>
+            {/* Floating Buttons */}
+            <div className={nodeStyles.floatingButtons}>
+                <button onClick={(e) => { e.stopPropagation(); duplicateNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-gray-700">
+                    <Icons.Duplicate /> Duplicar
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); deleteNode(); }} className="flex items-center gap-1 px-3 py-1.5 bg-gray-800 text-white rounded-lg text-xs hover:bg-red-600">
+                    <Icons.Delete /> Remover
+                </button>
+            </div>
+
+            {/* Header with Stats */}
+            <div className={nodeStyles.header} style={{ backgroundColor: '#25D366' }}>
+                <div className={nodeStyles.stats}>
+                    <div>
+                        <div className="text-2xl font-bold">{data.stats?.executing || 0}</div>
+                        <div className="text-xs flex items-center gap-1">Executando <Icons.Help /></div>
+                    </div>
+                    <div>
+                        <div className="text-2xl font-bold">{data.stats?.sent || 0}</div>
+                        <div className="text-xs flex items-center gap-1">Enviados <Icons.Help /></div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Title Bar */}
+            <div className="flex items-center justify-between px-4 py-2 bg-[#25D366]">
+                <div className="flex items-center gap-2 text-white">
+                    <div className="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div className="font-semibold text-sm">WhatsApp Flow</div>
+                        <div className="text-xs opacity-80">Formulário Nativo</div>
+                    </div>
+                </div>
+            </div>
+
+            {/* Body */}
+            <div className={nodeStyles.body}>
+                <div className="space-y-3">
+                    <div>
+                        <label className="text-xs text-gray-500 font-medium block mb-1">Mensagem de Texto</label>
+                        <textarea
+                            className={nodeStyles.input}
+                            placeholder="Texto acima do botão..."
+                            rows={2}
+                            value={messageText}
+                            onChange={(e) => setMessageText(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="text-xs text-gray-500 font-medium block mb-1">ID do Flow (Meta)</label>
+                        <input
+                            type="text"
+                            className="w-full bg-gray-50 dark:bg-[var(--bg-secondary)] border border-gray-200 dark:border-[var(--border-color)] rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                            placeholder="Ex: 123456789012345"
+                            value={flowId}
+                            onChange={(e) => setFlowId(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2">
+                        <div>
+                            <label className="text-xs text-gray-500 font-medium block mb-1">Texto do Botão</label>
+                            <input
+                                type="text"
+                                className="w-full bg-gray-50 dark:bg-[var(--bg-secondary)] border border-gray-200 dark:border-[var(--border-color)] rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                                placeholder="Preencher"
+                                value={flowButtonText}
+                                onChange={(e) => setFlowButtonText(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 font-medium block mb-1">Tela Inicial</label>
+                            <input
+                                type="text"
+                                className="w-full bg-gray-50 dark:bg-[var(--bg-secondary)] border border-gray-200 dark:border-[var(--border-color)] rounded-lg p-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]"
+                                placeholder="UNION"
+                                value={flowScreen}
+                                onChange={(e) => setFlowScreen(e.target.value)}
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className={nodeStyles.nextStep}>
+                    <span>Aguardar Submissão</span>
+                    <div className="w-2 h-2 rounded-full bg-yellow-500" />
+                </div>
+            </div>
+
+            <Handle type="target" position={Position.Top} className={nodeStyles.handle} />
+            <Handle type="source" position={Position.Bottom} className={nodeStyles.handle} />
+        </div>
+    );
+}
+
 // ============ NÓ DE INÍCIO ============
 function StartNode({ data, selected, id }: CustomNodeProps) {
     const { updateConfig } = useNodeConfig(id, data.config || {});
@@ -4279,6 +4401,7 @@ function FlowEditorContent() {
         end: EndNode,
         templateText: TemplateTextNode,
         templateButton: TemplateButtonNode,
+        whatsapp_flow: WhatsAppFlowNode,
         // Action nodes (NEW)
         limitExecution: LimitExecutionNode,
         saveInfo: SaveInfoNode,

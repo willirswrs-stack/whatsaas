@@ -1,4 +1,3 @@
-
 import { Module } from '@nestjs/common';
 import { AdminPanelsModule } from './admin/admin-panels.module';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -44,7 +43,6 @@ import { InboxModule } from './modules/inbox/inbox.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AutoHealingModule } from './modules/auto-healing/auto-healing.module';
 
-
 @Module({
   imports: [
     SentryModule.forRoot(),
@@ -55,7 +53,7 @@ import { AutoHealingModule } from './modules/auto-healing/auto-healing.module';
       validationSchema: envValidationSchema,
       validationOptions: {
         allowUnknown: true, // Allow other env vars
-        abortEarly: true,   // Stop on first error
+        abortEarly: true, // Stop on first error
       },
     }),
 
@@ -66,9 +64,10 @@ import { AutoHealingModule } from './modules/auto-healing/auto-healing.module';
       useFactory: (config: ConfigService) => ({
         pinoHttp: {
           level: config.get('NODE_ENV') !== 'production' ? 'debug' : 'info',
-          transport: config.get('NODE_ENV') !== 'production'
-            ? { target: 'pino-pretty' }
-            : undefined,
+          transport:
+            config.get('NODE_ENV') !== 'production'
+              ? { target: 'pino-pretty' }
+              : undefined,
           genReqId: (req) => req.headers['x-request-id'] || uuidv4(),
           autoLogging: {
             ignore: (req) => req.url === '/api/v1/health', // Ignore health checks logs
@@ -90,7 +89,10 @@ import { AutoHealingModule } from './modules/auto-healing/auto-healing.module';
         return {
           type: 'postgres',
           host: configService.get<string>('DATABASE_HOST'),
-          port: parseInt(configService.get<string>('DATABASE_PORT') || '5432', 10),
+          port: parseInt(
+            configService.get<string>('DATABASE_PORT') || '5432',
+            10,
+          ),
           username: configService.get<string>('DATABASE_USER'),
           password: configService.get<string>('DATABASE_PASSWORD'),
           database: configService.get<string>('DATABASE_NAME'),
@@ -130,10 +132,12 @@ import { AutoHealingModule } from './modules/auto-healing/auto-healing.module';
     }),
 
     // Rate Limiting
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 100,
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 100,
+      },
+    ]),
 
     // Task Scheduling (Cron jobs)
     ScheduleModule.forRoot(),
@@ -141,8 +145,8 @@ import { AutoHealingModule } from './modules/auto-healing/auto-healing.module';
     // Application Modules
     HealthModule,
     BullBoardModule, // <-- Monitoramento de Filas
-    AdminModule,     // <-- Novo Módulo Administrativo
-    BillingModule,   // <-- Motor Financeiro e Assinaturas
+    AdminModule, // <-- Novo Módulo Administrativo
+    BillingModule, // <-- Motor Financeiro e Assinaturas
     EventsModule,
     CryptoModule,
     AuthModule,
@@ -175,4 +179,4 @@ import { AutoHealingModule } from './modules/auto-healing/auto-healing.module';
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

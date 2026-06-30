@@ -3,12 +3,12 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
 
 import {
-    WebhookIntegration,
-    WebhookEventType,
-    WebhookEventMapping,
-    WebhookEventInbox,
-    MessageOutbox,
-    MessageLog,
+  WebhookIntegration,
+  WebhookEventType,
+  WebhookEventMapping,
+  WebhookEventInbox,
+  MessageOutbox,
+  MessageLog,
 } from './entities';
 
 import { OrderWebhooksService } from './order-webhooks.service';
@@ -24,41 +24,38 @@ import { Instance } from '../instances/entities/instance.entity';
 import { OrderWebhooksSeeder } from './order-webhooks-seeder.service';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([
-            WebhookIntegration,
-            WebhookEventType,
-            WebhookEventMapping,
-            WebhookEventInbox,
-            MessageOutbox,
-            MessageLog,
-            Instance,
-        ]),
-        BullModule.registerQueue({
-            name: 'order-webhooks',
-            defaultJobOptions: {
-                removeOnComplete: 1000,
-                removeOnFail: 5000,
-                attempts: 5,
-                backoff: {
-                    type: 'exponential',
-                    delay: 5000,
-                },
-            },
-        }),
-        EvolutionModule,
-        MetaTemplatesModule,
-    ],
-    controllers: [
-        OrderWebhooksController,
-        OrderWebhooksInboundController,
-    ],
-    providers: [
-        OrderWebhooksService,
-        OrderWebhooksProcessor,
-        PayloadNormalizerService,
-        OrderWebhooksSeeder,
-    ],
-    exports: [OrderWebhooksService],
+  imports: [
+    TypeOrmModule.forFeature([
+      WebhookIntegration,
+      WebhookEventType,
+      WebhookEventMapping,
+      WebhookEventInbox,
+      MessageOutbox,
+      MessageLog,
+      Instance,
+    ]),
+    BullModule.registerQueue({
+      name: 'order-webhooks',
+      defaultJobOptions: {
+        removeOnComplete: 1000,
+        removeOnFail: 5000,
+        attempts: 5,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
+      },
+    }),
+    EvolutionModule,
+    MetaTemplatesModule,
+  ],
+  controllers: [OrderWebhooksController, OrderWebhooksInboundController],
+  providers: [
+    OrderWebhooksService,
+    OrderWebhooksProcessor,
+    PayloadNormalizerService,
+    OrderWebhooksSeeder,
+  ],
+  exports: [OrderWebhooksService],
 })
-export class OrderWebhooksModule { }
+export class OrderWebhooksModule {}

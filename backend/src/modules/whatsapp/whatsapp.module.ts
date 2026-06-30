@@ -7,21 +7,13 @@ import { WhatsAppProviderFactory } from './whatsapp-provider.factory';
 /**
  * WhatsApp Module
  * Provides WhatsApp provider adapters (WAHA, Evolution)
- * 
+ *
  * @Global so it can be injected anywhere without importing
  */
 @Global()
 @Module({
-    imports: [ConfigModule],
-    providers: [
-        WahaAdapter,
-        EvolutionAdapter,
-        WhatsAppProviderFactory,
-    ],
-    exports: [
-        WahaAdapter,
-        EvolutionAdapter,
-        WhatsAppProviderFactory,
-    ],
+  imports: [ConfigModule],
+  providers: [WahaAdapter, EvolutionAdapter, WhatsAppProviderFactory],
+  exports: [WahaAdapter, EvolutionAdapter, WhatsAppProviderFactory],
 })
-export class WhatsAppModule { }
+export class WhatsAppModule {}

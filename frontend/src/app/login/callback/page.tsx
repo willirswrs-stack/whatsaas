@@ -2,39 +2,58 @@
 
 import { useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import api from '@/lib/api';
 
 function LoginCallbackContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
     useEffect(() => {
-        const accessToken = searchParams.get('accessToken');
-        const refreshToken = searchParams.get('refreshToken');
-        const userJson = searchParams.get('user');
+        const code = searchParams.get('code');
+        
+        // Legacy fallback
+        const legacyAccessToken = searchParams.get('accessToken');
+        const legacyRefreshToken = searchParams.get('refreshToken');
+        const legacyUserJson = searchParams.get('user');
 
-        if (accessToken && userJson) {
-            try {
-                // Save in client storage mimicking standard login behavior
-                localStorage.setItem('accessToken', accessToken);
-                if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
-                
-                // De-serialize user string safely
-                const parsedUser = JSON.parse(decodeURIComponent(userJson));
-                localStorage.setItem('user', JSON.stringify(parsedUser));
-                
-                console.log('OAuth Login Success! Redirecting...');
-                
-                // Force a full local reload / push to home
-                window.location.href = '/'; 
-            } catch (err) {
-                console.error('OAuth persistence error', err);
-                router.push('/login?error=parse_failed');
+        const handleCallback = async () => {
+            if (code) {
+                try {
+                    const response = await api.post('/auth/social/token', { code });
+                    const { accessToken, refreshToken, user } = response.data;
+
+                    localStorage.setItem('accessToken', accessToken);
+                    if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+                    localStorage.setItem('user', JSON.stringify(user));
+
+                    console.log('OAuth Login Success! Redirecting...');
+                    window.location.href = '/';
+                } catch (err) {
+                    console.error('OAuth token exchange error', err);
+                    router.push('/login?error=social_failed');
+                }
+            } else if (legacyAccessToken && legacyUserJson) {
+                try {
+                    localStorage.setItem('accessToken', legacyAccessToken);
+                    if (legacyRefreshToken) localStorage.setItem('refreshToken', legacyRefreshToken);
+                    const parsedUser = JSON.parse(decodeURIComponent(legacyUserJson));
+                    localStorage.setItem('user', JSON.stringify(parsedUser));
+                    
+                    console.log('Legacy OAuth Login Success! Redirecting...');
+                    window.location.href = '/';
+                } catch (err) {
+                    console.error('Legacy OAuth persistence error', err);
+                    router.push('/login?error=parse_failed');
+                }
+            } else {
+                console.warn('Incomplete OAuth Callback');
+                router.push('/login?error=no_data');
             }
-        } else {
-            console.warn('Incomplete OAuth Callback');
-            router.push('/login?error=no_data');
-        }
+        };
+
+        handleCallback();
     }, [searchParams, router]);
+
 
     return (
         <div className="min-h-screen bg-[#0f0c29] flex flex-col items-center justify-center text-white">

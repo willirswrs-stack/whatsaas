@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import * as adb from '@devicefarmer/adbkit';
 import { Promise } from 'bluebird';
 import * as path from 'path';
@@ -22,13 +27,20 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
   constructor() {
     try {
       // Tenta usar o caminho local embutido primeiro
-      const localAdbPath = path.join(process.cwd(), 'bin', 'platform-tools', 'adb.exe');
-      
+      const localAdbPath = path.join(
+        process.cwd(),
+        'bin',
+        'platform-tools',
+        'adb.exe',
+      );
+
       if (fs.existsSync(localAdbPath)) {
         this.logger.log(` utilizando ADB local: ${localAdbPath}`);
         this.client = adb.Adb.createClient({ bin: localAdbPath });
       } else {
-        this.logger.warn('ADB local não encontrado, tentando usar ADB do sistema...');
+        this.logger.warn(
+          'ADB local não encontrado, tentando usar ADB do sistema...',
+        );
         this.client = adb.Adb.createClient();
       }
     } catch (err) {
@@ -41,9 +53,11 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
       // Check if adb is actually in path by running a simple command
       await this.client.listDevices();
       this.adbAvailable = true;
-      this.logger.log('🚀 Iniciando rastreamento de dispositivos Android via USB...');
+      this.logger.log(
+        '🚀 Iniciando rastreamento de dispositivos Android via USB...',
+      );
       this.tracker = await this.client.trackDevices();
-      
+
       this.tracker.on('add', (device) => {
         this.logger.log(`📱 Celular conectado: ${device.id}`);
       });
@@ -52,7 +66,9 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`❌ Celular desconectado: ${device.id}`);
       });
     } catch (err) {
-      this.logger.error('Falha ao iniciar rastreador ADB. Verifique se o ADB está no PATH.');
+      this.logger.error(
+        'Falha ao iniciar rastreador ADB. Verifique se o ADB está no PATH.',
+      );
     }
   }
 
@@ -71,7 +87,7 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
   private async readStream(stream: any): Promise<string> {
     return new Promise((resolve, reject) => {
       let data = '';
-      stream.on('data', (chunk) => data += chunk);
+      stream.on('data', (chunk) => (data += chunk));
       stream.on('end', () => resolve(data));
       stream.on('error', reject);
     });
@@ -79,22 +95,26 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
 
   async typeText(deviceId: string, text: string) {
     const escapedText = text.replace(/ /g, '%s');
-    return (await this.client.getDevice(deviceId)).shell(`input text "${escapedText}"`);
+    return (await this.client.getDevice(deviceId)).shell(
+      `input text "${escapedText}"`,
+    );
   }
 
   async openWhatsApp(deviceId: string, waType: WaType = 'regular') {
     const pkg = WA_PACKAGES[waType];
     return (await this.client.getDevice(deviceId)).shell(
-      `monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`
+      `monkey -p ${pkg} -c android.intent.category.LAUNCHER 1`,
     );
   }
 
   /** Returns which WhatsApp variants are installed on the device */
-  async getInstalledWhatsApps(deviceId: string): Promise<{ regular: boolean; business: boolean }> {
+  async getInstalledWhatsApps(
+    deviceId: string,
+  ): Promise<{ regular: boolean; business: boolean }> {
     try {
       const device = await this.client.getDevice(deviceId);
       const stream = await device.shell(
-        `pm list packages ${WA_PACKAGES.regular} ${WA_PACKAGES.business}`
+        `pm list packages ${WA_PACKAGES.regular} ${WA_PACKAGES.business}`,
       );
       const output = await this.readStream(stream);
       return {
@@ -133,13 +153,17 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
     // 5. Pressionar Enter (Keycode 66) para enviar
     await device.shell('input keyevent 66');
 
-    this.logger.log(`[MobileFarm] Mensagem enviada para ${phoneNumber} via ${waType === 'business' ? 'WhatsApp Business' : 'WhatsApp'} (${deviceId})`);
+    this.logger.log(
+      `[MobileFarm] Mensagem enviada para ${phoneNumber} via ${waType === 'business' ? 'WhatsApp Business' : 'WhatsApp'} (${deviceId})`,
+    );
     return { success: true };
   }
 
   async getBatteryLevel(deviceId: string): Promise<number> {
     try {
-      const output = await (await this.client.getDevice(deviceId)).shell('dumpsys battery | grep level');
+      const output = await (
+        await this.client.getDevice(deviceId)
+      ).shell('dumpsys battery | grep level');
       const content = await this.readStream(output);
       const match = content.match(/level: (\d+)/);
       return match ? parseInt(match[1]) : 0;
@@ -150,7 +174,9 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
 
   async getDeviceModel(deviceId: string): Promise<string> {
     try {
-      const output = await (await this.client.getDevice(deviceId)).shell('getprop ro.product.model');
+      const output = await (
+        await this.client.getDevice(deviceId)
+      ).shell('getprop ro.product.model');
       const content = await this.readStream(output);
       return content.trim() || 'Unknown Android';
     } catch (err) {
@@ -169,13 +195,15 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
       model,
       battery,
       status: 'online',
-      installedWa,  // { regular: boolean, business: boolean }
+      installedWa, // { regular: boolean, business: boolean }
     };
   }
 
   async listFullDevices() {
     if (!this.adbAvailable) {
-      throw new Error('ADB não encontrado no sistema. Por favor, instale o Android Platform Tools.');
+      throw new Error(
+        'ADB não encontrado no sistema. Por favor, instale o Android Platform Tools.',
+      );
     }
     const devices = await this.listDevices();
     return Promise.map(devices, (device) => this.getDeviceInfo(device.id));
@@ -191,7 +219,10 @@ export class AndroidService implements OnModuleInit, OnModuleDestroy {
         output.on('error', reject);
       });
     } catch (err) {
-      this.logger.error(`Erro ao tirar screenshot do dispositivo ${deviceId}:`, err);
+      this.logger.error(
+        `Erro ao tirar screenshot do dispositivo ${deviceId}:`,
+        err,
+      );
       throw err;
     }
   }

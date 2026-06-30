@@ -18,21 +18,26 @@ import { AntiBanModule } from '../anti-ban/anti-ban.module';
 import { InboxModule } from '../inbox/inbox.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Flow, FlowExecution, FlowTrigger, FlowFolder, CampaignContact]),
-        BullModule.registerQueue({
-            name: FLOW_QUEUE,
-        }),
-        InstancesModule,
-        ContactsModule,
-        AiModule,
-        MetaTemplatesModule,
-        forwardRef(() => AntiBanModule),
-        InboxModule,
-    ],
-    controllers: [FlowsController, FoldersController],
-    providers: [FlowsService, FoldersService, FlowExecutionProcessor],
-    exports: [FlowsService, FoldersService],
+  imports: [
+    TypeOrmModule.forFeature([
+      Flow,
+      FlowExecution,
+      FlowTrigger,
+      FlowFolder,
+      CampaignContact,
+    ]),
+    BullModule.registerQueue({
+      name: FLOW_QUEUE,
+    }),
+    InstancesModule,
+    ContactsModule,
+    AiModule,
+    MetaTemplatesModule,
+    forwardRef(() => AntiBanModule),
+    InboxModule,
+  ],
+  controllers: [FlowsController, FoldersController],
+  providers: [FlowsService, FoldersService, FlowExecutionProcessor],
+  exports: [FlowsService, FoldersService],
 })
-export class FlowsModule { }
-
+export class FlowsModule {}

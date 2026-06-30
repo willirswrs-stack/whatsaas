@@ -1,22 +1,22 @@
 import { IsString, IsEmail, IsOptional } from 'class-validator';
 
 export class CreateManualTenantDto {
-    @IsString()
-    name: string;
+  @IsString()
+  name: string;
 
-    @IsEmail()
-    email: string;
+  @IsEmail()
+  email: string;
 
-    @IsOptional()
-    @IsString()
-    planId?: string;
+  @IsOptional()
+  @IsString()
+  planId?: string;
 
-    @IsString()
-    userName: string;
+  @IsString()
+  userName: string;
 
-    @IsEmail()
-    userEmail: string;
+  @IsEmail()
+  userEmail: string;
 
-    @IsString()
-    passwordHash: string;
+  @IsString()
+  passwordHash: string;
 }

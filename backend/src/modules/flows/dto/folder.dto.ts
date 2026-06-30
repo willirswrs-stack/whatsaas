@@ -1,37 +1,44 @@
-import { IsString, IsOptional, IsUUID, IsBoolean, IsInt, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsUUID,
+  IsBoolean,
+  IsInt,
+  Min,
+} from 'class-validator';
 
 export class CreateFolderDto {
-    @IsString()
-    name: string;
+  @IsString()
+  name: string;
 
-    @IsOptional()
-    @IsString()
-    description?: string;
+  @IsOptional()
+  @IsString()
+  description?: string;
 
-    @IsOptional()
-    @IsUUID()
-    parentId?: string;
+  @IsOptional()
+  @IsUUID()
+  parentId?: string;
 }
 
 export class UpdateFolderDto {
-    @IsOptional()
-    @IsString()
-    name?: string;
+  @IsOptional()
+  @IsString()
+  name?: string;
 
-    @IsOptional()
-    @IsString()
-    description?: string;
+  @IsOptional()
+  @IsString()
+  description?: string;
 
-    @IsOptional()
-    @IsUUID()
-    parentId?: string;
+  @IsOptional()
+  @IsUUID()
+  parentId?: string;
 
-    @IsOptional()
-    @IsBoolean()
-    archived?: boolean;
+  @IsOptional()
+  @IsBoolean()
+  archived?: boolean;
 
-    @IsOptional()
-    @IsInt()
-    @Min(0)
-    order?: number;
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  order?: number;
 }

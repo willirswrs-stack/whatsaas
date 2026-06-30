@@ -1,10 +1,10 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateChipDetails1782229500000 implements MigrationInterface {
-    name = 'CreateChipDetails1782229500000'
+  name = 'CreateChipDetails1782229500000';
 
-    public async up(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`
+  public async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`
             CREATE TABLE "chip_details" (
                 "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
                 "instance_id" uuid NOT NULL,
@@ -26,15 +26,17 @@ export class CreateChipDetails1782229500000 implements MigrationInterface {
             )
         `);
 
-        await queryRunner.query(`
+    await queryRunner.query(`
             ALTER TABLE "chip_details" 
             ADD CONSTRAINT "FK_chip_details_instance_id" 
             FOREIGN KEY ("instance_id") REFERENCES "instances"("id") ON DELETE CASCADE ON UPDATE NO ACTION
         `);
-    }
+  }
 
-    public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "chip_details" DROP CONSTRAINT "FK_chip_details_instance_id"`);
-        await queryRunner.query(`DROP TABLE "chip_details"`);
-    }
+  public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(
+      `ALTER TABLE "chip_details" DROP CONSTRAINT "FK_chip_details_instance_id"`,
+    );
+    await queryRunner.query(`DROP TABLE "chip_details"`);
+  }
 }

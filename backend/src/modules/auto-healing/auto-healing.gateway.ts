@@ -4,7 +4,7 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
   SubscribeMessage,
-  MessageBody
+  MessageBody,
 } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
 import { Logger } from '@nestjs/common';
@@ -15,7 +15,9 @@ import { Logger } from '@nestjs/common';
   },
   namespace: 'auto-healing',
 })
-export class AutoHealingGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class AutoHealingGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -26,17 +28,23 @@ export class AutoHealingGateway implements OnGatewayConnection, OnGatewayDisconn
   }
 
   handleDisconnect(client: Socket) {
-    this.logger.log(`Client disconnected from auto-healing monitor: ${client.id}`);
+    this.logger.log(
+      `Client disconnected from auto-healing monitor: ${client.id}`,
+    );
   }
 
-  notifyErrorDetected(errorData: { message: string, context?: string, code?: string }) {
+  notifyErrorDetected(errorData: {
+    message: string;
+    context?: string;
+    code?: string;
+  }) {
     this.server.emit('AGENT_DETECTED_ERROR', {
       timestamp: new Date(),
       ...errorData,
     });
   }
 
-  notifyFixing(actionData: { action: string, details?: string }) {
+  notifyFixing(actionData: { action: string; details?: string }) {
     this.server.emit('AGENT_FIXING', {
       timestamp: new Date(),
       ...actionData,
@@ -50,7 +58,11 @@ export class AutoHealingGateway implements OnGatewayConnection, OnGatewayDisconn
     });
   }
 
-  notifyActionRequired(actionData: { message: string, proposal: string, payload: any }) {
+  notifyActionRequired(actionData: {
+    message: string;
+    proposal: string;
+    payload: any;
+  }) {
     this.server.emit('AGENT_ACTION_REQUIRED', {
       timestamp: new Date(),
       ...actionData,
@@ -60,8 +72,13 @@ export class AutoHealingGateway implements OnGatewayConnection, OnGatewayDisconn
   // Frontend will emit this when Admin clicks "Approve"
   @SubscribeMessage('AGENT_APPROVE_ACTION')
   handleApproveAction(@MessageBody() data: any) {
-    this.logger.log(`Admin approved auto-healing action: ${JSON.stringify(data)}`);
+    this.logger.log(
+      `Admin approved auto-healing action: ${JSON.stringify(data)}`,
+    );
     // Opcionalmente repassar para o Service para executar a ação de fato.
-    this.server.emit('AGENT_ACTION_APPROVED_ACK', { success: true, payload: data });
+    this.server.emit('AGENT_ACTION_APPROVED_ACK', {
+      success: true,
+      payload: data,
+    });
   }
 }

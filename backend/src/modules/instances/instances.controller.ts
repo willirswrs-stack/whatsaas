@@ -1,48 +1,51 @@
 import {
-    Controller,
-    Get,
-    Post,
-    Patch,
-    Delete,
-    Param,
-    Body,
-    UseGuards,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiOperation, ApiBearerAuth, ApiBody } from '@nestjs/swagger';
 import { IsString, IsOptional, IsIn, IsNumber } from 'class-validator';
-
 
 import { InstancesService } from './instances.service';
 import { TenantGuard } from '../auth/guards/tenant.guard';
 import { CurrentTenant } from '../auth/decorators/current-tenant.decorator';
 import { ChipHealthService } from '../anti-ban/chip-health.service';
 import type { ProviderType } from '../whatsapp';
-import { UpdateInstanceDto, ToggleWarmupDto, PairingCodeDto } from './dto/instances.dto';
+import {
+  UpdateInstanceDto,
+  ToggleWarmupDto,
+  PairingCodeDto,
+} from './dto/instances.dto';
 import { ReconnectionService } from './services/reconnection.service';
 
 class CreateInstanceDto {
-    @IsString()
-    instanceName: string;
+  @IsString()
+  instanceName: string;
 
-    @IsOptional()
-    @IsString()
-    proxyId?: string;
+  @IsOptional()
+  @IsString()
+  proxyId?: string;
 
-    @IsOptional()
-    @IsIn(['waha', 'evolution'])
-    provider?: ProviderType;
+  @IsOptional()
+  @IsIn(['waha', 'evolution'])
+  provider?: ProviderType;
 
-    @IsOptional()
-    config?: Record<string, any>;
+  @IsOptional()
+  config?: Record<string, any>;
 
-    @IsOptional()
-    @IsIn(['inbound', 'warm_outbound', 'cold_outbound', 'groups'])
-    warmupProfile?: string;
+  @IsOptional()
+  @IsIn(['inbound', 'warm_outbound', 'cold_outbound', 'groups'])
+  warmupProfile?: string;
 
-    @IsOptional()
-    @IsNumber()
-    warmupDay?: number;
+  @IsOptional()
+  @IsNumber()
+  warmupDay?: number;
 }
 
 @ApiTags('instances')
@@ -50,147 +53,147 @@ class CreateInstanceDto {
 @Controller('instances')
 @UseGuards(AuthGuard('jwt'), TenantGuard)
 export class InstancesController {
-    constructor(
-        private readonly instancesService: InstancesService,
-        private readonly chipHealthService: ChipHealthService,
-        private readonly reconnectionService: ReconnectionService,
-    ) { }
+  constructor(
+    private readonly instancesService: InstancesService,
+    private readonly chipHealthService: ChipHealthService,
+    private readonly reconnectionService: ReconnectionService,
+  ) {}
 
-    @Get()
-    @ApiOperation({ summary: 'List all instances' })
-    async findAll(@CurrentTenant() tenantId: string) {
-        return this.instancesService.findAll(tenantId);
-    }
+  @Get()
+  @ApiOperation({ summary: 'List all instances' })
+  async findAll(@CurrentTenant() tenantId: string) {
+    return this.instancesService.findAll(tenantId);
+  }
 
-    @Get('providers')
-    @ApiOperation({ summary: 'List available WhatsApp providers' })
-    async getProviders() {
-        return {
-            providers: this.instancesService.getAvailableProviders(),
-        };
-    }
+  @Get('providers')
+  @ApiOperation({ summary: 'List available WhatsApp providers' })
+  async getProviders() {
+    return {
+      providers: this.instancesService.getAvailableProviders(),
+    };
+  }
 
+  // Rotas com parâmetros dinâmicos - devem ficar por último
+  @Patch(':id')
+  @ApiOperation({ summary: 'Update instance configuration' })
+  async update(
+    @Param('id') id: string,
+    @Body() data: UpdateInstanceDto,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.instancesService.update(id, tenantId, data as any);
+  }
 
+  @Patch(':id/warmup')
+  @ApiOperation({ summary: 'Toggle warmup mode for instance' })
+  async toggleWarmup(
+    @Param('id') id: string,
+    @Body() body: ToggleWarmupDto,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.instancesService.update(id, tenantId, {
+      warmupEnabled: body.enabled,
+    } as any);
+  }
 
-    // Rotas com parâmetros dinâmicos - devem ficar por último
-    @Patch(':id')
-    @ApiOperation({ summary: 'Update instance configuration' })
-    async update(
-        @Param('id') id: string,
-        @Body() data: UpdateInstanceDto,
-        @CurrentTenant() tenantId: string,
-    ) {
-        return this.instancesService.update(id, tenantId, data as any);
-    }
+  // Rotas com parâmetros dinâmicos - devem ficar por último
+  @Get(':id')
+  @ApiOperation({ summary: 'Get instance by ID' })
+  async findOne(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    return this.instancesService.findOne(id, tenantId);
+  }
 
-    @Patch(':id/warmup')
-    @ApiOperation({ summary: 'Toggle warmup mode for instance' })
-    async toggleWarmup(
-        @Param('id') id: string,
-        @Body() body: ToggleWarmupDto,
-        @CurrentTenant() tenantId: string,
-    ) {
-        return this.instancesService.update(id, tenantId, { warmupEnabled: body.enabled } as any);
-    }
+  @Post(':id/scan-maturity')
+  @ApiOperation({ summary: 'Scan instance maturity' })
+  async scanMaturity(
+    @Param('id') id: string,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.instancesService.scanMaturity(id, tenantId);
+  }
 
-    // Rotas com parâmetros dinâmicos - devem ficar por último
-    @Get(':id')
-    @ApiOperation({ summary: 'Get instance by ID' })
-    async findOne(
-        @Param('id') id: string,
-        @CurrentTenant() tenantId: string,
-    ) {
-        return this.instancesService.findOne(id, tenantId);
-    }
+  @Get(':id/health')
+  @ApiOperation({ summary: 'Get health score for instance' })
+  async getHealth(@Param('id') id: string) {
+    const score = await this.chipHealthService.calculateHealthScore(id);
+    const status = await this.chipHealthService.getHealthStatus(id);
+    return { instanceId: id, score, status };
+  }
 
-    @Post(':id/scan-maturity')
-    @ApiOperation({ summary: 'Scan instance maturity' })
-    async scanMaturity(
-        @Param('id') id: string,
-        @CurrentTenant() tenantId: string,
-    ) {
-        return this.instancesService.scanMaturity(id, tenantId);
-    }
+  @Get(':id/status')
+  @ApiOperation({ summary: 'Get instance connection status' })
+  async getStatus(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    return this.instancesService.getStatus(id, tenantId);
+  }
 
-    @Get(':id/health')
-    @ApiOperation({ summary: 'Get health score for instance' })
-    async getHealth(@Param('id') id: string) {
-        const score = await this.chipHealthService.calculateHealthScore(id);
-        const status = await this.chipHealthService.getHealthStatus(id);
-        return { instanceId: id, score, status };
-    }
-
-    @Get(':id/status')
-    @ApiOperation({ summary: 'Get instance connection status' })
-    async getStatus(
-        @Param('id') id: string,
-        @CurrentTenant() tenantId: string,
-    ) {
-        return this.instancesService.getStatus(id, tenantId);
-    }
-
-    @Post()
-    @ApiOperation({ summary: 'Create a new instance' })
-    @ApiBody({
-        schema: {
-            type: 'object',
-            properties: {
-                instanceName: { type: 'string', example: 'meu-whats' },
-                proxyId: { type: 'string', example: 'uuid', nullable: true },
-                provider: { type: 'string', enum: ['evolution', 'waha'], default: 'evolution' },
-                warmupProfile: { type: 'string', enum: ['inbound', 'warm_outbound', 'cold_outbound', 'groups'], default: 'cold_outbound' },
-            },
-            required: ['instanceName'],
+  @Post()
+  @ApiOperation({ summary: 'Create a new instance' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        instanceName: { type: 'string', example: 'meu-whats' },
+        proxyId: { type: 'string', example: 'uuid', nullable: true },
+        provider: {
+          type: 'string',
+          enum: ['evolution', 'waha'],
+          default: 'evolution',
         },
-    })
-    async create(
-        @Body() data: CreateInstanceDto,
-        @CurrentTenant() tenantId: string,
-    ) {
-        return this.instancesService.create(tenantId, data);
-    }
+        warmupProfile: {
+          type: 'string',
+          enum: ['inbound', 'warm_outbound', 'cold_outbound', 'groups'],
+          default: 'cold_outbound',
+        },
+      },
+      required: ['instanceName'],
+    },
+  })
+  async create(
+    @Body() data: CreateInstanceDto,
+    @CurrentTenant() tenantId: string,
+  ) {
+    return this.instancesService.create(tenantId, data);
+  }
 
-    @Get(':id/qr')
-    @ApiOperation({ summary: 'Get QR code for instance' })
-    async getQrCode(
-        @Param('id') id: string,
-        @CurrentTenant() tenantId: string,
-    ) {
-        const qrCode = await this.instancesService.getQrCode(id, tenantId);
-        return { qrCode };
-    }
+  @Get(':id/qr')
+  @ApiOperation({ summary: 'Get QR code for instance' })
+  async getQrCode(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    const qrCode = await this.instancesService.getQrCode(id, tenantId);
+    return { qrCode };
+  }
 
-    @Post(':id/pairing-code')
-    @ApiOperation({ summary: 'Get phone pairing code for instance' })
-    async getPairingCode(
-        @Param('id') id: string,
-        @Body() body: PairingCodeDto,
-        @CurrentTenant() tenantId: string,
-    ) {
-        const result = await this.instancesService.getPairingCode(id, tenantId, body.phoneNumber);
-        return { pairingCode: result.pairingCode, phone: result.phone };
-    }
+  @Post(':id/pairing-code')
+  @ApiOperation({ summary: 'Get phone pairing code for instance' })
+  async getPairingCode(
+    @Param('id') id: string,
+    @Body() body: PairingCodeDto,
+    @CurrentTenant() tenantId: string,
+  ) {
+    const result = await this.instancesService.getPairingCode(
+      id,
+      tenantId,
+      body.phoneNumber,
+    );
+    return { pairingCode: result.pairingCode, phone: result.phone };
+  }
 
-    @Delete(':id')
-    @ApiOperation({ summary: 'Delete instance' })
-    async delete(
-        @Param('id') id: string,
-        @CurrentTenant() tenantId: string,
-    ) {
-        return this.instancesService.delete(id, tenantId);
-    }
+  @Delete(':id')
+  @ApiOperation({ summary: 'Delete instance' })
+  async delete(@Param('id') id: string, @CurrentTenant() tenantId: string) {
+    return this.instancesService.delete(id, tenantId);
+  }
 
-    @Post(':id/reconnect')
-    @ApiOperation({ summary: 'Force reconnect a specific instance' })
-    async forceReconnect(
-        @Param('id') id: string,
-    ) {
-        return this.reconnectionService.forceReconnect(id);
-    }
+  @Post(':id/reconnect')
+  @ApiOperation({ summary: 'Force reconnect a specific instance' })
+  async forceReconnect(@Param('id') id: string) {
+    return this.reconnectionService.forceReconnect(id);
+  }
 
-    @Post('reconnect-all/action')
-    @ApiOperation({ summary: 'Force reconnect all disconnected/reconnecting instances' })
-    async reconnectAll() {
-        return this.reconnectionService.reconnectAll();
-    }
+  @Post('reconnect-all/action')
+  @ApiOperation({
+    summary: 'Force reconnect all disconnected/reconnecting instances',
+  })
+  async reconnectAll() {
+    return this.reconnectionService.reconnectAll();
+  }
 }

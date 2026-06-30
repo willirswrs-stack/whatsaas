@@ -8,7 +8,7 @@ export class AutoHealingService {
 
   constructor(
     private readonly gateway: AutoHealingGateway,
-    private readonly aiService: AiService
+    private readonly aiService: AiService,
   ) {}
 
   /**
@@ -20,9 +20,12 @@ export class AutoHealingService {
 
     // Se for erro de validação (400) com mensagens de DTO, ou erros internos (500)
     // Ignoramos erros normais de negócio como 401 (Não autorizado) ou 404.
-    if (statusCode === 500 || (statusCode === 400 && message.includes('Unexpected'))) {
+    if (
+      statusCode === 500 ||
+      (statusCode === 400 && message.includes('Unexpected'))
+    ) {
       this.logger.warn(`Auto-Healing acionado para o erro: ${message}`);
-      
+
       this.gateway.notifyErrorDetected({
         message: `Detectado erro ${statusCode}: ${message}`,
         context: requestInfo.url,
@@ -40,28 +43,39 @@ export class AutoHealingService {
         this.gateway.notifyActionRequired({
           message: `O erro em ${requestInfo.url} requer análise profunda.`,
           proposal: 'Solicitando revisão pela IA...',
-          payload: { error: message, stack: error?.stack, url: requestInfo.url }
+          payload: {
+            error: message,
+            stack: error?.stack,
+            url: requestInfo.url,
+          },
         });
-        
+
         // Dispara a análise assincronamente
-        this.analyzeErrorWithLLM(error, requestInfo).catch(e => {
-            this.logger.error(`AI analysis failed: ${e.message}`);
+        this.analyzeErrorWithLLM(error, requestInfo).catch((e) => {
+          this.logger.error(`AI analysis failed: ${e.message}`);
         });
       }
     }
   }
 
-  private async applyHeuristics(error: any, requestInfo: any): Promise<boolean> {
+  private async applyHeuristics(
+    error: any,
+    requestInfo: any,
+  ): Promise<boolean> {
     const message = error?.message || '';
-    
+
     // Heurística 1: Falha de conexão com provider
-    if (message.includes('ECONNREFUSED') && requestInfo.url.includes('/instances')) {
+    if (
+      message.includes('ECONNREFUSED') &&
+      requestInfo.url.includes('/instances')
+    ) {
       this.gateway.notifyFixing({
         action: 'Reiniciando Provider',
-        details: 'A conexão com a API do WhatsApp falhou. Iniciando tentativa de reconexão automática.'
+        details:
+          'A conexão com a API do WhatsApp falhou. Iniciando tentativa de reconexão automática.',
       });
       // Simulando tempo de reparo
-      await new Promise(r => setTimeout(r, 2000));
+      await new Promise((r) => setTimeout(r, 2000));
       return true;
     }
 
@@ -73,28 +87,39 @@ export class AutoHealingService {
     const userPrompt = `URL: ${requestInfo.url}\nError: ${error?.message || error}\nStack: ${error?.stack?.substring(0, 500) || 'N/A'}`;
 
     try {
-        // Usa o AiService para gerar uma resposta (null usa mock se não tiver chave)
-        const responseText = await this.aiService.generateResponseWithKey(systemPrompt, userPrompt, null, 'openai');
-        
-        let aiResult = { rootCause: "Desconhecido", suggestedFix: "Revisão manual necessária", patchAvailable: false };
-        try {
-            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-                aiResult = JSON.parse(jsonMatch[0]);
-            }
-        } catch (e) {
-            this.logger.warn(`Failed to parse AI response: ${responseText}`);
+      // Usa o AiService para gerar uma resposta (null usa mock se não tiver chave)
+      const responseText = await this.aiService.generateResponseWithKey(
+        systemPrompt,
+        userPrompt,
+        null,
+        'openai',
+      );
+
+      let aiResult = {
+        rootCause: 'Desconhecido',
+        suggestedFix: 'Revisão manual necessária',
+        patchAvailable: false,
+      };
+      try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          aiResult = JSON.parse(jsonMatch[0]);
         }
+      } catch (e) {
+        this.logger.warn(`Failed to parse AI response: ${responseText}`);
+      }
 
-        // Notifica o frontend com a sugestão final
-        this.gateway.notifyActionRequired({
-            message: `Análise de IA Concluída para o erro em ${requestInfo.url}`,
-            proposal: aiResult.suggestedFix,
-            payload: { rootCause: aiResult.rootCause, patchAvailable: aiResult.patchAvailable }
-        });
-
+      // Notifica o frontend com a sugestão final
+      this.gateway.notifyActionRequired({
+        message: `Análise de IA Concluída para o erro em ${requestInfo.url}`,
+        proposal: aiResult.suggestedFix,
+        payload: {
+          rootCause: aiResult.rootCause,
+          patchAvailable: aiResult.patchAvailable,
+        },
+      });
     } catch (e) {
-        this.logger.error(`Error communicating with AI: ${e.message}`);
+      this.logger.error(`Error communicating with AI: ${e.message}`);
     }
   }
 }

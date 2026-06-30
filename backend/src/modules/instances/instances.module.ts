@@ -15,14 +15,18 @@ import { MobileFarmController } from './mobile-farm.controller';
 import { ProxiesModule } from '../proxies/proxies.module';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Instance, WarmupSchedule, ChipDetail, Tenant]),
-        forwardRef(() => EvolutionModule),
-        ProxiesModule,
-    ],
-    controllers: [InstancesController, MobileFarmController],
-    providers: [InstancesService, ChipHealthService, AndroidService, ReconnectionService],
-    exports: [InstancesService, AndroidService, ReconnectionService],
+  imports: [
+    TypeOrmModule.forFeature([Instance, WarmupSchedule, ChipDetail, Tenant]),
+    forwardRef(() => EvolutionModule),
+    ProxiesModule,
+  ],
+  controllers: [InstancesController, MobileFarmController],
+  providers: [
+    InstancesService,
+    ChipHealthService,
+    AndroidService,
+    ReconnectionService,
+  ],
+  exports: [InstancesService, AndroidService, ReconnectionService],
 })
-export class InstancesModule { }
-
+export class InstancesModule {}

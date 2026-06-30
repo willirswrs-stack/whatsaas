@@ -11,12 +11,9 @@ import { InboxController } from './inbox.controller';
 import { InboxCleanupService } from './inbox-cleanup.service';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Message, Contact, Instance, Tenant]),
-    ],
-    controllers: [InboxController],
-    providers: [InboxService, InboxCleanupService],
-    exports: [InboxService],
+  imports: [TypeOrmModule.forFeature([Message, Contact, Instance, Tenant])],
+  controllers: [InboxController],
+  providers: [InboxService, InboxCleanupService],
+  exports: [InboxService],
 })
 export class InboxModule {}
-

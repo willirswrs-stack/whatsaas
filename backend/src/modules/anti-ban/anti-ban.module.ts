@@ -22,48 +22,48 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { GroupWarmupService } from './group-warmup.service';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Instance]),
-        BullModule.registerQueue({
-            name: WARMUP_QUEUE,
-        }),
-        forwardRef(() => InstancesModule),
-        AiModule,
-        WhatsAppModule,
-    ],
-    controllers: [AnalyticsController, WarmupController],
-    providers: [
-        HumanBehaviorService,
-        PatternBreakerService,
-        PhoneNormalizerService,
-        DelayGeneratorService,
-        StackRouterService,
-        AntiBanAnalyticsService,
-        ChipHealthService,
-        WarmupService,
-        WarmupProcessor,
-        ChipLifecycleService,
-        ActivePreventionService,
-        GroupWarmupService,
-    ],
-    exports: [
-        HumanBehaviorService,
-        PatternBreakerService,
-        PhoneNormalizerService,
-        DelayGeneratorService,
-        StackRouterService,
-        AntiBanAnalyticsService,
-        ChipHealthService,
-        WarmupService,
-        ChipLifecycleService,
-        ActivePreventionService,
-        GroupWarmupService,
-    ],
+  imports: [
+    TypeOrmModule.forFeature([Instance]),
+    BullModule.registerQueue({
+      name: WARMUP_QUEUE,
+    }),
+    forwardRef(() => InstancesModule),
+    AiModule,
+    WhatsAppModule,
+  ],
+  controllers: [AnalyticsController, WarmupController],
+  providers: [
+    HumanBehaviorService,
+    PatternBreakerService,
+    PhoneNormalizerService,
+    DelayGeneratorService,
+    StackRouterService,
+    AntiBanAnalyticsService,
+    ChipHealthService,
+    WarmupService,
+    WarmupProcessor,
+    ChipLifecycleService,
+    ActivePreventionService,
+    GroupWarmupService,
+  ],
+  exports: [
+    HumanBehaviorService,
+    PatternBreakerService,
+    PhoneNormalizerService,
+    DelayGeneratorService,
+    StackRouterService,
+    AntiBanAnalyticsService,
+    ChipHealthService,
+    WarmupService,
+    ChipLifecycleService,
+    ActivePreventionService,
+    GroupWarmupService,
+  ],
 })
 export class AntiBanModule implements OnApplicationBootstrap {
-    constructor(private readonly warmupService: WarmupService) { }
+  constructor(private readonly warmupService: WarmupService) {}
 
-    async onApplicationBootstrap() {
-        // Inicialização
-    }
+  async onApplicationBootstrap() {
+    // Inicialização
+  }
 }

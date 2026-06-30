@@ -4,8 +4,8 @@ import { AuthModule } from '../auth/auth.module';
 
 @Global()
 @Module({
-    imports: [AuthModule],
-    providers: [EventsGateway],
-    exports: [EventsGateway],
+  imports: [AuthModule],
+  providers: [EventsGateway],
+  exports: [EventsGateway],
 })
-export class EventsModule { }
+export class EventsModule {}

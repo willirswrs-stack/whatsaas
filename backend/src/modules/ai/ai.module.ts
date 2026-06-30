@@ -9,13 +9,13 @@ import { SettingsModule } from '../settings/settings.module';
 import { Tenant } from '../tenants/entities/tenant.entity';
 
 @Module({
-    imports: [
-        ConfigModule, 
-        forwardRef(() => SettingsModule),
-        TypeOrmModule.forFeature([Tenant]),
-    ],
-    controllers: [AiController],
-    providers: [AiService, ElevenLabsService],
-    exports: [AiService, ElevenLabsService],
+  imports: [
+    ConfigModule,
+    forwardRef(() => SettingsModule),
+    TypeOrmModule.forFeature([Tenant]),
+  ],
+  controllers: [AiController],
+  providers: [AiService, ElevenLabsService],
+  exports: [AiService, ElevenLabsService],
 })
-export class AiModule { }
+export class AiModule {}

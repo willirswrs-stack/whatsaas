@@ -5,11 +5,9 @@ import { UploadsService } from './uploads.service';
 import { Tenant } from '../tenants/entities/tenant.entity';
 
 @Module({
-    imports: [
-        TypeOrmModule.forFeature([Tenant]),
-    ],
-    controllers: [UploadsController],
-    providers: [UploadsService],
-    exports: [UploadsService],
+  imports: [TypeOrmModule.forFeature([Tenant])],
+  controllers: [UploadsController],
+  providers: [UploadsService],
+  exports: [UploadsService],
 })
-export class UploadsModule { }
+export class UploadsModule {}

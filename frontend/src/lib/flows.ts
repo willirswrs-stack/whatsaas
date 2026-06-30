@@ -14,6 +14,7 @@ export type FlowNodeType =
     | 'removeTag'
     | 'updateField'
     | 'gpt'
+    | 'whatsapp_flow'
     | 'end';
 
 export interface FlowNodeData {
@@ -253,6 +254,7 @@ export const NODE_CATEGORIES: NodeCategory[] = [
             { type: 'message', label: 'Texto', icon: '💬', color: '#14b8a6' },
             { type: 'question', label: 'Pergunta', icon: '❓', color: '#14b8a6' },
             { type: 'link', label: 'Link', icon: '🔗', color: '#3b82f6' },
+            { type: 'whatsapp_flow', label: 'WhatsApp Flow', icon: '📋', color: '#25d366' },
         ],
     },
     {
@@ -336,6 +338,7 @@ export const getNodeColor = (type: FlowNodeType): string => {
         removeTag: '#ec4899',
         updateField: '#06b6d4',
         gpt: '#10b981',
+        whatsapp_flow: '#25d366',
         end: '#ef4444',
     };
     return colors[type] || '#6b7280';

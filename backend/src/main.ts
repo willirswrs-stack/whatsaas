@@ -21,9 +21,12 @@ async function bootstrap() {
   app.useGlobalInterceptors(new LoggerErrorInterceptor());
 
   // Security: Helmet
-  app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
-  }));
+  app.use(
+    helmet({
+      contentSecurityPolicy:
+        process.env.NODE_ENV === 'production' ? undefined : false,
+    }),
+  );
 
   // Increase payload limit
   app.use(json({ limit: '50mb' }));
@@ -48,11 +51,31 @@ async function bootstrap() {
     : ['http://localhost:3000', 'http://127.0.0.1:3000'];
 
   app.enableCors({
-    origin: true,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, curl, postman, etc.)
+      if (!origin) return callback(null, true);
+
+      const isAllowed = allowedOrigins.some((allowed) => {
+        return allowed === origin || allowed === '*';
+      });
+
+      if (isAllowed || process.env.NODE_ENV !== 'production') {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept', 'X-Request-ID'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Request-ID',
+      'x-admin-reset-token',
+    ],
   });
+
 
   // Serve uploaded files statically (before global prefix to avoid /api/v1 prefix)
   const uploadsPath = path.join(process.cwd(), 'uploads');

@@ -1,4 +1,13 @@
-import { Controller, Get, Post, Param, UseGuards, Res, HttpStatus, Body } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Param,
+  UseGuards,
+  Res,
+  HttpStatus,
+  Body,
+} from '@nestjs/common';
 import * as express from 'express';
 import { AuthGuard } from '@nestjs/passport';
 import { AndroidService } from './services/android.service';
@@ -17,16 +26,16 @@ export class MobileFarmController {
   async getStatus() {
     return {
       available: this.androidService.isAdbAvailable(),
-      message: this.androidService.isAdbAvailable() 
-        ? 'Motor ADB pronto e aguardando conexões USB.' 
-        : 'Motor ADB não inicializado. Verifique a pasta bin/platform-tools.'
+      message: this.androidService.isAdbAvailable()
+        ? 'Motor ADB pronto e aguardando conexões USB.'
+        : 'Motor ADB não inicializado. Verifique a pasta bin/platform-tools.',
     };
   }
 
   @Post('devices/:id/open-whatsapp')
   async openWhatsApp(
     @Param('id') id: string,
-    @Body() body: { waType?: 'regular' | 'business' }
+    @Body() body: { waType?: 'regular' | 'business' },
   ) {
     await this.androidService.openWhatsApp(id, body?.waType ?? 'regular');
     return { success: true };
@@ -35,7 +44,8 @@ export class MobileFarmController {
   @Post('devices/:id/send-message')
   async sendMessage(
     @Param('id') id: string,
-    @Body() body: { phone: string; message: string; waType?: 'regular' | 'business' }
+    @Body()
+    body: { phone: string; message: string; waType?: 'regular' | 'business' },
   ) {
     return this.androidService.sendWhatsAppMessage(
       id,
@@ -57,7 +67,9 @@ export class MobileFarmController {
       res.set('Content-Type', 'image/png');
       res.status(HttpStatus.OK).send(buffer);
     } catch (err) {
-      res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({ message: 'Erro ao capturar tela' });
+      res
+        .status(HttpStatus.INTERNAL_SERVER_ERROR)
+        .json({ message: 'Erro ao capturar tela' });
     }
   }
 }

@@ -5,10 +5,10 @@ import { createParamDecorator, ExecutionContext } from '@nestjs/common';
  * Usage: @CurrentTenant() tenantId: string
  */
 export const CurrentTenant = createParamDecorator(
-    (data: unknown, ctx: ExecutionContext): string => {
-        const request = ctx.switchToHttp().getRequest();
-        return request.user?.tenantId || request.tenantId;
-    },
+  (data: unknown, ctx: ExecutionContext): string => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.user?.tenantId || request.tenantId;
+  },
 );
 
 /**
@@ -16,18 +16,18 @@ export const CurrentTenant = createParamDecorator(
  * Usage: @CurrentUser() user: UserPayload
  */
 export const CurrentUser = createParamDecorator(
-    (data: unknown, ctx: ExecutionContext) => {
-        const request = ctx.switchToHttp().getRequest();
-        return request.user;
-    },
+  (data: unknown, ctx: ExecutionContext) => {
+    const request = ctx.switchToHttp().getRequest();
+    return request.user;
+  },
 );
 
 /**
  * Interface for user payload in JWT
  */
 export interface UserPayload {
-    userId: string;
-    email: string;
-    tenantId: string;
-    role: string;
+  userId: string;
+  email: string;
+  tenantId: string;
+  role: string;
 }

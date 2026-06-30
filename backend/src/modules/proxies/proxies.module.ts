@@ -8,14 +8,14 @@ import { WebshareAdapter } from './providers/webshare.adapter';
 import { IPRoyalAdapter } from './providers/iproyal.adapter';
 
 @Module({
-    imports: [TypeOrmModule.forFeature([ProxyEntity])],
-    controllers: [ProxiesController],
-    providers: [
-        ProxiesService,
-        ProxyProviderFactory,
-        WebshareAdapter,
-        IPRoyalAdapter
-    ],
-    exports: [ProxiesService]
+  imports: [TypeOrmModule.forFeature([ProxyEntity])],
+  controllers: [ProxiesController],
+  providers: [
+    ProxiesService,
+    ProxyProviderFactory,
+    WebshareAdapter,
+    IPRoyalAdapter,
+  ],
+  exports: [ProxiesService],
 })
 export class ProxiesModule {}

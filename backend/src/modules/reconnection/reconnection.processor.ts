@@ -1,4 +1,3 @@
-
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
@@ -11,52 +10,56 @@ import { RECONNECTION_QUEUE } from '../../config/bull.config';
 @Injectable()
 @Processor(RECONNECTION_QUEUE)
 export class ReconnectionProcessor extends WorkerHost {
-    private readonly logger = new Logger(ReconnectionProcessor.name);
+  private readonly logger = new Logger(ReconnectionProcessor.name);
 
-    constructor(
-        private reconnectionService: ReconnectionService,
-        private configService: ConfigService,
-        @InjectQueue(RECONNECTION_QUEUE) private reconnectionQueue: Queue
-    ) {
-        super();
+  constructor(
+    private reconnectionService: ReconnectionService,
+    private configService: ConfigService,
+    @InjectQueue(RECONNECTION_QUEUE) private reconnectionQueue: Queue,
+  ) {
+    super();
+  }
+
+  async process(job: Job): Promise<any> {
+    // Migrado para o novo ReconnectionService integrado em instances.module
+    // Evita concorrência e conflitos de reconexão
+    return { skipped: true, reason: 'Migrated to new reconnection service' };
+  }
+
+  private async handleTriggerCheck(job: Job) {
+    this.logger.debug('Triggering reconnection check...');
+    const batchSize = this.configService.get('AUTO_RECONNECT_BATCH_SIZE', 50);
+
+    const instances = await this.reconnectionService.findEligibleInstances(
+      Number(batchSize),
+    );
+
+    if (instances.length === 0) {
+      return { processed: 0, message: 'No eligible instances' };
     }
 
-    async process(job: Job): Promise<any> {
-        // Migrado para o novo ReconnectionService integrado em instances.module
-        // Evita concorrência e conflitos de reconexão
-        return { skipped: true, reason: 'Migrated to new reconnection service' };
-    }
+    this.logger.log(
+      `Found ${instances.length} instances for reconnection check.`,
+    );
 
-    private async handleTriggerCheck(job: Job) {
-        this.logger.debug('Triggering reconnection check...');
-        const batchSize = this.configService.get('AUTO_RECONNECT_BATCH_SIZE', 50);
+    const jobs = instances.map((instance) => ({
+      name: 'check-instance',
+      data: { instanceId: instance.id },
+      opts: {
+        jobId: `reconnect-${instance.id}-${Date.now()}`,
+        removeOnComplete: true,
+      },
+    }));
 
-        const instances = await this.reconnectionService.findEligibleInstances(Number(batchSize));
+    await this.reconnectionQueue.addBulk(jobs);
 
-        if (instances.length === 0) {
-            return { processed: 0, message: 'No eligible instances' };
-        }
+    return { processed: instances.length };
+  }
 
-        this.logger.log(`Found ${instances.length} instances for reconnection check.`);
+  private async handleCheckInstance(job: Job) {
+    const { instanceId } = job.data;
+    if (!instanceId) throw new Error('Missing instanceId');
 
-        const jobs = instances.map(instance => ({
-            name: 'check-instance',
-            data: { instanceId: instance.id },
-            opts: {
-                jobId: `reconnect-${instance.id}-${Date.now()}`,
-                removeOnComplete: true
-            }
-        }));
-
-        await this.reconnectionQueue.addBulk(jobs);
-
-        return { processed: instances.length };
-    }
-
-    private async handleCheckInstance(job: Job) {
-        const { instanceId } = job.data;
-        if (!instanceId) throw new Error('Missing instanceId');
-
-        await this.reconnectionService.processInstanceById(instanceId);
-    }
+    await this.reconnectionService.processInstanceById(instanceId);
+  }
 }

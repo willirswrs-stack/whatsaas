@@ -6,37 +6,37 @@ import { ConfigService } from '@nestjs/config';
 import { AuthService } from '../auth.service';
 
 interface JwtPayload {
-    sub: string;
-    email: string;
-    tenantId: string;
-    role: string;
+  sub: string;
+  email: string;
+  tenantId: string;
+  role: string;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-    constructor(
-        private authService: AuthService,
-        configService: ConfigService,
-    ) {
-        super({
-            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-            ignoreExpiration: false,
-            secretOrKey: configService.get('JWT_SECRET', 'wathsaas_jwt_secret'),
-        });
+  constructor(
+    private authService: AuthService,
+    configService: ConfigService,
+  ) {
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey: configService.get('JWT_SECRET', 'wathsaas_jwt_secret'),
+    });
+  }
+
+  async validate(payload: JwtPayload) {
+    const user = await this.authService.validateUser(payload.sub);
+    if (!user) {
+      throw new UnauthorizedException('User not found');
     }
 
-    async validate(payload: JwtPayload) {
-        const user = await this.authService.validateUser(payload.sub);
-        if (!user) {
-            throw new UnauthorizedException('User not found');
-        }
-
-        return {
-            userId: payload.sub,
-            email: payload.email,
-            tenantId: payload.tenantId,
-            role: payload.role,
-            tenant: user.tenant,
-        };
-    }
+    return {
+      userId: payload.sub,
+      email: payload.email,
+      tenantId: payload.tenantId,
+      role: payload.role,
+      tenant: user.tenant,
+    };
+  }
 }

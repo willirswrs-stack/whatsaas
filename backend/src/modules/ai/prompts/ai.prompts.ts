@@ -76,8 +76,7 @@ Gere um roteiro de conversa entre duas pessoas (Personagem A e Personagem B).
   ]
 }
 
-Retorne APENAS o JSON válido sem markdown.`
-;
+Retorne APENAS o JSON válido sem markdown.`;
 
 export const warmupConversationUserPrompt = (
   messageCount: number,
@@ -85,7 +84,7 @@ export const warmupConversationUserPrompt = (
   niche?: string,
 ): string => {
   let contextLine = `Gere uma conversa natural de WhatsApp sobre o tema: "${topics[0] || 'dia a dia'}".`;
-  
+
   if (niche) {
     contextLine = `Gere uma conversa natural de WhatsApp contextualizada inteiramente no nicho de mercado: "${niche}". Ambos os participantes têm interesse direto nesse meio e devem conversar sobre tópicos relevantes a este nicho de forma fluida e orgânica.`;
   }
