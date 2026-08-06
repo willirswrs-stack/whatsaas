@@ -94,7 +94,18 @@ export interface IWhatsAppProvider {
       flowScreen?: string;
     },
   ): Promise<SendMessageResult>;
-
+  /**
+   * Send WhatsApp Status/Stories broadcast
+   */
+  sendStatus?(
+    instanceName: string,
+    statusPayload: {
+      type: 'text' | 'image' | 'video' | 'audio';
+      content: string;
+      caption?: string;
+      backgroundColor?: string;
+    },
+  ): Promise<SendMessageResult>;
 
   /**
    * Send presence (typing, recording)
