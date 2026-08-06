@@ -7,6 +7,7 @@ import { Header } from '@/components/Header';
 import { warmupService, WarmupStats } from '@/lib/warmup';
 import { instancesService } from '@/lib/instances';
 import api from '@/lib/api';
+import { WhatsAppWebLive } from '@/components/WhatsAppWebLive';
 
 const rampStages = [
     { days: '1-3', limit: 10, label: 'Iniciante' },
@@ -388,39 +389,72 @@ export default function WarmupPage() {
         );
     }
 
+    const [mainView, setMainView] = useState<'web' | 'matrix'>('web');
     const safeStats = stats || { activeChips: 0, totalMessagesSent: 0, avgHealth: 0, instances: [] };
 
     return (
         <div className="animate-fadeIn pb-12">
             <Header />
 
-            <div className="page-header container mx-auto px-4 max-w-7xl">
+            <div className="page-header container mx-auto px-4 max-w-7xl flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
                     <img src="/icons/sidebar/warmup.png" alt="Warm-up" className="w-10 h-10 object-contain drop-shadow-md" />
                     <div>
-                        <h1 className="page-title">Warm-up de Chips</h1>
-                        <p className="text-sm text-[var(--text-muted)]">Maturação automatizada de chips e conversas reais em tempo real</p>
+                        <h1 className="page-title">Ambiente WhatsApp Web & Status (Tempo Real)</h1>
+                        <p className="text-sm text-[var(--text-muted)]">Interface autêntica do WhatsApp Web em tempo real, publicação de Status/Stories e maturação de chips</p>
                     </div>
+                </div>
+
+                {/* Main View Selector Bar */}
+                <div className="flex gap-2 bg-[#202c33] p-1.5 rounded-xl border border-[#222d34] self-start md:self-auto">
+                    <button
+                        onClick={() => setMainView('web')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                            mainView === 'web'
+                                ? 'bg-[#00a884] text-[#111b21] shadow-lg'
+                                : 'text-[#8696a0] hover:text-[#e9edef]'
+                        }`}
+                    >
+                        💬 WhatsApp Web (Ao Vivo)
+                    </button>
+                    <button
+                        onClick={() => setMainView('matrix')}
+                        className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 ${
+                            mainView === 'matrix'
+                                ? 'bg-[#00a884] text-[#111b21] shadow-lg'
+                                : 'text-[#8696a0] hover:text-[#e9edef]'
+                        }`}
+                    >
+                        📊 Matriz & Controle de Chips
+                    </button>
                 </div>
             </div>
 
-            {/* Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 container mx-auto px-4 max-w-7xl">
-                <div className="stat-card glass-card p-5">
-                    <span className="stat-label text-sm text-[var(--text-muted)]">Chips em Maturação</span>
-                    <span className="stat-value text-[var(--accent-warning)] text-2xl font-bold">{safeStats.activeChips}</span>
+            {mainView === 'web' ? (
+                <div className="container mx-auto px-4 max-w-7xl mb-8">
+                    <WhatsAppWebLive />
                 </div>
-                <div className="stat-card glass-card p-5">
-                    <span className="stat-label text-sm text-[var(--text-muted)]">Mensagens Trocadas (Hoje)</span>
-                    <span className="stat-value text-2xl font-bold">{safeStats.totalMessagesSent}</span>
-                </div>
-                <div className="stat-card glass-card p-5">
-                    <span className="stat-label text-sm text-[var(--text-muted)]">Saúde Média</span>
-                    <span className={`text-2xl font-bold ${safeStats.avgHealth > 80 ? 'text-[var(--accent-success)]' : 'text-[var(--accent-warning)]'}`}>
-                        {Math.round(safeStats.avgHealth)}%
-                    </span>
-                </div>
-            </div>
+            ) : (
+                <>
+                    {/* Stats */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8 container mx-auto px-4 max-w-7xl">
+                        <div className="stat-card glass-card p-5">
+                            <span className="stat-label text-sm text-[var(--text-muted)]">Chips em Maturação</span>
+                            <span className="stat-value text-[var(--accent-warning)] text-2xl font-bold">{safeStats.activeChips}</span>
+                        </div>
+                        <div className="stat-card glass-card p-5">
+                            <span className="stat-label text-sm text-[var(--text-muted)]">Mensagens Trocadas (Hoje)</span>
+                            <span className="stat-value text-2xl font-bold">{safeStats.totalMessagesSent}</span>
+                        </div>
+                        <div className="stat-card glass-card p-5">
+                            <span className="stat-label text-sm text-[var(--text-muted)]">Saúde Média</span>
+                            <span className={`text-2xl font-bold ${safeStats.avgHealth > 80 ? 'text-[var(--accent-success)]' : 'text-[var(--accent-warning)]'}`}>
+                                {Math.round(safeStats.avgHealth)}%
+                            </span>
+                        </div>
+                    </div>
+                </>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 container mx-auto px-4 max-w-7xl">
                 {/* Ramp Strategy */}
