@@ -18,11 +18,17 @@ export class ElevenLabsService {
   }
 
   private async getApiKey(tenantId?: string): Promise<string> {
-    if (!tenantId) return this.defaultApiKey;
+    const defaultKey =
+      this.configService.get('ELEVENLABS_API_KEY', '') ||
+      process.env.ELEVENLABS_API_KEY ||
+      '';
+    if (!tenantId) return defaultKey;
     const keys = await this.settingsService.getAllLLMKeys(tenantId);
-    return keys?.elevenLabsKey && !keys.elevenLabsKey.includes('*')
-      ? keys.elevenLabsKey
-      : this.defaultApiKey;
+    const key = keys?.elevenLabsKey || (keys as any)?.elevenlabsKey;
+    if (key && key.trim().length > 5 && !key.includes('*')) {
+      return key.trim();
+    }
+    return defaultKey;
   }
 
   /**
