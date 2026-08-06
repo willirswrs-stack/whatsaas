@@ -280,6 +280,8 @@ export class SettingsService {
       globalConfig.anthropicKey ||
       globalConfig.geminiKey ||
       globalConfig.groqKey ||
+      globalConfig.elevenLabsKey ||
+      globalConfig.elevenlabsKey ||
       globalConfig.customLlmKey
     ) {
       return {
@@ -287,7 +289,7 @@ export class SettingsService {
         anthropicKey: globalConfig.anthropicKey || undefined,
         geminiKey: globalConfig.geminiKey || undefined,
         groqKey: globalConfig.groqKey || undefined,
-        elevenLabsKey: globalConfig.elevenLabsKey || undefined,
+        elevenLabsKey: globalConfig.elevenLabsKey || globalConfig.elevenlabsKey || undefined,
         customLlmKey: globalConfig.customLlmKey || undefined,
         customLlmUrl: globalConfig.customLlmUrl || undefined,
       };
@@ -300,7 +302,7 @@ export class SettingsService {
       anthropicKey: settings?.anthropicKey || undefined,
       geminiKey: settings?.geminiKey || undefined,
       groqKey: settings?.groqKey || undefined,
-      elevenLabsKey: settings?.extraSettings?.elevenLabsKey || undefined,
+      elevenLabsKey: settings?.extraSettings?.elevenLabsKey || settings?.extraSettings?.elevenlabsKey || undefined,
       customLlmKey: settings?.extraSettings?.customLlmKey || undefined,
       customLlmUrl: settings?.extraSettings?.customLlmUrl || undefined,
     };
