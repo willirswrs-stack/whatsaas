@@ -390,7 +390,14 @@ export class WarmupService {
           // Limitar a probabilidade de entrar em sessão em cada slot a um máximo (ex: 20%)
           // para evitar filas contínuas e envio sem parar.
           const rawProbability = sessionsNeeded / slotsInDay;
-          const probability = Math.min(0.2, rawProbability);
+          let probability = Math.min(0.2, rawProbability);
+
+          // 🚀 IMPULSO CROSS-TENANT: Se for pareamento entre contas diferentes (Cross-Tenant),
+          // impulsiona a probabilidade para no mínimo 60% para garantir que os chips dos clientes
+          // conversem imediatamente com as sementes sem ter que esperar horas pelo sorteio estatístico!
+          if (chip.tenantId !== partner.tenantId) {
+            probability = Math.max(0.6, probability);
+          }
 
           if (Math.random() > probability) {
             // Skip this pair for now to distribute traffic
