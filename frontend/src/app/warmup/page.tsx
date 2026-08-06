@@ -128,6 +128,7 @@ const WhatsAppMockup = ({ simulatedChips, visibleMessages, isSimulatingTyping, o
 
 // ─── Page ──────────────────────────────────────────────────────────────────
 export default function WarmupPage() {
+    const [mainView, setMainView] = useState<'web' | 'matrix'>('web');
     const [stats, setStats] = useState<WarmupStats | null>(null);
     const [loading, setLoading] = useState(true);
     const [actionLoading, setActionLoading] = useState(false);
@@ -389,7 +390,6 @@ export default function WarmupPage() {
         );
     }
 
-    const [mainView, setMainView] = useState<'web' | 'matrix'>('web');
     const safeStats = stats || { activeChips: 0, totalMessagesSent: 0, avgHealth: 0, instances: [] };
 
     return (
