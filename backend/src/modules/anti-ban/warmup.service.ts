@@ -835,12 +835,28 @@ export class WarmupService {
           );
           currentMsgType = 'audio';
 
-          // 1. Determina o perfil de voz e velocidade (busca no metaConfig ou fallback neutro)
-          const voice = sender.metaConfig?.voiceProfile || 'alloy';
+          // 1. Determina o perfil de voz e velocidade com atribuição determinística por chip (evita vozes robóticas idênticas)
+          const HUMAN_VOICES = ['nova', 'onyx', 'echo', 'shimmer', 'fable', 'alloy'];
+          const getVoiceForInstance = (inst: any) => {
+            if (
+              inst.metaConfig?.voiceProfile &&
+              inst.metaConfig.voiceProfile.trim().length > 0
+            ) {
+              return inst.metaConfig.voiceProfile;
+            }
+            let hash = 0;
+            const str = inst.id || inst.instanceName || inst.phone || '';
+            for (let i = 0; i < str.length; i++) {
+              hash = (Math.imul(31, hash) + str.charCodeAt(i)) | 0;
+            }
+            return HUMAN_VOICES[Math.abs(hash) % HUMAN_VOICES.length];
+          };
+
+          const voice = getVoiceForInstance(sender);
           const speed = Number(sender.metaConfig?.voiceSpeed) || 1.0;
           const model = sender.metaConfig?.voiceModel || 'tts-1-hd';
           this.logger.log(
-            `[LIVE] Synthesizing voice using profile: ${voice}, speed: ${speed}, model: ${model}`,
+            `[LIVE] Synthesizing voice for ${sender.instanceName} using profile: ${voice}, speed: ${speed}, model: ${model}`,
           );
 
           let buffer: Buffer;
@@ -848,7 +864,7 @@ export class WarmupService {
           if (voice.length > 15 && (await this.elevenLabs.hasKey(tenantId))) {
             try {
               this.logger.log(
-                `[LIVE] Utilizando ElevenLabs para clonagem de voz`,
+                `[LIVE] Utilizando ElevenLabs para clonagem/síntese de voz (${voice})`,
               );
               buffer = await this.elevenLabs.synthesizeSpeech(
                 msg.content,
@@ -856,12 +872,13 @@ export class WarmupService {
                 tenantId,
               );
             } catch (e) {
+              const fallbackVoice = getVoiceForInstance(sender);
               this.logger.warn(
-                `ElevenLabs falhou, fallback para OpenAI: ${e.message}`,
+                `ElevenLabs falhou, fallback para OpenAI (${fallbackVoice}): ${e.message}`,
               );
               buffer = await this.aiService.synthesizeSpeech(
                 msg.content,
-                'alloy',
+                fallbackVoice,
                 speed,
                 model,
               );
