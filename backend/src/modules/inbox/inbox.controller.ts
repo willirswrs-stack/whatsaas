@@ -88,6 +88,67 @@ export class InboxController {
   }
 
   /**
+   * Send a media reply (photo, video, audio, document) from inbox.
+   */
+  @Post(':jid/send-media')
+  @ApiOperation({ summary: 'Send media reply to a conversation' })
+  async sendMediaReply(
+    @CurrentTenant() tenantId: string,
+    @Param('jid') jid: string,
+    @Body()
+    body: {
+      type: 'image' | 'video' | 'audio' | 'document';
+      url: string;
+      caption?: string;
+      filename?: string;
+      instanceId?: string;
+    },
+  ) {
+    const remoteJid = decodeURIComponent(jid);
+    const message = await this.inboxService.sendMediaReply(
+      tenantId,
+      remoteJid,
+      {
+        type: body.type,
+        url: body.url,
+        caption: body.caption,
+        filename: body.filename,
+      },
+      body.instanceId,
+    );
+    return { success: true, message };
+  }
+
+  /**
+   * Publish WhatsApp Status/Stories broadcast for an instance.
+   */
+  @Post('status')
+  @ApiOperation({ summary: 'Publish WhatsApp Status/Story broadcast' })
+  async publishStatus(
+    @CurrentTenant() tenantId: string,
+    @Body()
+    body: {
+      instanceId: string;
+      type: 'text' | 'image' | 'video' | 'audio';
+      content: string;
+      caption?: string;
+      backgroundColor?: string;
+    },
+  ) {
+    const result = await this.inboxService.publishStatus(
+      tenantId,
+      body.instanceId,
+      {
+        type: body.type,
+        content: body.content,
+        caption: body.caption,
+        backgroundColor: body.backgroundColor,
+      },
+    );
+    return { success: true, result };
+  }
+
+  /**
    * Mark all messages in a conversation as read.
    */
   @Patch(':jid/read')
