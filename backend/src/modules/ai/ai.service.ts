@@ -259,6 +259,24 @@ export class AiService {
     }
   }
 
+  private async getOpenAIClient(tenantId?: string): Promise<OpenAI> {
+    let key: string | null = null;
+    if (tenantId) {
+      key = await this.settingsService.getOpenAIKey(tenantId);
+    }
+    if (!key) {
+      const globalSettings = getGlobalApiSettings();
+      key = globalSettings.openaiKey || process.env.OPENAI_API_KEY || null;
+    }
+    if (key && key !== 'sk-placeholder' && key.trim().length > 5) {
+      return new OpenAI({ apiKey: key.trim() });
+    }
+    if (this.openai) {
+      return this.openai;
+    }
+    throw new Error('Chave da OpenAI não configurada no sistema (ou env OPENAI_API_KEY).');
+  }
+
   /**
    * Synthesize text to audio speech using OpenAI TTS
    * Returns audio buffer
@@ -275,10 +293,15 @@ export class AiService {
       | string = 'alloy',
     speed: number = 1.0,
     model: string = 'tts-1-hd',
+    tenantId?: string,
   ): Promise<Buffer> {
-    if (!this.openai) {
-      throw new Error('OpenAI client not initialized (missing API KEY)');
-    }
+    const openaiClient = await this.getOpenAIClient(tenantId);
+
+    // Mapeia vozes para vozes válidas da OpenAI se não for customizada
+    const validOpenAIVoices = ['alloy', 'echo', 'fable', 'onyx', 'nova', 'shimmer'];
+    const safeVoice = validOpenAIVoices.includes(voice.toLowerCase())
+      ? voice.toLowerCase()
+      : 'nova';
 
     // Clamp speed within OpenAI acceptable bounds
     const safeSpeed = Math.min(4.0, Math.max(0.25, speed || 1.0));
@@ -287,12 +310,12 @@ export class AiService {
 
     try {
       this.logger.log(
-        `[TTS] Synthesizing speech [${safeModel}]: "${text.substring(0, 30)}..." | Voice: ${voice}`,
+        `[TTS] Synthesizing speech [${safeModel}]: "${text.substring(0, 30)}..." | Voice: ${safeVoice}`,
       );
 
-      const mp3 = await this.openai.audio.speech.create({
+      const mp3 = await openaiClient.audio.speech.create({
         model: safeModel as any,
-        voice: voice as any,
+        voice: safeVoice as any,
         input: text,
         speed: safeSpeed,
       });
