@@ -325,44 +325,47 @@ export class WarmupService {
     const seedChips = activeCandidates.filter((i) => i.isSystemSeed);
 
     this.logger.log(
-      `🔄 Gerando rede de conversação global: ${clientChips.length} Clientes, ${seedChips.length} Sementes`,
+      `🔄 Gerando rede de conversação global: ${clientChips.length} Clientes, ${seedChips.length} Sementes (Total ativas: ${activeCandidates.length})`,
     );
 
     const pairKeys = new Set<string>();
     const selectedPairs: [Instance, Instance][] = [];
 
-    // Trust Ratio: Alta dependência das sementes quando a base é pequena
-    const seedProbability = clientChips.length < 50 ? 0.8 : 0.15;
+    // Embaralha todas as instâncias ativas (clientes e sementes) como potenciais iniciadoras
+    const initiators = activeCandidates.sort(() => 0.5 - Math.random());
 
-    for (const chip of clientChips) {
+    let crossTenantCount = 0;
+    let intraTenantCount = 0;
+
+    for (const chip of initiators) {
       const schedule = this.getScheduleForInstance(chip, chip.warmupDay || 1);
       const maxPartners = schedule ? schedule.maxPartners : 1;
 
       let partnersSelected = 0;
       let attempts = 0;
 
-      // Possíveis parceiros para este chip
-      // Removida restrição de Tenant para permitir que os 10 chips do próprio cliente conversem entre si
-      const possibleClients = clientChips.filter((c) => c.id !== chip.id);
-      const possibleSeeds = seedChips.filter((c) => c.id !== chip.id);
+      // Todos os parceiros possíveis para este chip (exceto ele mesmo)
+      const otherCandidates = activeCandidates.filter((c) => c.id !== chip.id);
 
-      // Embaralha para aleatoriedade
-      const shuffledClients = possibleClients.sort(() => 0.5 - Math.random());
-      const shuffledSeeds = possibleSeeds.sort(() => 0.5 - Math.random());
+      // Priorização Cross-Tenant: Separa em parceiros de OUTROS tenants vs MESMO tenant
+      const crossTenantPartners = otherCandidates
+        .filter((c) => c.tenantId !== chip.tenantId)
+        .sort(() => 0.5 - Math.random());
+
+      const intraTenantPartners = otherCandidates
+        .filter((c) => c.tenantId === chip.tenantId)
+        .sort(() => 0.5 - Math.random());
 
       while (partnersSelected < maxPartners && attempts < maxPartners * 10) {
         attempts++;
         let partner: Instance | null = null;
 
-        const useSeed = Math.random() < seedProbability;
-
-        if (useSeed && shuffledSeeds.length > 0) {
-          partner = shuffledSeeds.shift() as Instance;
-        } else if (shuffledClients.length > 0) {
-          partner = shuffledClients.shift() as Instance;
-        } else if (shuffledSeeds.length > 0) {
-          // Fallback
-          partner = shuffledSeeds.shift() as Instance;
+        // Prioridade 1: Tentar um parceiro CROSS-TENANT (de outra conta/tenant)
+        if (crossTenantPartners.length > 0) {
+          partner = crossTenantPartners.shift() as Instance;
+        } else if (intraTenantPartners.length > 0) {
+          // Prioridade 2: Fallback para INTRA-TENANT se não houver parceiros de outras contas disponíveis
+          partner = intraTenantPartners.shift() as Instance;
         }
 
         if (partner) {
@@ -398,10 +401,18 @@ export class WarmupService {
             pairKeys.add(key);
             selectedPairs.push([chip, partner]);
             partnersSelected++;
+            if (chip.tenantId !== partner.tenantId) {
+              crossTenantCount++;
+            } else {
+              intraTenantCount++;
+            }
           } else {
-            // Devolver para a lista para não perder o partner se houver rejeição de chave
-            if (partner.isSystemSeed) shuffledSeeds.push(partner);
-            else shuffledClients.push(partner);
+            // Devolver para a lista apropriada para não perder o partner se houver rejeição de chave
+            if (partner.tenantId !== chip.tenantId) {
+              crossTenantPartners.push(partner);
+            } else {
+              intraTenantPartners.push(partner);
+            }
           }
         } else {
           break;
@@ -410,7 +421,7 @@ export class WarmupService {
     }
 
     this.logger.log(
-      `🔗 Gerados ${selectedPairs.length} pares únicos globalmente`,
+      `🔗 Gerados ${selectedPairs.length} pares únicos globalmente (Cross-Tenant: ${crossTenantCount}, Intra-Tenant: ${intraTenantCount})`,
     );
 
     // ⚠️ LIMITE DE SEGURANÇA ANTI-BAN: Máximo de 10 pares por ciclo de 15 minutos.
