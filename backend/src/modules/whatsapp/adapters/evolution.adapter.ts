@@ -492,6 +492,58 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     };
   }
 
+  async sendStatus(
+    instanceName: string,
+    statusPayload: {
+      type: 'text' | 'image' | 'video' | 'audio';
+      content: string;
+      caption?: string;
+      backgroundColor?: string;
+    },
+  ): Promise<SendMessageResult> {
+    try {
+      this.logger.log(
+        `Publishing ${statusPayload.type} status for ${instanceName}`,
+      );
+      const response = await this.request(
+        'POST',
+        `/message/sendStatus/${instanceName}`,
+        {
+          type: statusPayload.type,
+          content: statusPayload.content,
+          caption: statusPayload.caption || '',
+          backgroundColor: statusPayload.backgroundColor || '#005c4b',
+          statusJidList: ['status@broadcast'],
+        },
+      );
+      return {
+        messageId: response?.key?.id || 'status-sent',
+        status: 'sent',
+      };
+    } catch (error: any) {
+      this.logger.warn(
+        `Failed to sendStatus via /message/sendStatus, attempting fallback: ${error.message}`,
+      );
+      try {
+        const response = await this.request(
+          'POST',
+          `/message/sendText/${instanceName}`,
+          {
+            number: 'status@broadcast',
+            text: statusPayload.content,
+          },
+        );
+        return {
+          messageId: response?.key?.id || 'status-sent',
+          status: 'sent',
+        };
+      } catch (err2: any) {
+        this.logger.error(`Status publish failed completely: ${err2.message}`);
+        throw err2;
+      }
+    }
+  }
+
   async sendPresence(
     instanceName: string,
     to: string,
