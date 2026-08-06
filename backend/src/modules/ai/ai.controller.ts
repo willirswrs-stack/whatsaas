@@ -152,9 +152,10 @@ export class AiController {
         // Fallback pro openai caso falhe
         buffer = await this.aiService.synthesizeSpeech(
           sampleText,
-          'alloy',
+          'nova',
           dto.speed || 1.0,
           dto.model || 'tts-1-hd',
+          tenantId,
         );
       }
     } else {
@@ -163,6 +164,7 @@ export class AiController {
         dto.voice,
         dto.speed || 1.0,
         dto.model || 'tts-1-hd',
+        tenantId,
       );
     }
 
