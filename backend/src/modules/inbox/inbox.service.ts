@@ -328,6 +328,108 @@ export class InboxService {
   }
 
   /**
+   * Send a media message (image, video, audio, document) from the inbox.
+   */
+  async sendMediaReply(
+    tenantId: string,
+    remoteJid: string,
+    media: {
+      type: 'image' | 'video' | 'audio' | 'document';
+      url: string;
+      caption?: string;
+      filename?: string;
+    },
+    instanceIdOverride?: string,
+  ): Promise<Message | null> {
+    let instanceId = instanceIdOverride;
+    if (!instanceId) {
+      const lastMsg = await this.messageRepo.findOne({
+        where: { tenantId, remoteJid },
+        order: { createdAt: 'DESC' },
+        select: ['instanceId', 'instanceName'],
+      });
+      instanceId = lastMsg?.instanceId || undefined;
+    }
+
+    let instance: Instance | null = null;
+    if (instanceId) {
+      instance = await this.instanceRepo.findOne({
+        where: { id: instanceId, tenantId },
+      });
+    }
+
+    if (!instance || instance.status !== ('connected' as any)) {
+      instance = await this.instanceRepo.findOne({
+        where: { tenantId, status: 'connected' as any },
+        order: { createdAt: 'DESC' },
+      });
+    }
+
+    if (!instance) {
+      throw new NotFoundException(
+        'Nenhum chip conectado disponível para enviar a mídia.',
+      );
+    }
+
+    const remotePhone = remoteJid.split('@')[0];
+    const provider = this.providerFactory.getProvider(
+      (instance.provider as ProviderType) || 'evolution',
+    );
+
+    const result = await provider.sendMedia(
+      instance.instanceName,
+      remotePhone,
+      media,
+    );
+
+    return this.saveMessage({
+      tenantId,
+      instanceId: instance.id,
+      instanceName: instance.instanceName,
+      remoteJid,
+      remotePhone,
+      direction: 'outbound',
+      type: media.type as any,
+      content: media.caption || `[Mídia: ${media.type}]`,
+      mediaUrl: media.url,
+      wamid: result?.messageId,
+      status: 'sent',
+      isGroup: remoteJid.endsWith('@g.us'),
+    });
+  }
+
+  /**
+   * Publish WhatsApp Status/Stories broadcast for an instance.
+   */
+  async publishStatus(
+    tenantId: string,
+    instanceId: string,
+    payload: {
+      type: 'text' | 'image' | 'video' | 'audio';
+      content: string;
+      caption?: string;
+      backgroundColor?: string;
+    },
+  ) {
+    const instance = await this.instanceRepo.findOne({
+      where: { id: instanceId, tenantId },
+    });
+    if (!instance) {
+      throw new NotFoundException('Instância não encontrada');
+    }
+
+    const provider = this.providerFactory.getProvider(
+      (instance.provider as ProviderType) || 'evolution',
+    );
+
+    if (provider.sendStatus) {
+      return provider.sendStatus(instance.instanceName, payload);
+    }
+
+    throw new Error('Provedor atual não suporta envio de Status');
+  }
+
+  /**
    * Cleanup expired messages (90 day retention).
    * Should be called by a cron job.
    */
