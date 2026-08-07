@@ -197,7 +197,7 @@ export default function ChipsPage() {
             // QR Code já vem na resposta da criação
             if (result.qrCode) {
                 setQrCode(result.qrCode);
-                setConnectionStatus('Escaneie o QR Code');
+                setConnectionStatus('Escaneie o QR Code com seu WhatsApp');
             } else {
                 // QR code não veio - tentar buscar
                 setConnectionStatus('Aguardando QR Code...');
@@ -205,13 +205,20 @@ export default function ChipsPage() {
                     const qrResult = await instancesService.getQrCode(result.instance.id);
                     if (qrResult.qrCode) {
                         setQrCode(qrResult.qrCode);
-                        setConnectionStatus('Escaneie o QR Code');
+                        setConnectionStatus('Escaneie o QR Code com seu WhatsApp');
                     } else {
-                        setError('QR Code ainda não disponível. A API pode estar iniciando. Tente o botão "QR Code" no card da instância em alguns segundos.');
-                        setShowModal(false);
+                        const { providerStatus } = await instancesService.getStatus(result.instance.id);
+                        if (providerStatus?.status === 'connected') {
+                            setSuccessMessage(`✅ Instância criada e conectada com sucesso! (${providerStatus.phoneNumber || 'Ativa'})`);
+                            setShowModal(false);
+                            loadInstances();
+                        } else {
+                            setError('Instância criada com sucesso! O QR Code está sendo gerado. Clique no botão "QR Code" no card da instância.');
+                            setShowModal(false);
+                        }
                     }
                 } catch {
-                    setError('QR Code ainda não disponível. A API pode estar iniciando. Tente o botão "QR Code" no card da instância em alguns segundos.');
+                    setError('Instância criada com sucesso! O QR Code está sendo gerado. Clique no botão "QR Code" no card da instância.');
                     setShowModal(false);
                 }
             }
@@ -252,12 +259,21 @@ export default function ChipsPage() {
             setPairingPhone('');
             setConnectionMethod('qr');
             
+            // 1. Checar se já está conectada
+            const { providerStatus } = await instancesService.getStatus(instanceId);
+            if (providerStatus?.status === 'connected') {
+                setSuccessMessage(`🟢 Esta instância já está conectada ao WhatsApp! (${providerStatus.phoneNumber || 'Ativa'})`);
+                loadInstances();
+                return;
+            }
+
+            // 2. Buscar o QR Code se estiver aguardando conexão
             const result = await instancesService.getQrCode(instanceId);
             if (result.qrCode) {
                 setQrCode(result.qrCode);
                 setShowModal(true);
             } else {
-                setError('QR Code não disponível. A instância pode já estar conectada.');
+                setError('QR Code em geração pela Evolution API. Aguarde uns instantes e clique novamente.');
             }
         } catch (err) {
             setError(getErrorMessage(err));
