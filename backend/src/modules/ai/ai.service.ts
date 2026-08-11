@@ -23,6 +23,8 @@ export interface WarmupConversation {
   role: string;
   content: string;
   isAudio: boolean;
+  msgType?: 'text' | 'audio' | 'image' | 'sticker';
+  mediaUrl?: string;
 }
 
 @Injectable()
@@ -638,28 +640,34 @@ export class AiService {
     // Pick random items to build a unique flow
     const pick = (arr: string[]) => arr[Math.floor(Math.random() * arr.length)];
 
-    const messages = [
-      { role: 'A', content: pick(greetingsA), isAudio: false },
-      { role: 'B', content: pick(responsesB), isAudio: false },
-      { role: 'A', content: pick(topicsA), isAudio: false },
-      { role: 'B', content: pick(reactB), isAudio: false },
-      { role: 'A', content: pick(questionA), isAudio: Math.random() > 0.85 },
-      { role: 'B', content: pick(answerB), isAudio: false },
-      { role: 'A', content: pick(commentA), isAudio: false },
-      { role: 'B', content: pick(commentB), isAudio: false },
-      { role: 'A', content: pick(inviteA), isAudio: false },
-      { role: 'B', content: pick(acceptB), isAudio: Math.random() > 0.85 },
+    const messages: WarmupConversation[] = [
+      { role: 'A', content: pick(greetingsA), isAudio: false, msgType: 'text' },
+      { role: 'B', content: pick(responsesB), isAudio: false, msgType: 'text' },
+      { role: 'A', content: pick(topicsA), isAudio: true, msgType: 'audio' },
+      { role: 'B', content: pick(reactB), isAudio: false, msgType: 'text' },
+      { role: 'A', content: 'Olha essa imagem kkkk', isAudio: false, msgType: 'image' },
+      { role: 'B', content: pick(answerB), isAudio: true, msgType: 'audio' },
+      { role: 'A', content: pick(commentA), isAudio: false, msgType: 'text' },
+      { role: 'B', content: 'Figurinha de risada kkk', isAudio: false, msgType: 'sticker' },
+      { role: 'A', content: pick(inviteA), isAudio: false, msgType: 'text' },
+      { role: 'B', content: pick(acceptB), isAudio: true, msgType: 'audio' },
     ];
 
     for (let i = 0; i < messageCount; i++) {
-      // Se pedir mais que 10, repete aleatórios (evita quebrar)
       if (i < messages.length) {
         conversation.push(messages[i]);
       } else {
+        const rand = Math.random();
+        let msgType: 'text' | 'audio' | 'image' | 'sticker' = 'text';
+        if (rand > 0.8) msgType = 'audio';
+        else if (rand > 0.7) msgType = 'image';
+        else if (rand > 0.6) msgType = 'sticker';
+
         conversation.push({
           role: i % 2 === 0 ? 'A' : 'B',
           content: pick(i % 2 === 0 ? topicsA : reactB),
-          isAudio: false,
+          isAudio: msgType === 'audio',
+          msgType,
         });
       }
     }
