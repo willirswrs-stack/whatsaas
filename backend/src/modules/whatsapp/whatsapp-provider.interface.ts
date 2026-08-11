@@ -73,10 +73,21 @@ export interface IWhatsAppProvider {
     instanceName: string,
     to: string,
     media: {
-      type: 'image' | 'video' | 'audio' | 'document';
+      type: 'image' | 'video' | 'audio' | 'document' | 'sticker';
       url: string;
       caption?: string;
       filename?: string;
+    },
+  ): Promise<SendMessageResult>;
+
+  /**
+   * Send WhatsApp Sticker (Figurinha)
+   */
+  sendSticker?(
+    instanceName: string,
+    to: string,
+    sticker: {
+      url: string;
     },
   ): Promise<SendMessageResult>;
 
