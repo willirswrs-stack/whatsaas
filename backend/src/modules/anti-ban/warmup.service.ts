@@ -469,6 +469,63 @@ export class WarmupService {
   }
 
   /**
+   * Enforces target media proportions (60% text, 20% audio, 10% image, 10% sticker)
+   */
+  private enforceMediaProportions(conversation: any[]): any[] {
+    if (!conversation || conversation.length === 0) return conversation;
+
+    const total = conversation.length;
+    const hasMediaTypes = conversation.some(
+      (m) => m.msgType && m.msgType !== 'text',
+    );
+
+    if (!hasMediaTypes) {
+      const audioTarget = Math.max(1, Math.floor(total * 0.2));
+      const imageTarget = total >= 4 ? 1 : 0;
+      const stickerTarget = total >= 3 ? 1 : 0;
+
+      let audioAssigned = 0;
+      let imageAssigned = 0;
+      let stickerAssigned = 0;
+
+      return conversation.map((msg, index) => {
+        let msgType: 'text' | 'audio' | 'image' | 'sticker' = 'text';
+
+        if (index >= 2) {
+          if (audioAssigned < audioTarget && (msg.isAudio || index % 3 === 0)) {
+            msgType = 'audio';
+            audioAssigned++;
+          } else if (
+            imageAssigned < imageTarget &&
+            index === Math.floor(total * 0.5)
+          ) {
+            msgType = 'image';
+            imageAssigned++;
+          } else if (
+            stickerAssigned < stickerTarget &&
+            index === total - 2
+          ) {
+            msgType = 'sticker';
+            stickerAssigned++;
+          }
+        }
+
+        return {
+          ...msg,
+          msgType,
+          isAudio: msgType === 'audio',
+        };
+      });
+    }
+
+    return conversation.map((msg) => ({
+      ...msg,
+      msgType: msg.msgType || (msg.isAudio ? 'audio' : 'text'),
+      isAudio: msg.msgType === 'audio' || !!msg.isAudio,
+    }));
+  }
+
+  /**
    * Creates a single warmup session (conversation) between two specific instances
    */
   async createWarmupSession(
@@ -510,8 +567,10 @@ export class WarmupService {
         };
       }
 
+      // Pick 2 random instances
       const shuffled = candidates.sort(() => 0.5 - Math.random());
-      [resolvedA, resolvedB] = shuffled.slice(0, 2);
+      resolvedA = shuffled[0];
+      resolvedB = shuffled[1];
     }
 
     instA = resolvedA;
@@ -528,28 +587,20 @@ export class WarmupService {
       `[Warmup] 💬 Generating conversation: ${instA.instanceName} (${instA.phone}) ↔ ${instB.instanceName} (${instB.phone})`,
     );
 
-    // Generate conversation with MORE messages
+    // Topics pool for natural conversations
     const allTopics = [
-      'trabalho',
       'futebol',
       'clima',
-      'comida',
-      'tecnologia',
-      'viagem',
       'filmes',
+      'trabalho',
+      'fim de semana',
+      'viagem',
+      'tecnologia',
       'música',
       'série',
       'receitas',
       'exercício',
       'pets',
-      'feriado',
-      'compras online',
-      'trânsito',
-      'família',
-      'notícias',
-      'memes',
-      'jogos',
-      'café',
     ];
     const randomTopics = allTopics.sort(() => 0.5 - Math.random()).slice(0, 3);
 
@@ -559,7 +610,7 @@ export class WarmupService {
     let conversation;
     try {
       conversation = await this.aiService.generateWarmupConversation(tenantId, {
-        messageCount: Math.floor(Math.random() * 3) + 3, // 3-5 mensagens (conversas curtas e naturais)
+        messageCount: Math.floor(Math.random() * 3) + 4,
         topics: randomTopics,
         niche: niche || undefined,
       });
@@ -585,6 +636,8 @@ export class WarmupService {
         totalDurationMs: 0,
       };
     }
+
+    conversation = this.enforceMediaProportions(conversation);
 
     // Schedule messages
     let accumulatedDelay = startDelayMs;
@@ -626,6 +679,9 @@ export class WarmupService {
             content: msg.content,
             tenantId: sender.tenantId,
             provider: resolvedProvider,
+            msgType: msg.msgType || (msg.isAudio ? 'audio' : 'text'),
+            isAudio: msg.msgType === 'audio' || !!msg.isAudio,
+            mediaUrl: msg.mediaUrl,
           },
           {
             delay: accumulatedDelay,
@@ -835,7 +891,9 @@ export class WarmupService {
           throw e; // skip this message
         }
 
-        if (msg.isAudio) {
+        const targetType = msg.msgType || (msg.isAudio ? 'audio' : 'text');
+
+        if (targetType === 'audio') {
           // 🎙️ RITUAL DO ÁUDIO REAL:
           this.logger.log(
             `[LIVE] Generating real voice audio for message index ${index}`,
@@ -909,7 +967,6 @@ export class WarmupService {
           fs.writeFileSync(filepath, buffer);
 
           // 🔥 ESTRATÉGIA NUCLEAR CORRIGIDA: Enviar Base64 PURO!
-          // O teste final validou que a Evolution V2 espera a string Base64 SEM o prefixo dataUri!
           const base64Audio = buffer.toString('base64');
 
           // 4. Indica que está "gravando áudio" (simulação de 3s)
@@ -920,14 +977,56 @@ export class WarmupService {
             3000,
           );
 
-          // 5. Envia como Mídia (Passando a string base64 pura diretamente)
+          // 5. Envia como Mídia
           await client.sendMedia(sender.instanceName, receiver.phone, {
             type: 'audio',
             url: base64Audio,
             filename: 'audio.mp3',
           });
-
-          // Limpeza rápida de arquivo não é recomendada de imediato (provedor precisa ler), rodar depois de alguns mins se necessário.
+        } else if (targetType === 'image') {
+          currentMsgType = 'image';
+          const sampleImages = [
+            'https://images.unsplash.com/photo-1579546929518-9e396f3cc809?w=600&auto=format&fit=crop',
+            'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&auto=format&fit=crop',
+          ];
+          const imgUrl =
+            msg.mediaUrl ||
+            sampleImages[Math.floor(Math.random() * sampleImages.length)];
+          await client.sendPresence(
+            sender.instanceName,
+            receiver.phone,
+            'composing',
+            2000,
+          );
+          await client.sendMedia(sender.instanceName, receiver.phone, {
+            type: 'image',
+            url: imgUrl,
+            caption: msg.content,
+          });
+        } else if (targetType === 'sticker') {
+          currentMsgType = 'sticker';
+          const sampleStickers = [
+            'https://raw.githubusercontent.com/wppconnect-team/wppconnect/main/templates/sticker.webp',
+          ];
+          const stickerUrl =
+            msg.mediaUrl ||
+            sampleStickers[Math.floor(Math.random() * sampleStickers.length)];
+          await client.sendPresence(
+            sender.instanceName,
+            receiver.phone,
+            'composing',
+            1500,
+          );
+          if (client.sendSticker) {
+            await client.sendSticker(sender.instanceName, receiver.phone, {
+              url: stickerUrl,
+            });
+          } else {
+            await client.sendMedia(sender.instanceName, receiver.phone, {
+              type: 'sticker',
+              url: stickerUrl,
+            });
+          }
         } else {
           // 📝 ENVIO DE TEXTO TRADICIONAL
           await client.sendPresence(
