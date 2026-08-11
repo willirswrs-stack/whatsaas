@@ -376,20 +376,22 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     instanceName: string,
     to: string,
     media: {
-      type: 'image' | 'video' | 'audio' | 'document';
+      type: 'image' | 'video' | 'audio' | 'document' | 'sticker';
       url: string;
       caption?: string;
       filename?: string;
     },
   ): Promise<SendMessageResult> {
-    // 🔥 CRÍTICO: Para Evolution v2, áudios reais (PTT/Mensagem de Voz)
-    // DEVEM usar o endpoint específico /message/sendWhatsAppAudio
     const resolvedNumber = await this.resolveAndValidateNumber(
       instanceName,
       to,
     );
     if (!resolvedNumber)
       throw new Error(`Number ${to} is not registered on WhatsApp`);
+
+    if (media.type === 'sticker') {
+      return this.sendSticker(instanceName, to, { url: media.url });
+    }
 
     if (media.type === 'audio') {
       const response = await this.request(
@@ -399,9 +401,9 @@ export class EvolutionAdapter implements IWhatsAppProvider {
           number: resolvedNumber,
           audio: media.url,
           options: {
-            delay: 1000, // Pequena simulação nativa
+            delay: 1000,
             presence: 'recording',
-            encoding: true, // Indica que o áudio enviado é uma string base64 pura
+            encoding: true,
           },
         },
       );
@@ -434,6 +436,37 @@ export class EvolutionAdapter implements IWhatsAppProvider {
     );
 
     this.logger.log(`Sent ${media.type} to ${to} via Evolution API`);
+
+    return {
+      messageId: response.key?.id || 'unknown',
+      status: 'sent',
+    };
+  }
+
+  async sendSticker(
+    instanceName: string,
+    to: string,
+    sticker: {
+      url: string;
+    },
+  ): Promise<SendMessageResult> {
+    const resolvedNumber = await this.resolveAndValidateNumber(
+      instanceName,
+      to,
+    );
+    if (!resolvedNumber)
+      throw new Error(`Number ${to} is not registered on WhatsApp`);
+
+    const response = await this.request(
+      'POST',
+      `/message/sendSticker/${instanceName}`,
+      {
+        number: resolvedNumber,
+        sticker: sticker.url,
+      },
+    );
+
+    this.logger.log(`Sent sticker to ${to} via Evolution API`);
 
     return {
       messageId: response.key?.id || 'unknown',
