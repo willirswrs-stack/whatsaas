@@ -170,12 +170,16 @@ export class WahaAdapter implements IWhatsAppProvider {
     instanceName: string,
     to: string,
     media: {
-      type: 'image' | 'video' | 'audio' | 'document';
+      type: 'image' | 'video' | 'audio' | 'document' | 'sticker';
       url: string;
       caption?: string;
       filename?: string;
     },
   ): Promise<SendMessageResult> {
+    if (media.type === 'sticker') {
+      return this.sendSticker(instanceName, to, { url: media.url });
+    }
+
     let fileUrl = media.url;
     // Detect if media.url is a raw base64 string (i.e. doesn't start with http or data:)
     if (
@@ -211,6 +215,38 @@ export class WahaAdapter implements IWhatsAppProvider {
     );
 
     this.logger.log(`Sent ${media.type} to ${to} via WAHA API`);
+
+    return {
+      messageId: response.id || response.key?.id || 'unknown',
+      status: 'sent',
+    };
+  }
+
+  async sendSticker(
+    instanceName: string,
+    to: string,
+    sticker: {
+      url: string;
+    },
+  ): Promise<SendMessageResult> {
+    let fileUrl = sticker.url;
+    if (!fileUrl.startsWith('http') && !fileUrl.startsWith('data:')) {
+      fileUrl = `data:image/webp;base64,${sticker.url}`;
+    }
+
+    const response = await this.request<WahaSendTextResponse>(
+      'POST',
+      `/api/sendSticker`,
+      {
+        session: instanceName,
+        chatId: this.formatJid(to),
+        file: {
+          url: fileUrl,
+        },
+      },
+    );
+
+    this.logger.log(`Sent sticker to ${to} via WAHA API`);
 
     return {
       messageId: response.id || response.key?.id || 'unknown',
