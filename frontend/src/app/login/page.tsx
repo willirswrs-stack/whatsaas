@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
-import { getErrorMessage } from '@/lib/auth';
+import { getErrorMessage, authService } from '@/lib/auth';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -19,6 +19,51 @@ export default function LoginPage() {
         name: '',
         companyName: '',
     });
+
+    const [showForgotModal, setShowForgotModal] = useState(false);
+    const [recoveryEmail, setRecoveryEmail] = useState('');
+    const [recoveryStep, setRecoveryStep] = useState(1);
+    const [recoveryCode, setRecoveryCode] = useState('');
+    const [newPassword, setNewPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [recoveryMessage, setRecoveryMessage] = useState('');
+
+    const handleSendRecoveryCode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!recoveryEmail || !recoveryEmail.includes('@')) {
+            alert('Informe um e-mail válido.');
+            return;
+        }
+        try {
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            setRecoveryCode(code);
+            setRecoveryStep(2);
+            setRecoveryMessage(`Código de recuperação gerado para ${recoveryEmail}: [${code}]`);
+        } catch (err: any) {
+            alert('Erro ao enviar código de recuperação.');
+        }
+    };
+
+    const handleSaveNewPassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newPassword.length < 6) {
+            alert('A nova senha deve ter no mínimo 6 caracteres.');
+            return;
+        }
+        if (newPassword !== confirmPassword) {
+            alert('As senhas não coincidem.');
+            return;
+        }
+        try {
+            await authService.resetPassword(recoveryEmail, newPassword);
+            alert('🎉 Nova senha redefinida com sucesso! Você já pode realizar o login com a nova senha.');
+            setShowForgotModal(false);
+            setFormData(prev => ({ ...prev, email: recoveryEmail, password: newPassword }));
+        } catch (err: any) {
+            const msg = err.response?.data?.message || getErrorMessage(err) || 'Erro ao salvar nova senha.';
+            alert(msg);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -120,7 +165,18 @@ export default function LoginPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium mb-2">Senha</label>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block text-sm font-medium">Senha</label>
+                            {isLogin && (
+                                <button
+                                    type="button"
+                                    onClick={() => { setShowForgotModal(true); setRecoveryStep(1); setRecoveryEmail(formData.email); }}
+                                    className="text-xs text-emerald-400 hover:underline font-medium cursor-pointer"
+                                >
+                                    🔑 Esqueci minha senha
+                                </button>
+                            )}
+                        </div>
                         <input
                             type="password"
                             className="input w-full"
@@ -151,8 +207,6 @@ export default function LoginPage() {
                     </button>
                 </form>
 
-
-
                 {/* Toggle Login/Register */}
                 <div className="mt-6 text-center">
                     <button
@@ -167,6 +221,92 @@ export default function LoginPage() {
                     </button>
                 </div>
             </div>
+
+            {/* FORGOT PASSWORD MODAL */}
+            {showForgotModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4 animate-fadeIn">
+                    <div className="bg-[var(--bg-secondary)] border border-[var(--border-color)] rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
+                        <div className="flex justify-between items-center mb-4 border-b border-[var(--border-color)] pb-3">
+                            <h3 className="text-lg font-bold text-[var(--text-primary)] flex items-center gap-2">
+                                🔑 Recuperar / Gerar Nova Senha
+                            </h3>
+                            <button onClick={() => setShowForgotModal(false)} className="text-[var(--text-muted)] hover:text-white text-xl">&times;</button>
+                        </div>
+
+                        {recoveryStep === 1 && (
+                            <form onSubmit={handleSendRecoveryCode} className="space-y-4">
+                                <p className="text-xs text-[var(--text-muted)]">Digite o seu e-mail de cadastro para receber o código de recuperação:</p>
+                                <div>
+                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">E-mail Cadastrado</label>
+                                    <input
+                                        type="email"
+                                        required
+                                        value={recoveryEmail}
+                                        onChange={(e) => setRecoveryEmail(e.target.value)}
+                                        className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-emerald-500"
+                                        placeholder="seu-email@empresa.com"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-2 pt-2">
+                                    <button type="button" onClick={() => setShowForgotModal(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] border border-[var(--border-color)]">Cancelar</button>
+                                    <button type="submit" className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500">Enviar Código ➔</button>
+                                </div>
+                            </form>
+                        )}
+
+                        {recoveryStep === 2 && (
+                            <div className="space-y-4">
+                                <p className="text-xs text-emerald-400 bg-emerald-500/10 p-3 rounded-xl border border-emerald-500/20 font-mono">{recoveryMessage}</p>
+                                <div>
+                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Código de 6 dígitos</label>
+                                    <input
+                                        type="text"
+                                        value={recoveryCode}
+                                        onChange={(e) => setRecoveryCode(e.target.value)}
+                                        className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-center text-lg font-bold tracking-widest text-[var(--text-primary)] outline-none"
+                                    />
+                                </div>
+                                <div className="flex justify-between gap-2 pt-2">
+                                    <button type="button" onClick={() => setRecoveryStep(1)} className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] border border-[var(--border-color)]">⬅ Voltar</button>
+                                    <button type="button" onClick={() => setRecoveryStep(3)} className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500">Validar Código ➔</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {recoveryStep === 3 && (
+                            <form onSubmit={handleSaveNewPassword} className="space-y-4">
+                                <p className="text-xs text-[var(--text-muted)]">Crie a sua nova senha de acesso:</p>
+                                <div>
+                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Nova Senha</label>
+                                    <input
+                                        type="password"
+                                        required
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-emerald-500"
+                                        placeholder="Mínimo 6 caracteres"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-[var(--text-secondary)] mb-1">Confirmar Nova Senha</label>
+                                    <input
+                                        type="password"
+                                        required
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className="w-full bg-[var(--bg-primary)] border border-[var(--border-color)] rounded-xl px-4 py-2.5 text-sm text-[var(--text-primary)] outline-none focus:border-emerald-500"
+                                        placeholder="Repita a nova senha"
+                                    />
+                                </div>
+                                <div className="flex justify-end gap-2 pt-2">
+                                    <button type="button" onClick={() => setShowForgotModal(false)} className="px-4 py-2 rounded-xl text-xs font-bold text-[var(--text-muted)] border border-[var(--border-color)]">Cancelar</button>
+                                    <button type="submit" className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-600 text-white hover:bg-emerald-500">Salvar & Entrar ✨</button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
