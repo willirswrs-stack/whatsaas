@@ -398,5 +398,22 @@ export class AuthService {
       user: data.user,
     };
   }
+
+  async resetUserPassword(dto: { email: string; newPassword: string }) {
+    const user = await this.userRepo.findOne({
+      where: { email: dto.email },
+    });
+
+    if (!user) {
+      throw new UnauthorizedException('Usuário não encontrado com este e-mail');
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    user.passwordHash = passwordHash;
+    await this.userRepo.save(user);
+
+    return { message: 'Senha redefinida com sucesso' };
+  }
 }
+
 
