@@ -22,6 +22,7 @@ import {
   LoginDto,
   AuthResponseDto,
   SocialExchangeTokenDto,
+  ResetPasswordDto,
 } from './dto/auth.dto';
 
 
@@ -50,6 +51,15 @@ export class AuthController {
     return this.authService.login(dto);
   }
 
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset user password with email' })
+  @ApiResponse({ status: 200, description: 'Password reset successful' })
+  @ApiResponse({ status: 401, description: 'User not found' })
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetUserPassword(dto);
+  }
+
   @Post('reset-admin')
   @ApiOperation({ summary: 'Force reset admin password' })
   async resetAdmin(@Headers('x-admin-reset-token') token: string) {
@@ -59,6 +69,7 @@ export class AuthController {
     }
     return this.authService.resetAdminPassword();
   }
+
 
 
   // ==========================
