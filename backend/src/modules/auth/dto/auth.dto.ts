@@ -59,3 +59,15 @@ export class SocialExchangeTokenDto {
   code: string;
 }
 
+export class ResetPasswordDto {
+  @ApiProperty({ example: 'john@example.com' })
+  @IsEmail()
+  email: string;
+
+  @ApiProperty({ example: 'securepassword123' })
+  @IsString()
+  @MinLength(6)
+  newPassword: string;
+}
+
+
