@@ -105,6 +105,14 @@ export const authService = {
         }
     },
 
+    async resetPassword(email: string, newPassword: string): Promise<{ message: string }> {
+        const response = await api.post<{ message: string }>('/auth/reset-password', {
+            email,
+            newPassword,
+        });
+        return response.data;
+    },
+
     logout(): void {
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
